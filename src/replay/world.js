@@ -31,6 +31,7 @@ export const BUILDINGS = [
   { id: 'place_bedroom', name: 'Bedroom', zone: 'home', x: 2, y: 2, w: 4, h: 3, door: 3, style: 'house', roof: 'blue', wall: 'white', icon: 'bed' },
   { id: 'place_kitchen', name: 'Kitchen', zone: 'home', x: 7, y: 2, w: 3, h: 3, door: 8, style: 'house', roof: 'red', wall: 'sand', icon: 'pot', chimney: true },
   { id: 'place_laundry', name: 'Laundry', zone: 'home', x: 2, y: 7, w: 3, h: 2, door: 3, style: 'house', roof: 'green', wall: 'white', icon: 'basket' },
+  { id: 'place_office', name: 'Home office', zone: 'home', x: 7, y: 7, w: 3, h: 2, door: 8, style: 'house', roof: 'blue', wall: 'sand', icon: 'paper' },
   { id: 'place_desk', name: 'Desk', zone: 'factory', x: 23, y: 2, w: 4, h: 3, door: 24, style: 'office', roof: 'grey', wall: 'sand', icon: 'paper' },
   { id: 'place_meeting', name: 'Meeting room', zone: 'factory', x: 28, y: 2, w: 3, h: 3, door: 29, style: 'house', roof: 'orange', wall: 'white', icon: 'chat' },
   { id: 'place_floor', name: 'Factory floor', zone: 'factory', x: 32, y: 1, w: 7, h: 4, door: 35, style: 'factory', roof: 'grey', wall: 'grey', icon: 'gear' },

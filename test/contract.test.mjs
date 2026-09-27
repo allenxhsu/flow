@@ -45,7 +45,7 @@ test('contract: every constant in docs/API.md is exported with its value', () =>
     for (const f of ['id', 'title', 'place']) assert.equal(typeof k[f], 'string', `${k.id}.${f}`);
     for (const f of ['staminaPerHour', 'manaPerHour']) assert.equal(typeof k[f], 'number', `${k.id}.${f}`);
   }
-  assert.deepEqual(M.DEFAULT_KINDS.map((k) => k.title), ['Drive', 'Chat', 'Walk the floor', 'Laundry', 'Meal', 'Rest']);
+  assert.deepEqual(M.DEFAULT_KINDS.map((k) => k.title), ['Drive', 'Chat', 'Walk the floor', 'Laundry', 'Meal', 'Rest', 'Feed the pet']);
 });
 
 test('contract: record types are the definitions then the events', () => {

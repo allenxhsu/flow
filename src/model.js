@@ -71,6 +71,7 @@ export const DEFAULT_PLACES = [
   { id: 'place_bedroom', name: 'Bedroom', zone: 'home' },
   { id: 'place_kitchen', name: 'Kitchen', zone: 'home' },
   { id: 'place_laundry', name: 'Laundry', zone: 'home' },
+  { id: 'place_office', name: 'Home office', zone: 'home' },
   { id: 'place_car', name: 'Car', zone: 'road' },
   { id: 'place_floor', name: 'Factory floor', zone: 'factory' },
   { id: 'place_desk', name: 'Desk', zone: 'factory' },
@@ -89,6 +90,8 @@ export const DEFAULT_KINDS = [
   { id: 'kind_laundry', title: 'Laundry', icon: '🧺', place: 'place_laundry', staminaPerHour: 1, manaPerHour: 0 },
   { id: 'kind_meal', title: 'Meal', icon: '🍜', place: 'place_kitchen', staminaPerHour: -2, manaPerHour: -1 },
   { id: 'kind_rest', title: 'Rest', icon: '☕', place: 'place_bedroom', staminaPerHour: -3, manaPerHour: -3 },
+  // Daily: reminded until done, with a streak like a daily task's.
+  { id: 'kind_pet', title: 'Feed the pet', icon: '🐇', place: 'place_office', staminaPerHour: 0, manaPerHour: -2, daily: true },
 ];
 
 const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind'];
@@ -783,6 +786,10 @@ export function play(records, now = Date.now()) {
     places: db.places,
     kinds: db.kinds,
     moments: db.moments.filter((m) => m.day === day),
+    dailyMoments: db.kinds.filter((k) => k.daily).map((k) => {
+      const days = new Set(db.moments.filter((m) => m.kind === k.id).map((m) => m.day));
+      return { kind: k.id, title: k.title, icon: k.icon, place: k.place, doneToday: days.has(day), ...dailyStreak(days, day) };
+    }),
   };
 }
 

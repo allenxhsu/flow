@@ -97,6 +97,10 @@ second in the same week replaces the first.
   Laundry, Meal, Rest): a kind, a place, start/end, optional `who`. Energy per
   hour; **no points**. Logged by one-tap start/stop quick buttons, by Claude
   filling gaps at day's end, and from calendars (phase 2).
+- **Daily moments:** a moment kind can be `daily` — reminded until done that
+  day, with a streak that forgives one missed day a week. **Feed the pet**
+  (decided with the player) is one: at the pet's cage in the home office
+  (`place_office`), restores a little mana (−2/hour, so 15 min = +0.5), no points.
 - **Places** belong to zones: home, road, factory, town, elsewhere. A task's
   place defaults from its skill.
 
