@@ -104,7 +104,7 @@ come as a batch. One suggestion plus up to three alternatives.
   it (it is "at risk"). Weekly streaks count ISO weeks.
 - The CLI flags a task as **struggling** when a daily a week old was done ≤ 3
   of the last 7 days, or any task needed rework 2+ times in 4 weeks.
-- The weekly review is due 7 days after the last. The trend is the latest
+- The weekly review is due every Sunday (the end of the Monday–Sunday week) while that week has none, and stays due after a missed week until one is done. The trend is the latest
   satisfaction minus the average of the three reviews before it.
 - Achievements: First step · In the zone · Personal best · Combo ×5 · Batched
   (3 in a batch) · Assembly line (5) · Clean week (10+ tasks, no rework) ·

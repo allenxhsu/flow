@@ -61,11 +61,12 @@ export function batchEnds(minutesList, now) {
 }
 
 /**
- * What buying something costs at a balance. The part below zero costs double,
+ * What buying something costs at a balance. The part below zero costs the
+ * tier's debt multiplier (double at Push),
  * and the page says so before the purchase, not after.
  */
-export function purchasePreview(balance, price) {
-  const charged = chargeFor(balance, price);
+export function purchasePreview(balance, price, debt) {
+  const charged = debt === undefined ? chargeFor(balance, price) : chargeFor(balance, price, debt);
   const below = Math.max(0, price - Math.max(0, balance));
   return { charged, below, after: balance - charged, intoDebt: below > 0, extra: charged - price };
 }
