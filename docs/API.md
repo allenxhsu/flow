@@ -17,6 +17,8 @@ export const BATCH_MANA_SHARE = 0.5;
 export const REWORK_MULTIPLIERS = [1.5, 1.75, 2];
 export const REWORK_CRITICAL = 2;
 export const DEBT_MULTIPLIER = 2;
+export const DIFFICULTY = [
+export const DEFAULT_DIFFICULTY = 'push';
 export const PLAYER_STEP = 500;
 export const STAT_STEP = 300;
 export const SKILL_STEP = 100;
@@ -46,7 +48,7 @@ export function makeTask(db, fields, { now = Date.now() } = {})
 export function makeReward({ title, price, repeatable = true, now = Date.now() }) 
 export const isCritical = (task)
 export function actual(done, reworks = []) 
-export function taskStats(db, task, before = Infinity, rw = reworkByDone(db)) 
+export function taskStats(db, task, before = Infinity, rw = reworkByDone(db), step = Number.isFinite(before) ? difficultyOn(db, dayOf(before), task.skill).targetStep : TARGET_STEP) 
 export function levelFor(xp, step) 
 export const masteryFactor = (level)
 export function underdogsOn(db, day) 
@@ -54,15 +56,16 @@ export function chainAt(db, task, start)
 export function priceDone(db, task, { start, end, minutes, value, quality }) 
 export function makeDone(db, taskRef, { end = Date.now(), minutes, value, quality, timed = false, note = '', reworkOf = null } = {}) 
 export function balanceOf(db, before = Infinity) 
-export function chargeFor(balance, amount) 
+export function chargeFor(balance, amount, debt = DEBT_MULTIPLIER) 
 export function makePurchase(db, rewardRef, { at = Date.now() } = {}) 
 export function makeRework(db, doneRef, { minutes, at = Date.now(), note = '' }) 
 export function makeEnergy({ stamina, mana, at = Date.now() }) 
 export function energyOn(db, day) 
-export function makeReview(db, { satisfaction, ratings = {}, win = '', lesson = '', next = '', at = Date.now() }) 
+export function makeReview(db, { satisfaction, ratings = {}, win = '', lesson = '', next = '', difficulty = null, at = Date.now() }) 
+export function difficultyOn(db, day, skillId = null) 
 export function latestPerWeek(reviews) 
 export const isDoneFor = (db, task, day)
-export function dailyStreak(days, day) 
+export function dailyStreak(days, day, grace = 1) 
 export function weeklyStreak(weeks, day) 
 export function pickNext(db, now, g = null) 
 export function reworkCandidate(db, taskId, now) 
@@ -95,6 +98,8 @@ flow stat add --name "…" [--icon ✦] | rename <stat> --name "…" [--icon …
 flow place add --name "…" [--zone home|road|factory|town|elsewhere]
 flow kind add --title "…" [--icon …] [--place P] [--stamina N] [--mana N]   (energy per hour; negative restores)
 flow review --satisfaction N [--<stat> N …] [--win "…"] [--lesson "…"] [--next "…"]
+          [--difficulty <tier>] [--skill-difficulty <skill>=<tier> …]   (from the next day)
+flow difficulty [--json]                 the tier now, per-skill overrides, what is unlocked and next
 flow log [--days 7]
 flow replay [--day YYYY-MM-DD]
 flow list [tasks|skills|stats|rewards|places|kinds]

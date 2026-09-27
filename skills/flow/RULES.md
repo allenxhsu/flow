@@ -6,6 +6,9 @@ run it, so they always agree. Answer with the player's own numbers: `done`
 prints the whole breakdown, and `status --json` has every completion's stored
 `price`.
 
+Every number below is the default tier, **Push**. Another tier scales some of
+them; see [Difficulty](#difficulty) at the end.
+
 ## What is stored, what is derived
 
 Definitions (settings, stats, skills, tasks, rewards, places, moment kinds) are
@@ -107,3 +110,47 @@ come as a batch. One suggestion plus up to three alternatives.
   (3 in a batch) · Assembly line (5) · Clean week (10+ tasks, no rework) ·
   Seven days · Journeyman (skill level 5) · Mastery (energy floor) · Reflective
   (4 reviews) · Earned it (a treat without debt).
+
+## Difficulty
+
+Five tiers (`DIFFICULTY`), easiest first; **Push** (`DEFAULT_DIFFICULTY`) is
+everything above, unchanged. A tier changes four things together: harder
+targets, bigger rewards, less forgiveness and tighter energy.
+
+| Tier | Unlocks at level | Points × | Target step | Rework + | Debt × | Energy cost × | Grace days / 7 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Steady | 1 | 0.8 | 3% | −0.25 | 1.5 | 0.85 | 2 |
+| **Push** (default) | 1 | 1 | 5% | 0 | 2 | 1 | 1 |
+| Grind | 3 | 1.25 | 8% | +0.25 | 2 | 1.15 | 1 |
+| Relentless | 6 | 1.5 | 11% | +0.5 | 2.5 | 1.3 | 0 |
+| Legend | 10 | 2 | 15% | +0.75 | 3 | 1.5 | 0 |
+
+- **Points ×** applies after the 2.5× cap: points = base × min(2.5, 1 +
+  bonuses) × tier points.
+- **Target step** replaces the 5% in both the flow target and the flow
+  estimate.
+- **Rework +** is added to the multiplier (1.5 / 1.75 / 2, and 2 for critical).
+  A rework uses the tier its completion was priced at.
+- **Debt ×** replaces the double on the part of a charge below zero. A purchase
+  uses the global tier on its day; a rework uses its completion's tier.
+- **Energy cost ×** multiplies positive task costs after mastery and batch
+  discounts. Restoring is never scaled.
+- **Grace days** is how many missed days a daily streak forgives in any 7-day
+  stretch (the dashboard uses the global tier).
+
+**Global plus per skill.** One global tier, and a skill can override it. A task
+plays at its skill's tier (`difficultyOn(db, day, skill)`).
+
+**Only at the weekly review.** The review's `difficulty: { tier, skills }` sets
+it, from the day after the review. A review without it keeps the setting; one
+with it replaces the whole setting, so a skill left out goes back to the global
+tier. Before any review sets it, everything is Push.
+
+**Unlocks.** Raising the global tier needs the player's level ≥ the tier's
+unlock level; raising a skill's override needs that skill's level. A locked or
+unknown tier is refused. Lowering is always allowed, and a tier already chosen
+stays in effect if a level later falls.
+
+Every price stores its tier (`price.difficulty`), so changing difficulty never
+changes points already earned. `flow difficulty` shows the setting, what is
+unlocked and what unlocks next.
