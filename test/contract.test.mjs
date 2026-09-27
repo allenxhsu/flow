@@ -145,3 +145,62 @@ test('contract: replayDay() → {beats, series, finale, hero, …}; beat kinds a
   for (const p of r.series) for (const k of ['at', 'stamina', 'mana']) assert.equal(typeof p[k], 'number', `series.${k}`);
   for (const k of ['points', 'spent', 'tasks', 'moments', 'reworks', 'zones', 'tomorrow', 'balance', 'level']) assert.ok(k in r.finale, `finale.${k}`);
 });
+
+// ─── Inventory (phase 1.5) — SPEC.md "Inventory (phase 1.5) › Contract" ───────
+// NOTE for the implementation commit: the contract adds record types (item, loadout, wish; skip, spend)
+// and price.bonuses.gear, so the older 'record types' and 'event records' assertions above must be
+// updated in the same commit.
+
+// Arity = Function.length, read literally from the contract signatures (no default on the options object).
+// SPEC?: inventory(records, now) is written without a default, unlike play(records, now = Date.now()) —
+// taken literally as arity 2.
+const INVENTORY_FUNCTIONS = {
+  makeItem: 2, findItems: 2, makeSkip: 2, makeSpend: 2, makeWish: 2, shoppingList: 1,
+  makeLoadout: 2, activeLoadout: 1, gearBonus: 3, inventory: 2,
+};
+const INVENTORY_CONSTANTS = {
+  SKIP_POINTS_PER_DOLLAR: 1, SKIP_DAILY_CAP: 100, GEAR_STEP_USES: 10, GEAR_STEP: 0.01, GEAR_MAX: 0.10,
+  SLOTS: ['head', 'body', 'feet', 'hands', 'bag', 'tech', 'vehicle'],
+};
+
+test('contract (inventory): new functions are exported with their arity', () => {
+  for (const [name, arity] of Object.entries(INVENTORY_FUNCTIONS)) {
+    assert.equal(typeof M[name], 'function', name);
+    assert.equal(M[name].length, arity, `${name}.length`);
+  }
+});
+
+test('contract (inventory): new constants are exported with their value', () => {
+  for (const [name, value] of Object.entries(INVENTORY_CONSTANTS)) assert.deepEqual(M[name], value, name);
+});
+
+test('contract (inventory): record types — item, loadout, wish are definitions; skip, spend are events', () => {
+  for (const t of ['item', 'loadout', 'wish', 'skip', 'spend']) assert.ok(M.RECORD_TYPES.includes(t), t);
+  const firstEvent = M.RECORD_TYPES.indexOf('done');
+  for (const t of ['item', 'loadout', 'wish']) assert.ok(M.RECORD_TYPES.indexOf(t) < firstEvent, `${t} is a definition`);
+  for (const t of ['skip', 'spend']) assert.ok(M.RECORD_TYPES.indexOf(t) > firstEvent, `${t} is an event`);
+});
+
+test('contract (inventory): done carries gear and price.bonuses.gear; skip/spend carry id, type, day', () => {
+  const g = game();
+  const t = g.task({ title: 'Run', skill: 'sk_run', estimate: 30 });
+  const done = g.done(t, `${D}T09:00:00`, 30);
+  assert.ok(Array.isArray(done.gear), 'done.gear');
+  assert.equal(typeof done.price.bonuses.gear, 'number', 'done.price.bonuses.gear');
+  const skip = g.add(M.makeSkip(g.db(), { query: 'Lamp', price: 20, at: T(`${D}T10:00:00`) }));
+  const spend = g.add(M.makeSpend(g.db(), { name: 'Lamp', price: 20, at: T(`${D}T11:00:00`) }));
+  for (const [type, r] of Object.entries({ skip, spend })) {
+    assert.equal(r.type, type);
+    assert.ok(r.id.startsWith(`${type}_`), `${type} id`);
+    assert.equal(r.day, D, `${type}.day`);
+    assert.equal(r.price, 20, `${type}.price`);
+  }
+  assert.equal(typeof skip.points, 'number');
+  const inv = M.inventory(g.records, T(`${D}T21:00:00`));
+  for (const k of ['items', 'stashes', 'loadouts', 'active', 'inUse', 'lowStock', 'moneySaved', 'savedThisMonth', 'spentThisMonth', 'skipsToday']) {
+    assert.ok(k in inv, `inventory().${k}`);
+  }
+  assert.ok(inv.inUse instanceof Set);
+  const gb = M.gearBonus(g.db(), t, T(`${D}T21:00:00`));
+  assert.ok(gb === null || ['item', 'uses', 'bonus'].every((k) => k in gb), 'gearBonus → { item, uses, bonus }');
+});
