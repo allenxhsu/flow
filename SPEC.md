@@ -203,9 +203,27 @@ and `price.bonuses.gear`; `balanceOf` adds skip points; constants
 
 ## Art direction (replaces "pixel art" for the game screens)
 
-The **inventory** and the **Day Replay** use rich **vector, dark-fantasy UI**
-drawn in code: ornate framed panels, metal and leather textures, glowing gems,
-lit item slots, lighting and soft shadow — sharp at any size. Original work,
-inspired by the look of 2010s action-RPG inventories, never copying any game's
-art, icons, fonts or names. The rest of the app keeps the ui-kit look. The
-replay is redone in this style (its API and timing stay).
+**Modern sci-fi strategy game — at least StarCraft II-level polish** — decided
+with the player after the pixel replay read as "too old". Rich vector art drawn
+in code (Canvas 2D / SVG, gradients, glow, particles), sharp at any size, with
+smooth easing and camera motion, matching ui-kit's sci-fi HUD (its tokens and
+palettes: steel / crystal / chitin).
+
+- **World:** a three-quarter real-time-strategy camera over the same zones
+  (Home, Road, Factory, Town) as lit terrain and structures, soft shadows,
+  ambient occlusion, day/dusk/night lighting, subtle fog of war on places not
+  visited today; smooth camera pans that follow the hero.
+- **Hero as a unit:** a clean modern figure with a glowing selection ring and
+  a move-order marker; NPCs as units with name plates; the car as a vehicle.
+- **HUD:** holographic panels — resource counters (points, stamina, mana), a
+  unit portrait with vitals, a minimap of the zones with the hero's trail,
+  objective/event banners (combo, batch, personal best) and a transmission-style
+  text panel for events, in ui-kit's display type.
+- **Finale:** a mission-debrief screen: totals, energy through the day,
+  where time went, next objective (tomorrow's first task).
+- **Inventory:** the same language — an armory/loadout panel with the hero
+  and slots, and stash tabs as storage bays.
+
+Original work only: no Blizzard (or any game's) art, units, icons, UI frames,
+faction names or sounds — "inspired by the genre and its polish". The rest of
+the app keeps the ui-kit look.
