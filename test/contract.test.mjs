@@ -146,7 +146,6 @@ test('contract: replayDay() → {beats, series, finale, hero, …}; beat kinds a
   for (const k of ['points', 'spent', 'tasks', 'moments', 'reworks', 'zones', 'tomorrow', 'balance', 'level']) assert.ok(k in r.finale, `finale.${k}`);
 });
 
-<<<<<<< HEAD
 // ─── Inventory (phase 1.5) — SPEC.md "Inventory (phase 1.5) › Contract" ───────
 // NOTE for the implementation commit: the contract adds record types (item, loadout, wish; skip, spend)
 // and price.bonuses.gear, so the older 'record types' and 'event records' assertions above must be
@@ -203,7 +202,8 @@ test('contract (inventory): done carries gear and price.bonuses.gear; skip/spend
   assert.ok(inv.inUse instanceof Set);
   const gb = M.gearBonus(g.db(), t, T(`${D}T21:00:00`));
   assert.ok(gb === null || ['item', 'uses', 'bonus'].every((k) => k in gb), 'gearBonus → { item, uses, bonus }');
-=======
+});
+
 // Consumers must handle "not due, and no review yet": since reviews became due
 // on Sundays, a new player on a weekday has { due: false, latest: null }. The
 // Review screen once assumed !due implied a latest review, and crashed.
@@ -212,5 +212,4 @@ test('contract: satisfaction can be not due with no latest review', async () => 
   const s = play([], new Date('2026-09-24T12:00:00').getTime()).satisfaction; // a Thursday, no reviews
   assert.equal(s.due, false);
   assert.equal(s.latest, null);
->>>>>>> main
 });
