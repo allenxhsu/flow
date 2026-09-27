@@ -190,13 +190,13 @@ test('difficulty: shown by flow difficulty, set in the review, per skill, from t
     run('skill', 'add', '--name', 'Running', '--stat', 'Body');
     run('skill', 'add', '--name', 'Mail', '--stat', 'Work');
     run('task', 'add', '--title', 'Long run', '--skill', 'running', '--estimate', '600');
-    run('task', 'add', '--title', 'Inbox', '--skill', 'mail', '--estimate', '100');
-    // 1800+ XP on Running: the player reaches level 3, Running level 6, Mail stays level 1.
+    run('task', 'add', '--title', 'Inbox', '--skill', 'mail', '--estimate', '20');
+    // 1800+ XP on Running: the player reaches level 3, Running level 6; Mail (under 100 XP) stays level 1.
     for (const d of ['21', '22', '23']) run('done', 'long run', '--minutes', '600', '--at', `2026-09-${d}T20:00:00Z`);
-    run('done', 'inbox', '--minutes', '100', '--at', '2026-09-24T10:00:00Z');
-    run('done', 'inbox', '--minutes', '100', '--at', '2026-09-25T10:00:00Z');
-    // Push: the next target is 5% better than 100.
-    assert.match(run('done', 'inbox', '--minutes', '100', '--at', '2026-09-26T10:00:00Z'), /Next time: target 95 min \(your last 3 runs, 5% better\)/);
+    run('done', 'inbox', '--minutes', '20', '--at', '2026-09-24T10:00:00Z');
+    run('done', 'inbox', '--minutes', '20', '--at', '2026-09-25T10:00:00Z');
+    // Push: the next target is 5% better than 20.
+    assert.match(run('done', 'inbox', '--minutes', '20', '--at', '2026-09-26T10:00:00Z'), /Next time: target 19 min \(your last 3 runs, 5% better\)/);
 
     const text = run('difficulty');
     assert.match(text, /Push/);
@@ -241,9 +241,9 @@ test('difficulty: shown by flow difficulty, set in the review, per skill, from t
     assert.match(p.run(TUE, 'difficulty'), /Mail: Steady/);
 
     // The CLI's own "next time" target uses the skill's tier today: Steady aims 3% better.
-    const inbox = p.run(TUE, 'done', 'inbox', '--minutes', '100', '--at', '2026-09-29T10:00:00Z');
+    const inbox = p.run(TUE, 'done', 'inbox', '--minutes', '20', '--at', '2026-09-29T10:00:00Z');
     assert.match(inbox, /Steady/);
-    assert.match(inbox, /Next time: target 97 min \(your last 4 runs, 3% better\)/);
+    assert.match(inbox, /Next time: target 19\.4 min \(your last 4 runs, 3% better\)/);
 
     assert.match(p.run(TUE, 'help'), /flow difficulty/);
     assert.match(p.run(TUE, 'help'), /--skill-difficulty <skill>=<tier>/);
