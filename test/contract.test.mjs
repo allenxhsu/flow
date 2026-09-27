@@ -145,3 +145,13 @@ test('contract: replayDay() → {beats, series, finale, hero, …}; beat kinds a
   for (const p of r.series) for (const k of ['at', 'stamina', 'mana']) assert.equal(typeof p[k], 'number', `series.${k}`);
   for (const k of ['points', 'spent', 'tasks', 'moments', 'reworks', 'zones', 'tomorrow', 'balance', 'level']) assert.ok(k in r.finale, `finale.${k}`);
 });
+
+// Consumers must handle "not due, and no review yet": since reviews became due
+// on Sundays, a new player on a weekday has { due: false, latest: null }. The
+// Review screen once assumed !due implied a latest review, and crashed.
+test('contract: satisfaction can be not due with no latest review', async () => {
+  const { play } = await import('../src/model.js');
+  const s = play([], new Date('2026-09-24T12:00:00').getTime()).satisfaction; // a Thursday, no reviews
+  assert.equal(s.due, false);
+  assert.equal(s.latest, null);
+});
