@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en" data-app="flow">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flow</title>
+<link rel="stylesheet" href="ui-kit/css/kit.css">
+<link rel="stylesheet" href="src/styles.css">
+<!-- Applied before first paint so the page never flashes unthemed. -->
+<script type="module">
+  import { initTheme, detectMacDesktop } from './ui-kit/js/theme.js';
+  initTheme({ app: 'flow', macInset: detectMacDesktop() });
+</script>
+<script type="module" src="ui-kit/js/theme-picker.js"></script>
+<script type="module" src="ui-kit/js/sync-status.js"></script>
+<script type="module" src="ui-kit/js/toast.js"></script>
+<script type="module" src="ui-kit/js/dialog.js"></script>
+<script type="module" src="ui-kit/js/portal-bar.js"></script>
+</head>
+<body>
+  <!-- Inside the Portal only (src/app.js stamps it in): anywhere else there is no /auth/me to ask. -->
+  <template id="portal-bar-tpl"><sc-portal-bar app="flow"></sc-portal-bar></template>
+  <div class="sc-shell" id="shell">
+    <aside class="sc-sidebar" id="sidebar">
+      <div class="sc-brand">
+        <span class="sc-brand-mark">FL</span>
+        <div>
+          <div class="sc-brand-name">Flow</div>
+          <span class="sc-brand-sub">FASTER · BETTER</span>
+        </div>
+      </div>
+      <nav class="sc-nav" id="nav" aria-label="Views"></nav>
+      <span class="sc-spacer"></span>
+      <footer class="sc-sidebar-foot">
+        <sc-sync-status style="flex: 1"></sc-sync-status>
+      </footer>
+    </aside>
+    <div class="nav-scrim" aria-hidden="true"></div>
+    <main class="sc-main">
+      <header class="sc-header">
+        <button class="sc-button sc-button--ghost sc-button--icon sc-button--sm nav-toggle" data-toggle-nav title="Menu" aria-label="Menu">☰</button>
+        <h1 class="sc-header-title" id="view-title">Now</h1>
+        <span class="sc-spacer"></span>
+        <span class="sc-resource" title="Points balance"><span class="sc-resource-icon"></span><span id="hdr-balance">0</span></span>
+        <span class="sc-badge" id="hdr-level" title="Player level">LV 1</span>
+      </header>
+      <div class="sc-content" id="view"><div class="sc-boot sc-muted">Loading…</div></div>
+    </main>
+  </div>
+  <sc-toast></sc-toast>
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>
