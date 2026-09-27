@@ -4,9 +4,10 @@
 //
 // The data is sync-kit records in workspace "flow". Two kinds:
 //
-//   definitions — settings, stat, skill, task, reward, place, kind. Edited in
-//                 place, and last-write-wins is the right rule for them.
-//   events      — done, rework, purchase, energy, review, moment. Written once
+//   definitions — settings, stat, skill, task, reward, place, kind, item,
+//                 loadout, wish. Edited in place, and last-write-wins is the
+//                 right rule for them.
+//   events      — done, rework, purchase, energy, review, moment, skip, spend. Written once
 //                 and never edited, so two devices can never overwrite each other.
 //                 A review redone in the same ISO week is a new event; the
 //                 latest one counts for that week.
@@ -91,8 +92,21 @@ export const DEFAULT_KINDS = [
   { id: 'kind_rest', title: 'Rest', icon: '☕', place: 'place_bedroom', staminaPerHour: -3, manaPerHour: -3 },
 ];
 
-const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind'];
-const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment'];
+// ─── inventory (phase 1.5) ──────────────────────────────────────────────────
+
+/** Skipping a purchase ("I have it") pays 1 point per dollar avoided… */
+export const SKIP_POINTS_PER_DOLLAR = 1;
+/** …up to this many points a day across all skips. */
+export const SKIP_DAILY_CAP = 100;
+/** Gear earns GEAR_STEP for every GEAR_STEP_USES completions done wearing it, up to GEAR_MAX. */
+export const GEAR_STEP_USES = 10;
+export const GEAR_STEP = 0.01;
+export const GEAR_MAX = 0.10;
+/** A loadout's slots, in paper-doll order. */
+export const SLOTS = ['head', 'body', 'legs', 'feet', 'hands', 'bag', 'tech', 'vehicle'];
+
+const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish'];
+const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend'];
 export const RECORD_TYPES = [...DEFINITIONS, ...EVENTS];
 
 // ─── dates ──────────────────────────────────────────────────────────────────
@@ -144,6 +158,8 @@ export function index(records) {
   const byStart = (a, b) => (a.end ?? a.at ?? 0) - (b.end ?? b.at ?? 0) || a.id.localeCompare(b.id);
   const places = by.place.length ? by.place : DEFAULT_PLACES.map((p) => ({ ...p, type: 'place' }));
   const kinds = by.kind.length ? by.kind : DEFAULT_KINDS.map((k) => ({ ...k, type: 'kind' }));
+  const items = lastWrites(by.item);
+  const loadouts = lastWrites(by.loadout);
   return {
     settings: by.settings.find((s) => s.id === 'settings') || { name: 'Player', mission: '' },
     stats,
@@ -164,7 +180,23 @@ export function index(records) {
     skill: new Map(by.skill.map((s) => [s.id, s])),
     task: new Map(by.task.map((t) => [t.id, t])),
     reward: new Map(by.reward.map((r) => [r.id, r])),
+    items,
+    item: new Map(items.map((i) => [i.id, i])),
+    loadouts,
+    wishes: lastWrites(by.wish),
+    skips: by.skip.sort(byStart),
+    spends: by.spend.sort(byStart),
   };
+}
+
+/** One record per id: the latest write wins (a later copy wins a tie), in first-seen order. */
+function lastWrites(list) {
+  const m = new Map();
+  for (const r of list) {
+    const was = m.get(r.id);
+    if (!was || (r.updatedAt ?? 0) >= (was.updatedAt ?? 0)) m.set(r.id, r);
+  }
+  return [...m.values()];
 }
 
 // ─── definitions ────────────────────────────────────────────────────────────
@@ -380,7 +412,7 @@ export function chainAt(db, task, start) {
  * bonus named. The result is stored on the record and never recomputed.
  *
  *   base   = estimated minutes × quality × POINTS_PER_MINUTE
- *   points = base × min(BONUS_CAP, 1 + flow + pb + underdog + (batch or combo))
+ *   points = base × min(BONUS_CAP, 1 + flow + pb + underdog + (batch or combo) + gear)
  */
 export function priceDone(db, task, { start, end, minutes, value, quality }) {
   const rw = reworkByDone(db);
@@ -397,6 +429,7 @@ export function priceDone(db, task, { start, end, minutes, value, quality }) {
     underdog: underdogsOn(db, day).includes(stat) ? BONUS.underdog : 0,
     combo: chain.batchIndex > 0 ? 0 : Math.min(BONUS.comboMax, BONUS.comboStep * chain.comboIndex),
     batch: BONUS.batchStep * chain.batchIndex,
+    gear: gearBonus(db, task, start).bonus,
   };
   const multiplier = Math.min(BONUS_CAP, 1 + Object.values(bonuses).reduce((a, b) => a + b, 0));
   const base = Math.max(1, Math.round(hist.estimate * quality * POINTS_PER_MINUTE));
@@ -447,19 +480,20 @@ export function makeDone(db, taskRef, { end = Date.now(), minutes, value, qualit
   const price = priceDone(db, task, { start, end, minutes, value, quality });
   return {
     id: newId('done', end), type: 'done', task: task.id, day: dayOf(end), start, end, minutes, measure: task.measure,
-    value, quality, timed: !!timed, note, critical: isCritical(task), price,
+    value, quality, timed: !!timed, note, critical: isCritical(task), price, gear: equipped(db),
     comboIndex: price.comboIndex, batchIndex: price.batchIndex, ...(reworkOf ? { reworkOf } : {}),
   };
 }
 
 // ─── spending: purchases, rework, debt ──────────────────────────────────────
 
-/** The points balance: earned, less rework charges and purchases, as they were charged. */
+/** The points balance: earned and skip points, less rework charges and purchases, as they were charged. */
 export function balanceOf(db, before = Infinity) {
   let n = 0;
   for (const d of db.done) if ((d.end ?? 0) < before) n += d.price?.points || 0;
   for (const r of db.rework) if ((r.at ?? 0) < before) n -= r.charged || 0;
   for (const p of db.purchases) if ((p.at ?? 0) < before) n -= p.charged || 0;
+  for (const s of db.skips || []) if ((s.at ?? 0) < before) n += s.points || 0;
   return n;
 }
 
@@ -496,6 +530,248 @@ export function makeRework(db, doneRef, { minutes, at = Date.now(), note = '' })
   return {
     id: newId('rework', at), type: 'rework', done: done.id, task: done.task, day: dayOf(at), at, minutes, repeat,
     multiplier, perMinute: Math.round(perMinute * 100) / 100, penalty, charged: chargeFor(balanceOf(db, at), penalty), note,
+  };
+}
+
+// ─── inventory: items, skips, spends, loadouts, gear ────────────────────────
+// Use what you already own before buying more. Skipping a purchase pays
+// points (never XP); buying is allowed and simply recorded.
+
+const money = (x) => Math.round(x * 100) / 100;
+const moneyOf = (v, what) => {
+  const n = Number(v);
+  if (!(Number.isFinite(n) && n >= 0)) throw new Error(`${what} is a price in dollars, 0 or more`);
+  return money(n);
+};
+const countOf = (v, what) => {
+  const n = Number(v);
+  if (!(Number.isFinite(n) && n >= 0)) throw new Error(`${what} is a number, 0 or more`);
+  return n;
+};
+
+/**
+ * An item you own. Consumables join the shopping list at or below `lowStock`
+ * and ask for enough to get back to `usual`. `slot` is where it is worn in a
+ * loadout; `skills` are the skills it helps (the gear bonus).
+ */
+export function makeItem(db, { name, category = '', aliases = [], place = null, qty = 1, price = 0,
+  consumable = false, lowStock = 0, usual, skills = [], slot = null, photo = null, color = null, id = null, now = Date.now() }) {
+  name = String(name ?? '').trim();
+  if (!name) throw new Error('an item needs a name');
+  if (slot !== null && slot !== undefined && slot !== '' && !SLOTS.includes(slot)) throw new Error(`slot is ${SLOTS.join(', ')}, not "${slot}"`);
+  if (place && !db.place.has(place)) throw new Error(`no place "${place}"`);
+  for (const s of skills) if (!db.skill.has(s)) throw new Error(`no skill "${s}"`);
+  lowStock = countOf(lowStock, 'lowStock');
+  usual = usual === undefined || usual === null ? lowStock + 1 : countOf(usual, 'usual');
+  return {
+    id: id || newId('item', now), type: 'item', name, category: String(category || ''),
+    aliases: (Array.isArray(aliases) ? aliases : [aliases]).map((a) => String(a).trim()).filter(Boolean),
+    place: place || null, qty: countOf(qty, 'qty'), price: moneyOf(price, 'price'), consumable: !!consumable,
+    lowStock, usual, skills: [...skills], slot: slot || null, photo: photo || null, color: color || null,
+  };
+}
+
+const words = (s) => String(s ?? '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, ' ').trim();
+const stem = (w) => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);
+/** At most one edit apart (insert, delete or change a letter): a typo. */
+function oneEdit(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0; let j = 0; let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++; else if (b.length > a.length) j++; else { i++; j++; }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
+/** How well a query matches one text, 0–1: whole, from the start, inside, then word by word. */
+function matchScore(text, q, qWords) {
+  const t = words(text);
+  if (!t || !q) return 0;
+  if (t === q) return 1;
+  if (t.startsWith(q)) return 0.9;
+  if (t.includes(q)) return 0.75;
+  const tWords = t.split(' ').map(stem);
+  let hit = 0;
+  for (const w of qWords) {
+    if (tWords.some((x) => x === w || (w.length >= 3 && x.startsWith(w)))) hit += 1;
+    else if (w.length >= 5 && tWords.some((x) => x.length >= 5 && oneEdit(x, w))) hit += 0.8;
+  }
+  const need = qWords.length <= 2 ? qWords.length : Math.ceil((qWords.length * 2) / 3);
+  const found = qWords.filter((w) => tWords.some((x) => x === w || (w.length >= 3 && x.startsWith(w)) || (w.length >= 5 && x.length >= 5 && oneEdit(x, w)))).length;
+  if (found < need) return 0;
+  return 0.6 * (hit / qWords.length);
+}
+
+/** Items that match a query on name, aliases or category, best first: [{ item, score }]. */
+export function findItems(db, query) {
+  const q = words(query);
+  if (!q) return [];
+  const qWords = q.split(' ').map(stem);
+  const out = [];
+  for (const item of db.items || []) {
+    if (item.archived) continue;
+    const score = Math.max(
+      matchScore(item.name, q, qWords),
+      ...(item.aliases || []).map((a) => 0.95 * matchScore(a, q, qWords)),
+      0.7 * matchScore(item.category, q, qWords),
+    );
+    if (score > 0) out.push({ item, score: Math.round(score * 1000) / 1000 });
+  }
+  return out.sort((a, b) => b.score - a.score || a.item.name.localeCompare(b.item.name));
+}
+
+/**
+ * "I have it": a purchase not made. Points = the price avoided, 1 per dollar,
+ * rounded — capped at SKIP_DAILY_CAP a day, counting only the skips before
+ * this one's own time that day. The full price still counts as money saved.
+ */
+export function makeSkip(db, { query, price, item = null, at = Date.now() }) {
+  const owned = item ? db.item.get(item) : null;
+  if (item && !owned) throw new Error(`no item "${item}"`);
+  query = String(query ?? owned?.name ?? '').trim();
+  if (!query) throw new Error('a skip names what you did not buy');
+  price = moneyOf(price, 'price');
+  const day = dayOf(at);
+  const before = (db.skips || []).filter((s) => s.day === day && (s.at ?? 0) < at).reduce((n, s) => n + (s.points || 0), 0);
+  const points = Math.max(0, Math.min(Math.round(price * SKIP_POINTS_PER_DOLLAR), SKIP_DAILY_CAP - before));
+  return { id: newId('skip', at), type: 'skip', day, at, query, item: owned?.id || null, price, points };
+}
+
+/** "Buy anyway": real money spent. No penalty; write restockFor(db, spend) with it. */
+export function makeSpend(db, { name, price, item = null, qty = 1, at = Date.now() }) {
+  const owned = item ? db.item.get(item) : null;
+  if (item && !owned) throw new Error(`no item "${item}"`);
+  name = String(name ?? owned?.name ?? '').trim();
+  if (!name) throw new Error('a purchase needs a name');
+  qty = countOf(qty, 'qty');
+  if (!(qty > 0)) throw new Error('qty is more than 0');
+  return { id: newId('spend', at), type: 'spend', day: dayOf(at), at, name, item: owned?.id || null, qty, price: moneyOf(price, 'price') };
+}
+
+/**
+ * The item record to write with a spend: the owned item with its quantity
+ * topped up, or a new item (priced per unit) when the spend names none.
+ */
+export function restockFor(db, spend) {
+  const owned = spend.item ? db.item.get(spend.item) : null;
+  if (owned) return { ...owned, qty: (owned.qty || 0) + (spend.qty || 1) };
+  return makeItem(db, { name: spend.name, qty: spend.qty || 1, price: money((spend.price || 0) / (spend.qty || 1)), now: spend.at ?? Date.now() });
+}
+
+/** Something you mean to buy. It stays on the shopping list until marked done. */
+export function makeWish(db, { name, qty = 1, now = Date.now() }) {
+  name = String(name ?? '').trim();
+  if (!name) throw new Error('a wish needs a name');
+  qty = countOf(qty, 'qty');
+  if (!(qty > 0)) throw new Error('qty is more than 0');
+  return { id: newId('wish', now), type: 'wish', name, qty, done: false };
+}
+
+const isLow = (i) => i.consumable && !i.archived && (i.qty || 0) <= (i.lowStock || 0);
+
+/**
+ * The shopping list: every open wish with what the inventory already has that
+ * matches it, then every consumable at or below its low-stock level, asking
+ * for enough to get back to its usual quantity.
+ */
+export function shoppingList(db) {
+  const list = [];
+  for (const w of db.wishes || []) if (!w.done) list.push({ name: w.name, qty: w.qty, wish: w, matches: findItems(db, w.name) });
+  for (const i of db.items || []) {
+    if (!isLow(i)) continue;
+    const usual = i.usual ?? (i.lowStock || 0) + 1;
+    list.push({ name: i.name, qty: Math.max(1, usual - (i.qty || 0)), lowStock: true, item: i, matches: [] });
+  }
+  return list;
+}
+
+/** A loadout: what you carry for one context (Work bag, Gym bag, Car…), slot → item id. */
+export function makeLoadout(db, { name, slots = {}, active = false, checklist = [], id = null, now = Date.now() }) {
+  name = String(name ?? '').trim();
+  if (!name) throw new Error('a loadout needs a name');
+  const clean = {};
+  for (const [slot, itemId] of Object.entries(slots || {})) {
+    if (!SLOTS.includes(slot)) throw new Error(`slot is ${SLOTS.join(', ')}, not "${slot}"`);
+    if (itemId === null || itemId === undefined || itemId === '') continue;
+    if (!db.item.has(itemId)) throw new Error(`no item "${itemId}"`);
+    clean[slot] = itemId;
+  }
+  return { id: id || newId('loadout', now), type: 'loadout', name, slots: clean, active: !!active, checklist: (checklist || []).map(String).filter(Boolean) };
+}
+
+/** The active loadout, or null. If several say active, the latest written wins. */
+export function activeLoadout(db) {
+  let best = null;
+  for (const l of db.loadouts || []) if (l.active && !l.archived && (!best || (l.updatedAt ?? 0) >= (best.updatedAt ?? 0))) best = l;
+  return best;
+}
+
+/** The ids of the items equipped in the active loadout now. */
+function equipped(db) {
+  const l = activeLoadout(db);
+  return l ? [...new Set(Object.values(l.slots || {}).filter((id) => db.item.has(id)))] : [];
+}
+
+/**
+ * The gear bonus for a task: of the items in the active loadout that are
+ * linked to the task's skill, the one worn for the most of that skill's
+ * completions before `at`. +GEAR_STEP per GEAR_STEP_USES of them, up to GEAR_MAX.
+ */
+export function gearBonus(db, task, at) {
+  const t = typeof task === 'string' ? db.task.get(task) : task;
+  const none = { item: null, uses: 0, bonus: 0 };
+  if (!t) return none;
+  const linked = equipped(db).map((id) => db.item.get(id)).filter((i) => (i.skills || []).includes(t.skill));
+  if (!linked.length) return none;
+  const runs = db.done.filter((d) => (d.end ?? 0) < at && Array.isArray(d.gear) && d.gear.length && db.task.get(d.task)?.skill === t.skill);
+  let best = null;
+  for (const item of linked) {
+    const uses = runs.filter((d) => d.gear.includes(item.id)).length;
+    const bonus = Math.round(Math.min(GEAR_MAX, Math.floor(uses / GEAR_STEP_USES) * GEAR_STEP) * 10000) / 10000;
+    if (!best || bonus > best.bonus || (bonus === best.bonus && uses > best.uses)) best = { item, uses, bonus };
+  }
+  return best;
+}
+
+/** What the hero wears on a day: the loadout active at `ms` (written by then), slot by slot. */
+function outfitAt(db, ms) {
+  const l = activeLoadout({ loadouts: (db.loadouts || []).filter((x) => (x.updatedAt ?? 0) < ms) });
+  return Object.fromEntries(SLOTS.map((slot) => {
+    const i = l && db.item.get(l.slots?.[slot]);
+    return [slot, i ? { id: i.id, name: i.name, category: i.category || '', color: i.color || null } : null];
+  }));
+}
+
+/**
+ * The inventory as of `now`: items, stashes by storage place (equipped items
+ * stay in their stash), loadouts, what is in use, what is low, and money
+ * saved (skips) vs spent this month.
+ */
+export function inventory(records, now = Date.now()) {
+  const db = Array.isArray(records) ? index(records) : records;
+  const day = dayOf(now);
+  const month = day.slice(0, 7);
+  const items = db.items.filter((i) => !i.archived);
+  const byPlace = new Map();
+  for (const i of items) byPlace.set(i.place || null, [...(byPlace.get(i.place || null) || []), i]);
+  const order = new Map(db.places.map((p, n) => [p.id, n]));
+  const stashes = [...byPlace].map(([place, list]) => ({ place, name: place ? db.place.get(place)?.name || place : 'Unfiled', items: list }))
+    .sort((a, b) => (a.place === null) - (b.place === null) || (order.get(a.place) ?? 1e9) - (order.get(b.place) ?? 1e9));
+  const inUse = new Set();
+  for (const l of db.loadouts) for (const id of Object.values(l.slots || {})) if (db.item.has(id)) inUse.add(id);
+  const skips = db.skips.filter((s) => (s.at ?? 0) <= now);
+  const spends = db.spends.filter((s) => (s.at ?? 0) <= now);
+  const sum = (xs) => money(xs.reduce((n, x) => n + (x.price || 0), 0));
+  return {
+    items, stashes, loadouts: db.loadouts, active: activeLoadout(db), inUse,
+    lowStock: items.filter(isLow),
+    moneySaved: sum(skips), spent: sum(spends),
+    savedThisMonth: sum(skips.filter((s) => s.day.slice(0, 7) === month)),
+    spentThisMonth: sum(spends.filter((s) => s.day.slice(0, 7) === month)),
+    skipsToday: skips.filter((s) => s.day === day),
+    shopping: shoppingList(db),
   };
 }
 
@@ -795,6 +1071,7 @@ function asOf(db, ms) {
     ...db,
     done: upTo(db.done, 'end'), rework: upTo(db.rework, 'at'), purchases: upTo(db.purchases, 'at'),
     energy: upTo(db.energy, 'at'), moments: upTo(db.moments, 'end'), reviews: upTo(db.reviews, 'at'),
+    skips: upTo(db.skips || [], 'at'), spends: upTo(db.spends || [], 'at'),
   };
 }
 
@@ -874,7 +1151,8 @@ export function replayDay(records, day, { now = Date.now() } = {}) {
   }
 
   // The finale is the day as it ended, even when replayed weeks later.
-  const past = asOf(db, new Date(`${addDays(day, 1)}T00:00:00`).getTime());
+  const endOfDay = new Date(`${addDays(day, 1)}T00:00:00`).getTime();
+  const past = asOf(db, endOfDay);
   const totalXp = [...skillXp(past).values()].reduce((a, b) => a + b, 0);
   const tomorrow = pickNext(past, new Date(`${addDays(day, 1)}T08:00:00`).getTime());
   const done = events.filter((e) => e.kind === 'done');
@@ -882,7 +1160,7 @@ export function replayDay(records, day, { now = Date.now() } = {}) {
   return {
     day,
     start: rating, // the morning energy record, or null when the day was never rated
-    hero: db.settings.hero || null,
+    hero: { ...(db.settings.hero || {}), outfit: outfitAt(db, endOfDay) },
     beats,
     series,
     finale: {

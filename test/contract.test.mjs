@@ -25,8 +25,8 @@ const CONSTANTS = {
   ZONES: ['home', 'road', 'factory', 'town', 'elsewhere'], WALK_MIN: 5,
 };
 
-const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind'];
-const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment'];
+const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish'];
+const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend'];
 const D = '2026-09-28';
 
 test('contract: every function in docs/API.md is exported with its arity', () => {
@@ -84,7 +84,7 @@ test('contract: event records carry id, type, day and their fields', () => {
   const { done, rework, purchase, moment, energy, review } = events;
   for (const f of ['task', 'start', 'end', 'minutes', 'quality']) assert.ok(f in done, `done.${f}`);
   for (const f of ['base', 'points', 'bonuses', 'multiplier', 'energy']) assert.ok(f in done.price, `done.price.${f}`);
-  assert.deepEqual(Object.keys(done.price.bonuses).sort(), ['batch', 'combo', 'flow', 'pb', 'underdog']);
+  assert.deepEqual(Object.keys(done.price.bonuses).sort(), ['batch', 'combo', 'flow', 'gear', 'pb', 'underdog']);
   for (const f of ['done', 'minutes', 'multiplier', 'penalty', 'charged']) assert.ok(f in rework, `rework.${f}`);
   for (const f of ['reward', 'price', 'charged']) assert.ok(f in purchase, `purchase.${f}`);
   for (const f of ['kind', 'place', 'start', 'end', 'who']) assert.ok(f in moment, `moment.${f}`);

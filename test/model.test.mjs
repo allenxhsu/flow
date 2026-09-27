@@ -148,7 +148,7 @@ describe('pricing', () => {
     assert.equal(d.price.base, 24);
     assert.equal(d.price.estimateFrom, 'you');
     assert.equal(d.price.target, null);
-    assert.deepEqual(d.price.bonuses, { flow: 0, pb: 0, underdog: 0, combo: 0, batch: 0 });
+    assert.deepEqual(d.price.bonuses, { flow: 0, pb: 0, underdog: 0, combo: 0, batch: 0, gear: 0 });
     assert.equal(d.price.points, 24);
     assert.equal(d.start, T('2026-09-28T09:00:00'));
     assert.equal(d.day, '2026-09-28');
@@ -333,7 +333,7 @@ describe('pricing', () => {
     g.done('t_big', '2026-09-27T12:00:00', 200);
     for (let i = 1; i <= 10; i++) g.done('t_fill', `2026-09-28T09:${String(i * 5).padStart(2, '0')}:00`, 5);
     const d = g.done('t_x', '2026-09-28T10:10:00', 20);
-    assert.deepEqual(d.price.bonuses, { flow: 0.2, pb: 0.25, underdog: 0.5, combo: 1, batch: 0 });
+    assert.deepEqual(d.price.bonuses, { flow: 0.2, pb: 0.25, underdog: 0.5, combo: 1, batch: 0, gear: 0 });
     assert.equal(d.price.multiplier, BONUS_CAP);
     assert.equal(d.price.base, 29); // round(30 × 0.95)
     assert.equal(d.price.points, 73); // round(29 × 2.5)
