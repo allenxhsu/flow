@@ -1,11 +1,32 @@
 // Rules: how the scoring works, in words. The numbers come from src/model.js,
 // so this page cannot drift from what the game actually does.
 
-import { BONUS, BONUS_CAP, COMBO_GAP_MIN, BATCH_GAP_MIN, BATCH_RELEASE, DEADLINE_SOON_DAYS, HISTORY_RUNS, HISTORY_MIN_RUNS, TARGET_STEP, MASTERY_STEP, MASTERY_FLOOR, BATCH_MANA_SHARE, REWORK_MULTIPLIERS, REWORK_CRITICAL, DEBT_MULTIPLIER, PLAYER_STEP, STAT_STEP, SKILL_STEP, REWORK_ASK_DAYS } from '../model.js';
+import { BONUS, BONUS_CAP, COMBO_GAP_MIN, BATCH_GAP_MIN, BATCH_RELEASE, DEADLINE_SOON_DAYS, HISTORY_RUNS, HISTORY_MIN_RUNS, TARGET_STEP, MASTERY_STEP, MASTERY_FLOOR, BATCH_MANA_SHARE, REWORK_MULTIPLIERS, REWORK_CRITICAL, DEBT_MULTIPLIER, PLAYER_STEP, STAT_STEP, SKILL_STEP, REWORK_ASK_DAYS, DIFFICULTY, DEFAULT_DIFFICULTY } from '../model.js';
+import { esc } from '../util.js';
 
 const pc = (x) => `${Math.round(x * 100)}%`;
+const signed = (x) => (x === 0 ? '0' : `${x > 0 ? '+' : '−'}${Math.abs(x)}`);
 
-export function render() {
+/** The tier you play at now, its per-skill overrides, and the table. */
+function difficulty(g) {
+  const d = g?.difficulty || { tier: DEFAULT_DIFFICULTY, name: 'Push', skills: {}, next: null };
+  const name = (id) => DIFFICULTY.find((t) => t.id === id)?.name || id;
+  const over = Object.entries(d.skills || {}).map(([id, t]) => `${esc(g?.skills?.find((k) => k.id === id)?.name || id)} at ${esc(name(t))}`);
+  return `
+    <h3 id="difficulty">Difficulty</h3>
+    <p>You play at <b>${esc(d.name)}</b>${over.length ? `; ${over.join(', ')}` : ''}.${d.next ? ` ${esc(d.next.name)} unlocks at level ${d.next.unlock}.` : ''} The numbers above are Push. A harder tier means harder targets, bigger rewards, less forgiveness and tighter energy, all together.</p>
+    <div class="table-wrap"><table class="sc-table tier-table">
+      <thead><tr><th>Tier</th><th>Unlocks at level</th><th>Points ×</th><th>Target step</th><th>Rework +</th><th>Debt ×</th><th>Energy cost ×</th><th>Grace days / 7</th></tr></thead>
+      <tbody>${DIFFICULTY.map((t) => `<tr data-tier="${t.id}"${t.id === d.tier ? ' class="current"' : ''}><td>${t.id === d.tier ? '▶ ' : ''}${t.id === DEFAULT_DIFFICULTY ? `<b>${esc(t.name)}</b> (default)` : esc(t.name)}</td><td class="num">${t.unlock}</td><td class="num">${t.points}</td><td class="num">${pc(t.targetStep)}</td><td class="num">${signed(t.reworkAdd)}</td><td class="num">${t.debt}</td><td class="num">${t.energy}</td><td class="num">${t.grace}</td></tr>`).join('')}</tbody>
+    </table></div>
+    <ul>
+      <li><b>Points ×</b> applies after the ${BONUS_CAP}× cap. <b>Target step</b> replaces the ${pc(TARGET_STEP)} in the target and the flow estimate. <b>Rework +</b> is added to the rework multiplier, at the tier the job was priced at. <b>Debt ×</b> replaces the ${DEBT_MULTIPLIER}× below zero. <b>Energy cost ×</b> scales positive costs only. <b>Grace days</b> is how many misses a daily streak forgives in 7 days.</li>
+      <li>One global tier, and any skill can override it; a task plays at its skill's tier.</li>
+      <li>It changes only in the weekly review, from the next day. Raising needs the level (yours for the global tier, the skill's for an override); lowering is always allowed. Points already earned never change.</li>
+    </ul>`;
+}
+
+export function render(ctx) {
   return `<div class="view"><article class="sc-panel pad prose" id="rules">
     <h2>The rules</h2>
     <p>Flow is about doing similar tasks <b>faster or better</b>, until the day feels like flow in a game. Success after 12 weeks: still checking in five days a week, and weekly life satisfaction up a point.</p>
@@ -58,5 +79,6 @@ export function render() {
 
     <h3>Moments and places</h3>
     <p>Moments are life that is not a task — a drive, a chat, laundry, a meal, rest: energy by the hour, never points. Places belong to zones (home, road, factory, town, elsewhere); a task's place defaults from its skill.</p>
+    ${difficulty(ctx?.g)}
   </article></div>`;
 }

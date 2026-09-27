@@ -63,10 +63,42 @@ input[type='color'] { width: 100%; height: 34px; padding: 2px; background: var(-
 .chart-tip[hidden] { display: none; }
 
 .replay-root { min-height: 240px; }
-.prose { max-width: 70ch; line-height: 1.55; }
+.prose { max-width: 70ch; line-height: 1.55; min-width: 0; }
 .prose h3 { margin: var(--sc-space-4) 0 var(--sc-space-2); font-family: var(--sc-font-display); font-size: var(--sc-text-sm); letter-spacing: 0.1em; text-transform: uppercase; color: var(--sc-text-2); }
 .prose ul { padding-left: 1.2em; margin: 0; }
 .prose p { margin: 0 0 var(--sc-space-2); }
+
+/* Difficulty: tier cards on the review. Semantic hooks (.tier-card, .locked,
+   .chosen, .current, .tier-icon, .tier-lock) so an app-wide skin can restyle them. */
+.tier-row { display: grid; grid-template-columns: repeat(5, minmax(128px, 1fr)); gap: var(--sc-space-2); overflow-x: auto; scroll-snap-type: x proximity; padding-bottom: 2px; }
+.tier-card { display: grid; gap: 4px; align-content: start; justify-items: center; text-align: center; padding: var(--sc-space-3); cursor: pointer; scroll-snap-align: start; min-width: 0; }
+.tier-card input { position: absolute; opacity: 0; pointer-events: none; }
+.tier-card:has(input:focus-visible) { outline: 2px solid var(--sc-accent); outline-offset: 2px; }
+.tier-card.chosen { border-color: var(--sc-warning); box-shadow: 0 0 0 1px rgb(var(--sc-warning-rgb) / 0.5), 0 0 18px rgb(var(--sc-warning-rgb) / 0.18); }
+.tier-card.current .tier-state { color: var(--sc-accent); }
+.tier-card.chosen .tier-state, .tier-card.chosen .tier-name { color: var(--sc-warning); }
+.tier-card.locked { cursor: not-allowed; opacity: 0.5; filter: grayscale(1); }
+.tier-card.locked:hover { border-color: var(--sc-line); box-shadow: none; }
+.tier-icon { display: grid; place-items: center; width: 36px; height: 36px; font-size: 20px; background: var(--sc-sunken); border: 1px solid var(--sc-line-strong); }
+.tier-name { font-family: var(--sc-font-display); letter-spacing: 0.08em; text-transform: uppercase; font-size: var(--sc-text-sm); }
+.tier-points { font-size: var(--sc-text-lg); font-weight: 700; color: var(--sc-success); }
+.tier-card.locked .tier-points { color: var(--sc-text-3); }
+.tier-points-label { font-size: var(--sc-text-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--sc-text-3); margin-top: -4px; }
+.tier-summary { font-size: var(--sc-text-xs); color: var(--sc-text-2); }
+.tier-stats { display: grid; grid-template-columns: auto auto; gap: 0 var(--sc-space-2); margin: 0; width: 100%; font-size: var(--sc-text-xs); color: var(--sc-text-3); }
+.tier-stats dt { text-align: left; }
+.tier-stats dd { margin: 0; text-align: right; color: var(--sc-text-2); }
+.tier-state { font-size: var(--sc-text-xs); text-transform: uppercase; letter-spacing: 0.1em; color: var(--sc-success); display: inline-flex; align-items: center; gap: 4px; }
+.tier-card.locked .tier-state { color: var(--sc-danger); text-transform: none; letter-spacing: 0; }
+/* A padlock drawn in CSS: a shackle over a body. */
+.tier-lock { position: relative; display: inline-block; width: 10px; height: 8px; margin-top: 5px; background: currentColor; }
+.tier-lock::before { content: ''; position: absolute; left: 2px; top: -6px; width: 6px; height: 6px; border: 2px solid currentColor; border-bottom: 0; box-sizing: border-box; }
+.per-skill { gap: var(--sc-space-2); }
+.skill-tier { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1.4fr); align-items: center; gap: var(--sc-space-2); }
+.skill-tier-name { overflow-wrap: anywhere; }
+.tier-guide { padding: var(--sc-space-2) var(--sc-space-3); background: var(--sc-sunken); border-left: 3px solid var(--sc-warning); }
+.tier-badge { font-size: var(--sc-text-xs); }
+.tier-table tr.current td { color: var(--sc-warning); }
 
 /* Phone: the sidebar becomes a drawer. */
 @media (max-width: 760px) {
