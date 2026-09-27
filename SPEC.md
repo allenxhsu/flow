@@ -34,8 +34,12 @@ life satisfaction up ≥ 1 point. One player.
 - **Bonuses add up, capped at 2.5× base:** flow (hit target) +20%, personal
   best +25%, underdog (stat with least XP in the previous 7 days) +50%, combo
   +10% per chained task (next start ≤ 30 min after last end) up to +100%,
-  **batch** +15% × position (same batch type, gap ≤ 10 min). In a batch the
-  batch bonus replaces the combo bonus. Rest pauses a combo, never breaks it.
+  **batch** +15% × position (same batch type, gap ≤ 10 min): the 1st task of
+  a batch +0%, the 2nd +15%, the 3rd +30%. In a batch the batch bonus replaces
+  the combo bonus. Rest — a rest task or a restoring moment (Rest, Meal) —
+  pauses a combo, never breaks it.
+- **Underdog when nothing was earned:** if every stat earned 0 XP in the
+  previous 7 days (the first week, after a holiday), nobody is the underdog.
 - Every completion stores the price it earned. Points never change later
   except through rework.
 
@@ -46,7 +50,8 @@ life satisfaction up ≥ 1 point. One player.
   of that completion. Example: 90 pts in 90 min, 60-min fix → 60 × 1 × 1.5 = 90.
 - Rework subtracts the penalty from **XP (levels can drop)** and the charge
   from the balance; the task's true time becomes original + fix (for bests and
-  targets) and its quality drops by the share redone.
+  targets) and its quality drops by the share redone: fix ÷ original minutes,
+  so a 30-min fix on a 90-min job leaves quality at 2/3 of what was logged.
 - Logged by the player or Claude, from a planner task reopened (phase 2), and
   the timer asks "is this rework of X?" when starting a task finished in the
   last 14 days.
@@ -80,7 +85,11 @@ offered together ("Batch: 4 purchase requests").
 
 Daily streaks forgive one missed day per week; weekly streaks count ISO weeks.
 Weekly review = satisfaction + per-stat 0–10, win, lesson, one change — via the
-app's form or a conversation with Claude that also rebalances tasks.
+app's form or a conversation with Claude that also rebalances tasks. **Due every
+Sunday** (end of the Monday–Sunday week) when this week has no review yet, and
+still due on the days after a week that was missed, until one is done. A new
+player's first review is due on their first Sunday. One review per week; a
+second in the same week replaces the first.
 
 ## Moments and places
 

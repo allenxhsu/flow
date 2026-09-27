@@ -666,6 +666,19 @@ export function reworkCandidate(db, taskId, now) {
   return [...db.done].reverse().find((d) => d.task === taskId && d.day >= since) || null;
 }
 
+/**
+ * The weekly review is due every Sunday — the end of a Monday–Sunday week —
+ * while that week has none, and stays due after a missed week until one is
+ * done. A new player is first due on their first Sunday.
+ */
+export function reviewDue(reviews, day) {
+  const week = isoWeek(day);
+  if (reviews.some((r) => r.week === week)) return false;
+  if (new Date(`${day}T12:00:00`).getDay() === 0) return true;
+  const latest = reviews[reviews.length - 1];
+  return !!latest && latest.week < isoWeek(addDays(day, -7));
+}
+
 // ─── achievements ───────────────────────────────────────────────────────────
 
 const ACHIEVEMENTS = [
@@ -764,7 +777,7 @@ export function play(records, now = Date.now()) {
     today: { points: doneToday.reduce((n, d) => n + (d.price?.points || 0), 0), done: doneToday.length, minutes: doneToday.reduce((n, d) => n + d.minutes, 0) },
     history: [...db.done].reverse().slice(0, 50).map((d) => ({ ...d, title: db.task.get(d.task)?.title || '(deleted task)', rework: rw.get(d.id) || [] })),
     purchases: [...db.purchases].reverse().slice(0, 20).map((p) => ({ ...p, title: db.reward.get(p.reward)?.title || '(deleted reward)' })),
-    satisfaction: { latest, trend, history: reviews, due: !latest || daysBetween(latest.day, day) >= WEEK },
+    satisfaction: { latest, trend, history: reviews, due: reviewDue(reviews, day) },
     achievements: ACHIEVEMENTS.map(({ test, ...a }) => ({ ...a, earned: test(facts) })),
     underdogs,
     places: db.places,

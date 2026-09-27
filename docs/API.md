@@ -66,6 +66,7 @@ export function dailyStreak(days, day)
 export function weeklyStreak(weeks, day) 
 export function pickNext(db, now, g = null) 
 export function reworkCandidate(db, taskId, now) 
+export function reviewDue(reviews, day) 
 export function play(records, now = Date.now()) 
 export const WALK_MIN = 5;
 export function replayDay(records, day, { now = Date.now() } = {}) 

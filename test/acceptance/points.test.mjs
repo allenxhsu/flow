@@ -222,11 +222,10 @@ test('personal best: the first run has no best to beat', () => {
   assert.equal(first.price.bonuses.pb, 0);
 });
 
-test('underdog: when no stat earned XP in the previous 7 days, every stat ties for least', {
-  todo: 'SPEC: with all stats at 0 XP last week (new player, after a holiday), is every stat the underdog (+50% on everything) or none? Code: none',
-}, () => {
+test('underdog: when no stat earned XP in the previous 7 days, nobody is the underdog', () => {
+  // Decided by the player: an all-zero week (first week, after a holiday) gives no +50% to anything.
   const g = game();
   const jog = g.task({ title: 'Jog', skill: 'sk_run', estimate: 30 });
   const d = makeDone(g.db(), jog.id, { end: T(`${D}T08:00:00`), minutes: 30 });
-  assert.equal(d.price.bonuses.underdog, 0.5);
+  assert.equal(d.price.bonuses.underdog, 0);
 });
