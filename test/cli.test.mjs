@@ -56,11 +56,13 @@ test('a whole day: setup, energy, a batch of three, rework, moments, debt, revie
     assert.match(run('moment', 'chat', '--from', '08:20', '--to', '08:40', '--who', 'Sam', '--place', 'meeting'), /at Meeting room/);
 
     // 22 covered, 38 on credit at double: 98.
-    assert.match(run('buy', 'ice'), /−98 pts .*Balance 22 → -76/);
-    // Rework in debt costs double too: penalty 2 × 1 × 1.5 = 3, charged 6.
+    assert.match(run('buy', 'ice', '--at', '17:00'), /−98 pts .*Balance 22 → -76/);
+    // Rework in debt costs double too: penalty 2 × 1 × 1.5 = 3, charged 6. It is
+    // logged after the 17:00 purchase — a charge is doubled by the balance at its
+    // own time, not by debt that came later.
     const log = run('log', '--days', '1');
     const doneId = /Purchase request 10m .*\[(done_[^\]]+)\]/.exec(log)[1];
-    assert.match(run('rework', doneId, '--minutes', '2', '--at', '12:00'), /= −3 XP[\s\S]*Charged 6 pts \(3 extra/);
+    assert.match(run('rework', doneId, '--minutes', '2', '--at', '17:30'), /= −3 XP[\s\S]*Charged 6 pts \(3 extra/);
 
     assert.match(run('review', '--satisfaction', '7', '--body', '6', '--work', '8', '--win', 'batched', '--lesson', 'check part numbers', '--next', 'add a check step'), /Review 2026-W40: satisfaction 7\/10 · Body 6, Work 8/);
     assert.match(fails('review', '--satisfaction', '7', '--bogus', '3'), /no stat called --bogus/);
