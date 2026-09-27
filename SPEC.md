@@ -163,8 +163,16 @@ is allowed and simply visible.
 - **Skip ("I have it"):** points = the price avoided, 1 point per dollar,
   capped at **100 points per day** across all skips. Points go to the balance
   and to "money saved"; **no XP** (no skill earned it).
-- **Buy anyway:** records the money spent and adds or restocks the item. **No
-  penalty.** The character sheet shows spent vs saved per month.
+- **Buy anyway:** records the money spent and adds or restocks the item — a
+  purchase of something already owned adds to its quantity by itself; anything
+  new becomes a new item. **No penalty.** The character sheet shows spent vs
+  saved per month.
+- **Decided details:** points round to the nearest dollar ($12.49 → 12) while
+  money saved keeps the cents; money saved is the full price avoided even past
+  the cap ($150 skipped → 100 points, $150 saved); the daily cap counts the
+  skips before this one's own time that day (a charge is priced at its time);
+  a low-stock item asks for enough to get back to its **usual** quantity
+  (`usual`, default lowStock + 1; have 1, usual 4 → buy 3).
 - **Equip:** loadouts per context (Work bag, Gym bag, Car, Desk…) fill slots
   Head, Body, Feet, Hands, Bag, Tech, Vehicle; one loadout is active; each has a
   packing checklist; items are *in use* (equipped in any loadout) or *stored*.
@@ -183,17 +191,23 @@ Events (write-once): `skip`, `spend`.
 
 ```js
 makeItem(db, { name, category = '', aliases = [], place = null, qty = 1, price = 0,
-  consumable = false, lowStock = 0, skills = [], slot = null, photo = null })   // → item record
+  consumable = false, lowStock = 0, usual = lowStock + 1, skills = [], slot = null, photo = null })
+                              // → item record; a slot outside SLOTS throws
 findItems(db, query)          // → [{ item, score }] best first; matches name, aliases, category
 makeSkip(db, { query, price, item = null, at })   // → { type:'skip', …, price, points } points capped per day
 makeSpend(db, { name, price, item = null, qty = 1, at })   // → { type:'spend', …, price }
+restockFor(db, spend)         // → the item record to write with it: the owned item with qty + spend.qty,
+                              //   or a new item { name, qty, price } when the spend names no item
 makeWish(db, { name, qty = 1 })                   // → wish record
 shoppingList(db)              // → [{ name, qty, wish?, lowStock?, matches: [{ item, score }] }]
 makeLoadout(db, { name, slots = {}, active = false })   // slots: { head, body, feet, hands, bag, tech, vehicle } → item ids
-activeLoadout(db)             // → loadout or null
-gearBonus(db, task, at)       // → { item, uses, bonus } for the best linked item, bonus 0–0.10
-inventory(records, now)       // → { items, stashes:[{place, items}], loadouts, active, inUse:Set,
-                              //     lowStock, moneySaved, savedThisMonth, spentThisMonth, skipsToday }
+activeLoadout(db)             // → loadout or null; if several are active, the latest written wins
+gearBonus(db, task, at)       // → { item, uses, bonus } for the best linked item, bonus 0–0.10;
+                              //   { item: null, uses: 0, bonus: 0 } when none is equipped
+inventory(records, now = Date.now())
+                              // → { items, stashes:[{place (id), items}], loadouts, active, inUse: Set of item ids,
+                              //     lowStock, moneySaved, savedThisMonth, spentThisMonth, skipsToday: [skip records] }
+                              //   equipped items still appear in their stash
 ```
 
 `makeDone` gains `gear: [itemIds]` (the active loadout's items at the time)

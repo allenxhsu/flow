@@ -152,11 +152,10 @@ test('contract: replayDay() → {beats, series, finale, hero, …}; beat kinds a
 // updated in the same commit.
 
 // Arity = Function.length, read literally from the contract signatures (no default on the options object).
-// SPEC?: inventory(records, now) is written without a default, unlike play(records, now = Date.now()) —
-// taken literally as arity 2.
+// Decided: inventory(records, now = Date.now()) has a default like play(), so arity 1.
 const INVENTORY_FUNCTIONS = {
   makeItem: 2, findItems: 2, makeSkip: 2, makeSpend: 2, makeWish: 2, shoppingList: 1,
-  makeLoadout: 2, activeLoadout: 1, gearBonus: 3, inventory: 2,
+  makeLoadout: 2, activeLoadout: 1, gearBonus: 3, inventory: 1, restockFor: 2,
 };
 const INVENTORY_CONSTANTS = {
   SKIP_POINTS_PER_DOLLAR: 1, SKIP_DAILY_CAP: 100, GEAR_STEP_USES: 10, GEAR_STEP: 0.01, GEAR_MAX: 0.10,

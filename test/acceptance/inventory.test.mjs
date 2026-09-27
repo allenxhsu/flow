@@ -56,6 +56,7 @@ test('makeItem: an item record with the contract defaults', () => {
   assert.equal(it.price, 0);
   assert.equal(it.consumable, false);
   assert.equal(it.lowStock, 0);
+  assert.equal(it.usual, 1, 'usual defaults to lowStock + 1');
   assert.deepEqual(it.skills, []);
   assert.equal(it.slot, null);
   assert.equal(it.photo, null);
@@ -125,7 +126,7 @@ test('skip: 1 point per dollar avoided', () => {
   assert.equal(s.price, 15);
   assert.equal(s.points, 15 * M.SKIP_POINTS_PER_DOLLAR);
   assert.equal(s.points, 15);
-  // SPEC?: a fractional price ($12.49) — are points rounded, floored, or kept fractional?
+  // Decided — see inventory-decisions.test.mjs: a fractional price
 });
 
 test('skip: capped at 100 points per day across all skips ($60 + $70 → 60 + 40, then 0)', () => {
@@ -162,7 +163,7 @@ test('skip: points raise balanceOf and money saved, but add NO XP', () => {
   assert.equal(after.player.xp, before.player.xp, 'no skill earned it');
   const inv = M.inventory(g.records, T(`${D}T20:00:00`));
   assert.equal(inv.moneySaved, 30);
-  // SPEC?: over the cap ($150 skipped → 100 points), is "money saved" the $150 avoided or the 100 points?
+  // Decided — see inventory-decisions.test.mjs: over the cap
 });
 
 test('skip: stored points never change later', () => {
@@ -174,8 +175,7 @@ test('skip: stored points never change later', () => {
   M.inventory(g.records, T(`${D}T20:00:00`));
   M.play(g.records, T(`${D}T20:00:00`));
   assert.equal(JSON.stringify(a), snapshot);
-  // SPEC?: a skip written later but timed earlier the same day (synced from another device) — does its cap
-  // count every stored skip of that day, or only those before its `at`? Not asserted.
+  // Decided — see inventory-decisions.test.mjs: a skip written later but timed earlier the same day
   assert.equal(M.balanceOf(g.db()), 60 + 40 + 0, 'balance sums the stored points, not a recomputation');
 });
 
@@ -196,8 +196,7 @@ test('spend: records the price, costs no points, counts in spentThisMonth', () =
   assert.equal(M.balanceOf(g.db()), balance, 'no penalty');
   assert.equal(M.play(g.records, T(`${D}T20:00:00`)).balance, balance);
   assert.equal(M.inventory(g.records, T(`${D}T20:00:00`)).spentThisMonth, 15);
-  // SPEC?: "Buy anyway … adds or restocks the item" — does makeSpend({ item }) raise that item's qty in
-  // inventory().items (derived from spends), or must the caller also write an updated item record?
+  // Decided — see inventory-decisions.test.mjs: "Buy anyway … adds or restocks the item"
 });
 
 test('spend and skip: month boundaries (September vs October)', () => {
@@ -244,7 +243,7 @@ test('shopping list: a consumable at or below its low-stock level joins by itsel
   assert.ok(e.lowStock, 'flagged as low stock');
   assert.equal(list.find((x) => x.name === 'Rice'), undefined, 'qty 5 > lowStock 2 → not on the list');
   assert.ok(M.inventory(g.records, T(`${D}T12:00:00`)).lowStock.some((x) => idOf(x) === coffee.id || idOf(x?.item) === coffee.id));
-  // SPEC?: what qty does a low-stock entry ask for (1? up to lowStock + 1?) — not asserted.
+  // Decided — see inventory-decisions.test.mjs: what qty does a low-stock entry ask for
 
   g.records.push({ ...coffee, qty: 3 }); // restocked (definition, last write wins)
   assert.equal(M.shoppingList(g.db()).find((x) => x.name === 'Coffee beans'), undefined);
@@ -265,7 +264,7 @@ test('loadouts: SLOTS are head, body, feet, hands, bag, tech, vehicle', () => {
   assert.equal(l.slots.head, hat.id);
   assert.equal(l.slots.tech, laptop.id);
   for (const k of Object.keys(l.slots)) assert.ok(M.SLOTS.includes(k), `slot ${k}`);
-  // SPEC?: a slot name outside SLOTS (e.g. "pocket") — throw, or drop it? Not asserted.
+  // Decided — see inventory-decisions.test.mjs: a slot name outside SLOTS
 });
 
 test('loadouts: only one is active', () => {
@@ -276,8 +275,7 @@ test('loadouts: only one is active', () => {
   const gymBag = loadout(g, { name: 'Gym bag', active: true });
   assert.equal(M.activeLoadout(g.db()).id, gymBag.id);
   const car = loadout(g, { name: 'Car', active: true });
-  // SPEC?: makeLoadout returns one record and cannot rewrite the others; when two stored loadouts both
-  // say active:true, the literal reading taken here is "the one written last is the active one".
+  // Decided — see inventory-decisions.test.mjs: makeLoadout returns one record and cannot rewrite the others; when two stored loadouts both
   assert.equal(M.activeLoadout(g.db()).id, car.id);
   const inv = M.inventory(g.records, T(`${D}T12:00:00`));
   assert.equal(idOf(inv.active), car.id);
@@ -294,11 +292,11 @@ test('loadouts: in use = equipped in any loadout; stashes grouped by storage pla
   loadout(g, { name: 'Work bag', slots: { tech: laptop.id } }); // not active, still "in use"
   const inv = M.inventory(g.records, T(`${D}T12:00:00`));
   assert.ok(inv.inUse instanceof Set);
-  // SPEC?: inUse holds item ids (taken here) or item records?
+  // Decided — see inventory-decisions.test.mjs: inUse holds item ids
   assert.deepEqual([...inv.inUse].map(idOf).sort(), [shoes.id, laptop.id].sort());
   assert.equal(inv.items.length, 4);
   const byPlace = Object.fromEntries(inv.stashes.map((s) => [placeIdOf(s.place), s.items.map(idOf).sort()]));
-  // SPEC?: is stash.place the place id or the place record? Do in-use items still appear in their stash?
+  // Decided — see inventory-decisions.test.mjs: is stash.place the place id or the place record? Do in-use items still appear in their stash?
   assert.deepEqual(byPlace.place_warehouse, [drill.id, tape.id].sort());
   assert.equal(inv.stashes.filter((s) => placeIdOf(s.place) === 'place_warehouse').length, 1, 'one stash per place');
 });
@@ -351,7 +349,7 @@ test("gear bonus: completions of other skills' tasks do not count", () => {
   assert.ok(close(r.bonus, 0.01));
   const m = M.gearBonus(g.db(), mail, T(`${D}T09:00:00`));
   assert.equal(m?.bonus ?? 0, 0, 'shoes are not linked to Mail');
-  // SPEC?: with no linked item equipped, does gearBonus return { item: null, uses: 0, bonus: 0 } or null?
+  // Decided — see inventory-decisions.test.mjs: with no linked item equipped, does gearBonus return { item: null, uses: 0, bonus: 0 } or null?
 });
 
 test('gear bonus: only while equipped in the active loadout now', () => {
@@ -441,8 +439,7 @@ test('inventory(records, now): shape per the contract', () => {
   assert.equal(inv.moneySaved, 25);
   assert.equal(inv.savedThisMonth, 25);
   assert.equal(inv.spentThisMonth, 4);
-  // SPEC?: is skipsToday the skips made today (a list, length 2 here) or today's skip points (20, so the
-  // UI can show the 100/day cap)? Both readings are accepted here.
+  // Decided — see inventory-decisions.test.mjs: is skipsToday the skips made today
   const st = inv.skipsToday;
   assert.ok((Array.isArray(st) && st.length === 2) || st === 20 || st === 2, `skipsToday = ${JSON.stringify(st)}`);
 });
