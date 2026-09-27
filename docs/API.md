@@ -27,6 +27,12 @@ export const DEFAULT_STATS = [
 export const ZONES = ['home', 'road', 'factory', 'town', 'elsewhere'];
 export const DEFAULT_PLACES = [
 export const DEFAULT_KINDS = [
+export const SKIP_POINTS_PER_DOLLAR = 1;
+export const SKIP_DAILY_CAP = 100;
+export const GEAR_STEP_USES = 10;
+export const GEAR_STEP = 0.01;
+export const GEAR_MAX = 0.10;
+export const SLOTS = ['head', 'body', 'legs', 'feet', 'hands', 'bag', 'tech', 'vehicle'];
 export const RECORD_TYPES = [...DEFINITIONS, ...EVENTS];
 export const dayOf = (ms)
 export const addDays = (day, n)
@@ -57,6 +63,17 @@ export function balanceOf(db, before = Infinity)
 export function chargeFor(balance, amount) 
 export function makePurchase(db, rewardRef, { at = Date.now() } = {}) 
 export function makeRework(db, doneRef, { minutes, at = Date.now(), note = '' }) 
+export function makeItem(db, { name, category = '', aliases = [], place = null, qty = 1, price = 0, consumable = false, lowStock = 0, usual = lowStock + 1, skills = [], slot = null, photo = null, color = null, id = null, now = Date.now() }) 
+export function findItems(db, query) 
+export function makeSkip(db, { query, price, item = null, at = Date.now() }) 
+export function makeSpend(db, { name, price, item = null, qty = 1, at = Date.now() }) 
+export function restockFor(db, spend) 
+export function makeWish(db, { name, qty = 1, now = Date.now() }) 
+export function shoppingList(db) 
+export function makeLoadout(db, { name, slots = {}, active = false, checklist = [], id = null, now = Date.now() }) 
+export function activeLoadout(db) 
+export function gearBonus(db, task, at) 
+export function inventory(records, now = Date.now()) 
 export function makeEnergy({ stamina, mana, at = Date.now() }) 
 export function energyOn(db, day) 
 export function makeReview(db, { satisfaction, ratings = {}, win = '', lesson = '', next = '', at = Date.now() }) 
@@ -82,7 +99,18 @@ flow energy <stamina> <mana> [--at HH:MM]   this morning's rating, 0–10 each
 flow done <task> --minutes N [--value V] [--quality 0-100] [--at HH:MM|ISO | --start HH:MM] [--day YYYY-MM-DD] [--note "…"]
 flow rework <task|done-id> --minutes N [--at …] [--note "…"]   (the task's latest completion by default)
 flow moment <kind> --from HH:MM --to HH:MM [--who X] [--place P] [--day YYYY-MM-DD] [--note "…"]
-flow buy <reward> [--at …]
+flow buy <reward> [--at …]              a treat from the points shop
+flow item add --name "…" [--category C] [--alias "a,b"] [--place P] [--qty N] [--price $] [--consumable --low N [--usual N]]
+          [--skill S[,S]] [--slot head|body|legs|feet|hands|bag|tech|vehicle] [--color #hex] [--photo ref]
+flow item edit <item> [same fields; --place none, --slot none, --skill none, --no-consumable] | list [--json]
+flow have <query> [--json]              check before buying: "You own 2: Desk, Car"
+flow skip <query> --price $ [--item I] [--at …]   "I have it": 1 pt per dollar, 100 a day, no XP
+flow purchase <name> --price $ [--item I | --new] [--qty N] [--place P] [--at …]
+          real money: no penalty, adds or restocks the item (also: flow buy <name> --price $)
+flow wish add <name> [--qty N] | list [--json] | done <wish>   the shopping list (+ low stock)
+flow loadout add --name "…" [--head I --body I --legs I --feet I --hands I --bag I --tech I --vehicle I] [--check "a,b"] [--active]
+flow loadout edit <loadout> [slots; --<slot> none] | equip <loadout> | list [--json]
+flow inventory [--json]                 saved vs spent this month, in use, low stock, stashes
 flow undo [event-id|last]               take back a mistaken entry (ids are in flow log)
 flow reward add --title "…" --price N [--once] | edit <reward> [--title …] [--price N] | archive <reward>
 flow task add --title "…" --skill S [--measure time|count|quality] [--cadence daily|weekly|once|anytime]

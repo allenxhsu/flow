@@ -8,9 +8,9 @@ prints the whole breakdown, and `status --json` has every completion's stored
 
 ## What is stored, what is derived
 
-Definitions (settings, stats, skills, tasks, rewards, places, moment kinds) are
-edited in place; the last write wins. Events (done, rework, purchase, energy,
-review, moment) are written once. **Every completion stores the price it was
+Definitions (settings, stats, skills, tasks, rewards, places, moment kinds,
+items, loadouts, wishes) are edited in place; the last write wins. Events
+(done, rework, purchase, energy, review, moment, skip, spend) are written once. **Every completion stores the price it was
 paid**, and every rework and purchase stores what it charged, so points never
 change later — except through rework. Levels, targets, bests, energy, balance
 and the next task are recomputed from the records every time.
@@ -34,6 +34,7 @@ and the next task are recomputed from the records every time.
 | Underdog | +50% | The task's stat earned the least base points in the 7 days before today (nobody when all tie) |
 | Combo | +10% per chained task, up to +100% | This task started ≤ 30 min (`COMBO_GAP_MIN`) after the last one ended |
 | Batch | +15% × position | Same batch type as the last task, gap ≤ 10 min (`BATCH_GAP_MIN`). Replaces the combo bonus |
+| Gear | +1% per 10 uses, up to +10% | An item linked to the task's skill, equipped in the active loadout: +1% (`GEAR_STEP`) for every 10 (`GEAR_STEP_USES`) of that skill's completions done while it was equipped, max +10% (`GEAR_MAX`). Best item only |
 
 Rest (a task that restores energy) pauses a combo: it neither grows nor breaks it.
 
@@ -60,11 +61,28 @@ someone else.
 
 ## Balance, shop and debt
 
-Balance = points earned − rework charges − purchases, as charged. Debt is
+Balance = points earned + skip points − rework charges − purchases, as charged. Debt is
 allowed, but **the part of any charge that goes below zero costs double**
 (`DEBT_MULTIPLIER`): at a balance of 22, a 60-point treat charges 22 + 38 × 2
 = 98. Meals, sleep, medical care and rest are never for sale; socializing
 costs energy only, never points.
+
+## Inventory: skip, buy, gear
+
+- **Skip ("I have it")**: points = the price avoided, 1 point per dollar
+  (`SKIP_POINTS_PER_DOLLAR`), rounded to the nearest dollar ($12.49 → 12),
+  at most **100 points a day** across all skips (`SKIP_DAILY_CAP`) — the cap
+  counts the skips before this one's own time that day. The points go to the
+  balance, **never to XP**: no skill earned them. Money saved is the full price
+  with its cents, even past the cap ($150 skipped → 100 points, $150 saved).
+- **Buy anyway** (`purchase`): records the money spent and adds or restocks the
+  item. No points change, no penalty. `inventory` shows saved vs spent this month.
+- **Low stock**: a consumable at or below its low-stock level joins the shopping
+  list asking for enough to get back to its usual quantity (usual defaults to
+  low-stock + 1; have 1, usual 4 → buy 3).
+- **Gear** grows with use, never with buying: each completion records the items
+  equipped in the active loadout at the time (`gear`), and the gear bonus above
+  counts those. New gear starts at +0%.
 
 ## Energy
 

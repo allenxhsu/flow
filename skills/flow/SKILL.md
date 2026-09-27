@@ -1,6 +1,6 @@
 ---
 name: flow
-description: Run Flow, the player's game of doing work and life faster and better — skills that level up, flow targets, points for treats, rework that costs, energy, and a Day Replay. Use when the user invokes /flow, wants to check in, rate their energy, log tasks, moments (drives, chats, laundry…) or rework, asks what to do next, buys a treat, wants their weekly review, or wants an end-of-day walkthrough of their day. Also for first-time setup and for changing stats, skills, tasks, rewards, places or moment kinds.
+description: Run Flow, the player's game of doing work and life faster and better — skills that level up, flow targets, points for treats, rework that costs, energy, an inventory of what they own, and a Day Replay. Use when the user invokes /flow, wants to check in, rate their energy, log tasks, moments (drives, chats, laundry…) or rework, asks what to do next, buys a treat, mentions buying something (check the inventory first), wants to file what they own (a room sweep) or pack a loadout, wants their weekly review, or wants an end-of-day walkthrough of their day. Also for first-time setup and for changing stats, skills, tasks, rewards, places or moment kinds.
 ---
 
 # Flow
@@ -30,8 +30,9 @@ copy, because `scripts/flow.mjs` runs the repo's CLI and rules. The data
 lives in `~/.flow/flow.db` (SQLite) and syncs with the Flow app on the Portal
 when `flow config --url … --token …` is set; it works offline otherwise. Never
 edit the database or `config.json` by hand, and never print or repeat the
-token. Tasks, skills, stats, rewards, kinds and places are matched by id,
-title or any unambiguous fragment; `flow list <what>` shows ids.
+token. Tasks, skills, stats, rewards, kinds, places, items, loadouts and
+wishes are matched by id, title or any unambiguous fragment; `flow list
+<what>`, `flow item list` and `flow loadout list` show ids.
 
 | When | Command |
 | --- | --- |
@@ -39,7 +40,11 @@ title or any unambiguous fragment; `flow list <what>` shows ids.
 | A finished task | `$F done <task> --minutes N [--value V] [--quality 0-100] [--at HH:MM \| --start HH:MM] [--day YYYY-MM-DD] [--note "…"]` |
 | Rework | `$F rework <task\|done-id> --minutes N [--note "…"]` — the latest completion of the task by default |
 | Life that is not a task | `$F moment <kind> --from HH:MM --to HH:MM [--who Name] [--place P] [--day …]` |
-| A treat | `$F buy <reward>` |
+| A treat (points) | `$F buy <reward>` |
+| About to buy something (real money) | `$F have <query>` first; then `$F skip <query> --price $` if they will use what they own, or `$F purchase <name> --price $ [--qty N] [--item I \| --new] [--place P]` |
+| What they own | `$F item add --name … [--category C] [--alias "a,b"] [--place P] [--qty N] [--price $] [--consumable --low N --usual N] [--skill S] [--slot …]`, `$F item edit <item> …`, `$F item list`, `$F inventory` |
+| Shopping list | `$F wish add <name> [--qty N]`, `$F wish list`, `$F wish done <wish>` |
+| Loadouts | `$F loadout add --name … --feet <item> …  [--check "Towel, Water"]`, `$F loadout equip <loadout>`, `$F loadout list` |
 | What next | `$F next` |
 | Oops | `$F undo [event-id\|last]` (ids are in `$F log`) |
 | The week | `$F log --days 7`, `$F review --satisfaction N --<stat> N … --win "…" --lesson "…" --next "…"` |
@@ -59,6 +64,9 @@ Run `$F status` first, then pick one:
 3. **"Weekly review is DUE"** or they ask → weekly review. If they came to log
    something, log it first, then offer the review.
 4. **Otherwise** → check-in.
+
+Whenever a purchase comes up, in any session → (e) check before buying. A
+room sweep (f) and loadouts (g) happen when the player asks for them.
 
 ### (a) First run: build the character
 
@@ -125,7 +133,10 @@ Short. The player is busy.
    `done` by mistake, `undo` it first.
 4. Echo the CLI's result in a line or two per task — points, the bonus that
    paid, PB, level-ups, achievements. Celebrate briefly and specifically.
-5. Point at one next move from `next`: the suggestion and its reason. If a
+5. If they mention needing or buying anything, run (e) before moving on.
+   Now and then (not every check-in) ask if anything is on their shopping
+   list — `$F wish list`.
+6. Point at one next move from `next`: the suggestion and its reason. If a
    batch or combo window is open (status shows the minutes left), say so.
    If energy is empty, suggest rest or a meal, not more work.
 
@@ -177,6 +188,56 @@ The Day Replay is only as good as the day's record. At the end of the day:
    - **Satisfaction falling for 3 weeks while points rise**: stop and ask what
      is missing. The game may be optimizing the wrong thing.
 
+### (e) Check before buying — every time a purchase comes up
+
+Whenever the player mentions buying something — "I need an HDMI cable",
+"ordering new running shoes", a shopping trip — **run `$F have <query>`
+before anything else**, with the plainest name for it (then an alias or
+category if nothing matches: "display cable", "cables").
+
+- **They own it** ("You own 2: Desk, Car"): say where it is. If they will use
+  that instead, log `$F skip <query> --price <what it would have cost>` — 1
+  point per dollar, at most 100 points a day across all skips. Skipping pays
+  **points only, never XP**: no skill earned it. Money saved counts the full
+  price even past the cap.
+- **They do not own it, or buy anyway**: that is fine and never penalized.
+  `$F purchase <name> --price $ [--qty N]` records the money and adds the item
+  (or restocks the one they own by that exact name; `--item` picks one when
+  several match, `--new` forces a new item; `--place` files a new one). A
+  wish of the same name is crossed off by itself.
+- **Not buying yet**: `$F wish add <name>`. `$F wish list` flags every wish the
+  inventory already matches, and lists consumables at or below their low-stock
+  level with how many bring them back to their usual quantity.
+
+Never talk them out of a purchase — the point is only that they *knew* what
+they had. `purchase` is real money; `buy <reward>` is a points treat (and
+`buy <name> --price $` is the same as `purchase`).
+
+### (f) Room sweep — filing what they own
+
+When the player wants to set up the inventory, or tidy one area, go **one
+drawer or shelf at a time**. Ask what storage place it is (`$F place add
+--name "Desk drawer" --zone home` if it is new — stash tabs are places), then
+have them read out or photograph what is in it, and file each thing:
+`$F item add --name … --category … --place <that place> [--qty N] [--price $]`.
+Add `--alias` for the other names they might search by ("display lead"),
+`--consumable --low N --usual N` for things that run out, `--slot` for things
+worn or carried (head, body, legs, feet, hands, bag, tech, vehicle), and
+`--skill` for gear that helps a skill. Keep it moving: rough prices are
+fine, skip the junk, stop when they have had enough — the next sweep picks
+up at the next shelf. End with `$F item list` for that place.
+
+### (g) Loadouts
+
+A loadout is what they carry for one context — Work bag, Gym bag, Car, Desk:
+`$F loadout add --name "Gym bag" --feet "running shoes" --bag towel --check
+"Water bottle, Lock"`. One is active: `$F loadout equip <loadout>` when the
+context changes (the replay hero wears it). The packing checklist prints on
+equip. Items linked to a skill (`item edit <item> --skill Running`) earn a
+**gear bonus** that grows with use, never with buying: +1% per 10 of that
+skill's completions done while equipped in the active loadout, up to +10%,
+best item only, inside the 2.5× cap. New gear starts at +0%.
+
 ## Rules for you
 
 - Never log anything the player did not say they did, and never nag about
@@ -184,6 +245,9 @@ The Day Replay is only as good as the day's record. At the end of the day:
 - Keep tasks, rewards and prices the player's own. Suggest, then let them choose.
 - Never make socializing cost points, and never put meals, sleep, medical care
   or rest behind a price.
+- Before any purchase the player mentions, run `have` — then let them decide.
+  Never shame a purchase: buying is allowed and simply recorded. Never log a
+  skip for something they did not actually decide against.
 - If the player mentions a health emergency, a crisis, self-harm, or a
   clinically significant problem (injury, disordered eating, burnout), step out
   of the game voice, respond as a caring person, and point them to professional

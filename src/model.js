@@ -555,12 +555,13 @@ const countOf = (v, what) => {
  * loadout; `skills` are the skills it helps (the gear bonus).
  */
 export function makeItem(db, { name, category = '', aliases = [], place = null, qty = 1, price = 0,
-  consumable = false, lowStock = 0, usual, skills = [], slot = null, photo = null, color = null, id = null, now = Date.now() }) {
+  consumable = false, lowStock = 0, usual = lowStock + 1, skills = [], slot = null, photo = null, color = null, id = null, now = Date.now() }) {
   name = String(name ?? '').trim();
   if (!name) throw new Error('an item needs a name');
   if (slot !== null && slot !== undefined && slot !== '' && !SLOTS.includes(slot)) throw new Error(`slot is ${SLOTS.join(', ')}, not "${slot}"`);
   if (place && !db.place.has(place)) throw new Error(`no place "${place}"`);
   for (const s of skills) if (!db.skill.has(s)) throw new Error(`no skill "${s}"`);
+  if (typeof lowStock === 'string' && usual === lowStock + 1) usual = null; // "2" + 1 is not 3
   lowStock = countOf(lowStock, 'lowStock');
   usual = usual === undefined || usual === null ? lowStock + 1 : countOf(usual, 'usual');
   return {
