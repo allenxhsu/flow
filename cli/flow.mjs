@@ -8,7 +8,18 @@
 //   flow done <task> --minutes N [--value V] [--quality 0-100] [--at HH:MM|ISO | --start HH:MM] [--day YYYY-MM-DD] [--note "…"]
 //   flow rework <task|done-id> --minutes N [--at …] [--note "…"]   (the task's latest completion by default)
 //   flow moment <kind> --from HH:MM --to HH:MM [--who X] [--place P] [--day YYYY-MM-DD] [--note "…"]
-//   flow buy <reward> [--at …]
+//   flow buy <reward> [--at …]              a treat from the points shop
+//   flow item add --name "…" [--category C] [--alias "a,b"] [--place P] [--qty N] [--price $] [--consumable --low N [--usual N]]
+//             [--skill S[,S]] [--slot head|body|legs|feet|hands|bag|tech|vehicle] [--color #hex] [--photo ref]
+//   flow item edit <item> [same fields; --place none, --slot none, --skill none, --no-consumable] | list [--json]
+//   flow have <query> [--json]              check before buying: "You own 2: Desk, Car"
+//   flow skip <query> --price $ [--item I] [--at …]   "I have it": 1 pt per dollar, 100 a day, no XP
+//   flow purchase <name> --price $ [--item I | --new] [--qty N] [--place P] [--at …]
+//             real money: no penalty, adds or restocks the item (also: flow buy <name> --price $)
+//   flow wish add <name> [--qty N] | list [--json] | done <wish>   the shopping list (+ low stock)
+//   flow loadout add --name "…" [--head I --body I --legs I --feet I --hands I --bag I --tech I --vehicle I] [--check "a,b"] [--active]
+//   flow loadout edit <loadout> [slots; --<slot> none] | equip <loadout> | list [--json]
+//   flow inventory [--json]                 saved vs spent this month, in use, low stock, stashes
 //   flow undo [event-id|last]               take back a mistaken entry (ids are in flow log)
 //   flow reward add --title "…" --price N [--once] | edit <reward> [--title …] [--price N] | archive <reward>
 //   flow task add --title "…" --skill S [--measure time|count|quality] [--cadence daily|weekly|once|anytime]
@@ -59,7 +70,8 @@ const {
 
 // ─── plumbing ───────────────────────────────────────────────────────────────
 
-const BOOL = new Set(['json', 'critical', 'for-others', 'no-critical', 'no-for-others', 'once', 'repeatable', 'restamp', 'offline', 'clear', 'help']);
+const BOOL = new Set(['json', 'critical', 'for-others', 'no-critical', 'no-for-others', 'once', 'repeatable', 'restamp', 'offline', 'clear', 'help',
+  'consumable', 'no-consumable', 'active', 'new']);
 
 export function parseArgs(argv) {
   const pos = [];
@@ -343,6 +355,7 @@ function bonusText(price) {
   if (b.underdog) parts.push(`underdog +${pct(b.underdog)}`);
   if (b.batch) parts.push(`batch ×${price.batchIndex + 1} +${pct(b.batch)}`);
   if (b.combo) parts.push(`combo ×${price.comboIndex + 1} +${pct(b.combo)}`);
+  if (b.gear) parts.push(`gear +${pct(b.gear)}`);
   const sum = 1 + Object.values(b).reduce((a, x) => a + x, 0);
   return parts.length ? ` × ${price.multiplier} (${parts.join(', ')}${sum > BONUS_CAP ? `; capped at ${BONUS_CAP}×` : ''})` : '';
 }
@@ -378,6 +391,8 @@ function logText(db, day, days) {
   for (const r of db.rework) if (r.day >= from && r.day <= day) rows.push([r.day, r.at, `${hm(r.at)}       ↺ rework ${title(r.task)} ${r.minutes}m  −${r.penalty} XP, −${r.charged} pts (×${r.multiplier}, #${r.repeat})${r.note ? ` — ${r.note}` : ''}`]);
   for (const m of db.moments) if (m.day >= from && m.day <= day) rows.push([m.day, m.end, `${hm(m.start)}–${hm(m.end)} ◷ ${m.title}${m.who ? ` with ${m.who}` : ''} at ${db.place.get(m.place)?.name || '—'}`]);
   for (const p of db.purchases) if (p.day >= from && p.day <= day) rows.push([p.day, p.at, `${hm(p.at)}       🛒 ${db.reward.get(p.reward)?.title || '(deleted reward)'} −${p.charged}${p.charged > p.price ? ' (on credit)' : ''}`]);
+  for (const s of db.skips) if (s.day >= from && s.day <= day) rows.push([s.day, s.at, `${hm(s.at)}       ✓ skipped ${s.query} ${usd(s.price)} · +${s.points} pts  [${s.id}]`]);
+  for (const s of db.spends) if (s.day >= from && s.day <= day) rows.push([s.day, s.at, `${hm(s.at)}       💵 bought ${s.name} ×${s.qty} ${usd(s.price)}  [${s.id}]`]);
   for (const e of db.energy) if (e.day >= from && e.day <= day) rows.push([e.day, e.at, `${hm(e.at)}       ⚡ energy: stamina ${e.stamina}, mana ${e.mana}`]);
   for (const v of db.reviews) if (v.day >= from && v.day <= day) rows.push([v.day, v.at, `${hm(v.at)}       ✎ review ${v.week}: satisfaction ${v.satisfaction}/10${v.next ? ` · next: ${v.next}` : ''}`]);
   if (!rows.length) return `Nothing logged since ${from}.`;
@@ -455,6 +470,50 @@ const describeTask = (db, t) => {
   const place = db.place.get(M.placeOfTask(db, t))?.name;
   if (place) bits.push(`at ${place}`);
   return `${t.title} — ${db.skill.get(t.skill)?.name} (${bits.join(', ')}) [${t.id}]`;
+};
+
+// ─── inventory helpers ──────────────────────────────────────────────────────
+
+const usd = (x) => `$${Number.isInteger(x) ? x : Number(x).toFixed(2)}`;
+const placeName = (db, id) => (id ? db.place.get(id)?.name || id : 'unfiled');
+const resolveItem = (db, ref) => resolve(db.items.filter((i) => !i.archived), ref, 'item', (x) => x.name);
+const listOf = (v) => (v === true || v === 'none' ? [] : String(v).split(',').map((x) => x.trim()).filter(Boolean));
+
+function itemFields(db, o, { editing = false } = {}) {
+  const f = {};
+  if (editing && typeof o.name === 'string') f.name = o.name;
+  if (typeof o.category === 'string') f.category = o.category;
+  if (o.alias !== undefined || o.aliases !== undefined) f.aliases = listOf(o.alias ?? o.aliases);
+  if (o.place !== undefined) f.place = o.place === 'none' || o.place === true ? null : resolve(db.places, o.place, 'place').id;
+  for (const [k, key] of [['qty', 'qty'], ['price', 'price'], ['lowStock', 'low'], ['usual', 'usual']]) {
+    const v = o[key] ?? (key === 'low' ? o['low-stock'] : undefined);
+    if (v !== undefined) f[k] = num(v, `--${key}`);
+  }
+  if (o.consumable) f.consumable = true;
+  if (o['no-consumable']) f.consumable = false;
+  if (o.skill !== undefined || o.skills !== undefined) f.skills = listOf(o.skill ?? o.skills).map((s) => resolve(db.skills, s, 'skill').id);
+  if (o.slot !== undefined) f.slot = o.slot === 'none' || o.slot === true ? null : String(o.slot);
+  if (o.color !== undefined) f.color = o.color === 'none' || o.color === true ? null : String(o.color);
+  if (o.photo !== undefined) f.photo = o.photo === 'none' || o.photo === true ? null : String(o.photo);
+  return f;
+}
+
+function itemLine(db, i, inUse = null) {
+  const bits = [placeName(db, i.place)];
+  if (i.category) bits.push(i.category);
+  if (i.price) bits.push(usd(i.price));
+  if (i.slot) bits.push(`slot ${i.slot}`);
+  if (i.skills?.length) bits.push(`helps ${i.skills.map((s) => db.skill.get(s)?.name || s).join(', ')}`);
+  if (i.consumable) bits.push(`low at ${i.lowStock}, usual ${i.usual}`);
+  if (inUse?.has(i.id)) bits.push('in use');
+  return `${i.name} ×${i.qty} · ${bits.join(' · ')}${i.aliases?.length ? ` (aka ${i.aliases.join(', ')})` : ''} [${i.id}]`;
+}
+
+const describeItem = (db, i) => `${i.name} ×${i.qty} at ${placeName(db, i.place)}${i.category ? ` — ${i.category}` : ''}${i.price ? `, ${usd(i.price)}` : ''}${i.slot ? `, slot ${i.slot}` : ''} [${i.id}]`;
+
+const slotText = (db, l) => {
+  const filled = M.SLOTS.filter((s) => l.slots?.[s]).map((s) => `${s} ${db.item.get(l.slots[s])?.name || '(gone)'}`);
+  return filled.length ? filled.join(', ') : '(empty)';
 };
 
 const commands = {
@@ -605,6 +664,8 @@ const commands = {
   },
 
   async buy(game) {
+    // Rewards have fixed point prices; a --price means real money.
+    if (game.opt.price !== undefined) return commands.purchase(game);
     const db = await game.load();
     const reward = resolve(db.rewards.filter((r) => !r.archived), game.pos[0], 'reward');
     const balance = M.balanceOf(db);
@@ -774,16 +835,200 @@ const commands = {
     return `✎ Review ${rec.week}: satisfaction ${rec.satisfaction}/10${t === null ? '' : ` (${t >= 0 ? '+' : ''}${t.toFixed(1)} vs the weeks before)`}${Object.keys(rec.ratings).length ? ` · ${Object.entries(rec.ratings).map(([k, v]) => `${db.stat.get(k).name} ${v}`).join(', ')}` : ''}${rec.next ? `\n  Next week's one change: ${rec.next}` : ''}`;
   },
 
+  // ─── inventory (phase 1.5) ────────────────────────────────────────────────
+
+  async item(game) {
+    const { opt } = game;
+    const db = await game.load();
+    const [action, ref] = game.pos;
+    if (action === 'add') {
+      const rec = M.makeItem(db, { ...itemFields(db, opt), name: str(opt.name) || str(ref), now: game.now });
+      const db2 = await game.write(rec);
+      return `Added ${describeItem(db2, rec)}`;
+    }
+    if (action === 'edit') {
+      const item = resolveItem(db, ref);
+      const rec = M.makeItem(db, { ...item, ...itemFields(db, opt, { editing: true }) });
+      const db2 = await game.write({ ...item, ...rec });
+      return `Updated ${describeItem(db2, rec)}`;
+    }
+    if (action === 'list' || action === undefined) {
+      const inv = M.inventory(db, game.now);
+      if (opt.json) return JSON.stringify(inv.items, null, 2);
+      if (!inv.items.length) return '(no items yet — flow item add --name "…" --place P)';
+      const out = [];
+      for (const s of inv.stashes) {
+        out.push(`${out.length ? '\n' : ''}## ${s.name}`);
+        for (const i of s.items) out.push(`- ${itemLine(db, i, inv.inUse)}`);
+      }
+      return out.join('\n');
+    }
+    throw new Error('flow item add | edit | list');
+  },
+
+  async have(game) {
+    const db = await game.load();
+    const query = game.pos.join(' ').trim();
+    if (!query) throw new Error('flow have <what you are about to buy>');
+    const hits = M.findItems(db, query).filter((h) => (h.item.qty || 0) > 0);
+    if (game.opt.json) return JSON.stringify(hits, null, 2);
+    if (!hits.length) return `You own nothing like "${query}". Buying it is fine: flow purchase "${query}" --price N`;
+    const total = hits.reduce((n, h) => n + (h.item.qty || 0), 0);
+    const places = [...new Set(hits.map((h) => placeName(db, h.item.place)))];
+    const out = [`You own ${total}: ${places.join(', ')}`];
+    for (const h of hits) out.push(`  ${itemLine(db, h.item)}`);
+    out.push(`Use it instead? flow skip "${query}" --price N pays 1 pt per dollar (no XP, ${M.SKIP_DAILY_CAP} a day).`);
+    return out.join('\n');
+  },
+
+  async skip(game) {
+    const { opt } = game;
+    const db = await game.load();
+    const query = game.pos.join(' ').trim() || str(opt.query);
+    if (opt.price === undefined) throw new Error('flow skip <what you did not buy> --price N (its price in dollars)');
+    const item = opt.item !== undefined ? resolveItem(db, opt.item).id : null;
+    const balance = M.balanceOf(db);
+    const rec = M.makeSkip(db, { query, price: num(opt.price, '--price'), item, at: game.when('at') });
+    await game.write(rec);
+    const raw = Math.round(rec.price * M.SKIP_POINTS_PER_DOLLAR);
+    const capped = rec.points < raw ? ` (daily skip cap ${M.SKIP_DAILY_CAP})` : '';
+    return `✓ Skipped ${rec.query}: +${rec.points} pts${capped}, ${usd(rec.price)} saved. Balance ${balance} → ${balance + rec.points}. (Skips pay points, never XP.)`;
+  },
+
+  async purchase(game) {
+    const { opt } = game;
+    let db = await game.load();
+    const name = game.pos.join(' ').trim() || str(opt.name);
+    if (!name) throw new Error('flow purchase <name> --price N [--item I] [--qty N] [--place P]');
+    if (opt.price === undefined || opt.price === true) throw new Error('a real-money purchase needs --price N (dollars)');
+    let item = null;
+    if (opt.item !== undefined) item = resolveItem(db, opt.item).id;
+    else if (!opt.new) {
+      // Something you already own by exactly this name is restocked by itself.
+      const same = db.items.filter((i) => !i.archived && i.name.toLowerCase() === name.toLowerCase());
+      if (same.length === 1) item = same[0].id;
+      else if (same.length > 1) throw new Error(`you own ${same.length} items called ${name} — pass --item <id> (flow item list) or --new`);
+    }
+    const qty = opt.qty === undefined ? 1 : num(opt.qty, '--qty');
+    const spend = M.makeSpend(db, { name, price: num(opt.price, '--price'), item, qty, at: game.when('at') });
+    const was = item ? db.item.get(item) : null;
+    let stock = M.restockFor(db, spend);
+    if (!was && opt.place !== undefined) stock = { ...stock, place: resolve(db.places, opt.place, 'place').id };
+    const wishes = db.wishes.filter((w) => !w.done && w.name.toLowerCase() === name.toLowerCase()).map((w) => ({ ...w, done: true }));
+    db = await game.write({ ...spend, item: stock.id }, stock, ...wishes);
+    const inv = M.inventory(db, game.now);
+    const out = [`💵 Bought ${spend.name} ×${spend.qty} for ${usd(spend.price)} — no penalty. ${was ? `Restocked ${was.name}: ${was.qty} → ${stock.qty}` : `New item: ${describeItem(db, stock)}`}`];
+    if (wishes.length) out.push(`  Crossed off the shopping list: ${wishes.map((w) => w.name).join(', ')}`);
+    out.push(`  This month: saved ${usd(inv.savedThisMonth)} · spent ${usd(inv.spentThisMonth)}`);
+    return out.join('\n');
+  },
+
+  async wish(game) {
+    const { opt } = game;
+    const db = await game.load();
+    const [action, ...rest] = game.pos;
+    if (action === 'add') {
+      const rec = M.makeWish(db, { name: rest.join(' ').trim() || str(opt.name), qty: opt.qty === undefined ? 1 : num(opt.qty, '--qty'), now: game.now });
+      const db2 = await game.write(rec);
+      const hits = M.findItems(db2, rec.name).filter((h) => (h.item.qty || 0) > 0);
+      return `Added ${rec.name} ×${rec.qty} to the shopping list${hits.length ? ` — you already own: ${hits.map((h) => `${h.item.name} ×${h.item.qty} (${placeName(db2, h.item.place)})`).join(', ')}` : ''}`;
+    }
+    if (action === 'done' || action === 'remove') {
+      const w = resolve(db.wishes.filter((x) => !x.done), rest.join(' ').trim(), 'wish', (x) => x.name);
+      await game.write({ ...w, done: true });
+      return `Crossed off ${w.name}`;
+    }
+    if (action === 'list' || action === undefined) {
+      const list = M.shoppingList(db);
+      if (opt.json) return JSON.stringify(list, null, 2);
+      if (!list.length) return '(the shopping list is empty)';
+      return ['## Shopping list', ...list.map((e) => {
+        const own = e.matches.filter((m) => (m.item.qty || 0) > 0);
+        if (e.lowStock) return `- ${e.name} ×${e.qty} · low stock (have ${e.item.qty}, usual ${e.item.usual})`;
+        return `- ${e.name} ×${e.qty}${own.length ? ` · you own: ${own.map((m) => `${m.item.name} ×${m.item.qty} (${placeName(db, m.item.place)})`).join(', ')} — check before buying` : ''}`;
+      })].join('\n');
+    }
+    throw new Error('flow wish add <name> [--qty N] | list | done <wish>');
+  },
+
+  async loadout(game) {
+    const { opt } = game;
+    const db = await game.load();
+    const [action, ref] = game.pos;
+    const slotsFrom = (base = {}) => {
+      const slots = { ...base };
+      for (const s of M.SLOTS) {
+        if (opt[s] === undefined) continue;
+        if (opt[s] === 'none' || opt[s] === true) delete slots[s];
+        else slots[s] = resolveItem(db, opt[s]).id;
+      }
+      return slots;
+    };
+    const checklist = (v) => String(v).split(',').map((x) => x.trim()).filter(Boolean);
+    if (action === 'add') {
+      const rec = M.makeLoadout(db, { name: str(opt.name) || str(ref), slots: slotsFrom(), active: !!opt.active, checklist: opt.check !== undefined ? checklist(opt.check) : [], now: game.now });
+      const others = rec.active ? db.loadouts.filter((l) => l.active).map((l) => ({ ...l, active: false })) : [];
+      await game.write(...others, rec);
+      return `Added loadout ${rec.name}: ${slotText(db, rec)}${rec.active ? ' (active)' : ''} [${rec.id}]`;
+    }
+    if (action === 'edit') {
+      const l = resolve(db.loadouts, ref, 'loadout', (x) => x.name);
+      const rec = M.makeLoadout(db, { ...l, name: str(opt.name) || l.name, slots: slotsFrom(l.slots), checklist: opt.check !== undefined ? checklist(opt.check) : l.checklist || [] });
+      await game.write({ ...l, ...rec });
+      return `Updated loadout ${rec.name}: ${slotText(db, rec)}`;
+    }
+    if (action === 'equip') {
+      const l = resolve(db.loadouts, ref, 'loadout', (x) => x.name);
+      const others = db.loadouts.filter((x) => x.active && x.id !== l.id).map((x) => ({ ...x, active: false }));
+      await game.write(...others, { ...l, active: true });
+      const out = [`Equipped ${l.name}: ${slotText(db, l)}`];
+      if (l.checklist?.length) out.push(`  Pack: ${l.checklist.join(', ')}`);
+      return out.join('\n');
+    }
+    if (action === 'list' || action === undefined) {
+      const active = M.activeLoadout(db);
+      if (opt.json) return JSON.stringify(db.loadouts.map((l) => ({ ...l, active: l.id === active?.id })), null, 2);
+      if (!db.loadouts.length) return '(no loadouts yet — flow loadout add --name "Gym bag" --feet <item> …)';
+      return db.loadouts.map((l) => `${l.id === active?.id ? '* ' : '  '}${l.name}${l.id === active?.id ? ' (active)' : ''} — ${slotText(db, l)}${l.checklist?.length ? ` · pack: ${l.checklist.join(', ')}` : ''} [${l.id}]`).join('\n');
+    }
+    throw new Error('flow loadout add | edit | equip | list');
+  },
+
+  async inventory(game) {
+    const db = await game.load();
+    const inv = M.inventory(db, game.now);
+    if (game.opt.json) return JSON.stringify({ ...inv, inUse: [...inv.inUse] }, null, 2);
+    const today = inv.skipsToday.reduce((n, s) => n + (s.points || 0), 0);
+    const out = [`# Inventory — ${inv.items.length} item${inv.items.length === 1 ? '' : 's'} in ${inv.stashes.length} stash${inv.stashes.length === 1 ? '' : 'es'} · ${inv.inUse.size} in use`];
+    out.push(`This month: saved ${usd(inv.savedThisMonth)} · spent ${usd(inv.spentThisMonth)}  (all time: saved ${usd(inv.moneySaved)} · spent ${usd(inv.spent)})`);
+    out.push(`Skip points today: ${today}/${M.SKIP_DAILY_CAP}`);
+    out.push(`Active loadout: ${inv.active ? `${inv.active.name} — ${slotText(db, inv.active)}` : '(none — flow loadout equip <loadout>)'}`);
+    if (inv.inUse.size) out.push(`In use: ${[...inv.inUse].map((id) => db.item.get(id)?.name).join(', ')}`);
+    out.push(`Low stock: ${inv.lowStock.length ? inv.lowStock.map((i) => `${i.name} (have ${i.qty}, buy ${Math.max(1, (i.usual ?? i.lowStock + 1) - i.qty)})`).join(', ') : '(none)'}`);
+    const wishes = inv.shopping.filter((e) => e.wish).length;
+    if (wishes) out.push(`Shopping list: ${wishes} wish${wishes === 1 ? '' : 'es'} — flow wish list`);
+    for (const s of inv.stashes) {
+      out.push('', `## ${s.name}`);
+      for (const i of s.items) out.push(`- ${itemLine(db, i, inv.inUse)}`);
+    }
+    return out.join('\n');
+  },
+
   async undo(game) {
     const db = await game.load();
-    const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment'];
+    const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend'];
     const events = game.raw.filter((r) => EVENTS.includes(r.type) && !r.deletedAt);
     const ref = game.pos[0] || 'last';
     const rec = ref === 'last' ? events.filter((r) => r.origin === game.device).sort((a, b) => a.updatedAt - b.updatedAt).pop() : events.find((r) => r.id === ref);
     if (!rec) throw new Error(ref === 'last' ? 'nothing this device wrote to undo' : `no event "${ref}" (ids are in flow log)`);
     if (rec.type === 'done' && db.rework.some((r) => r.done === rec.id)) throw new Error('that completion has rework logged against it — undo the rework first');
     await game.remove(rec);
-    const what = rec.type === 'done' ? `${db.task.get(rec.task)?.title} on ${rec.day} (−${rec.price?.points} pts)` : rec.type === 'purchase' ? `${db.reward.get(rec.reward)?.title} (+${rec.charged} pts back)` : rec.type === 'moment' ? `${rec.title} on ${rec.day}` : `${rec.type} on ${rec.day}`;
+    // Undoing a real-money purchase takes back the stock it added.
+    const stocked = rec.type === 'spend' && rec.item ? db.item.get(rec.item) : null;
+    if (stocked) await game.write({ ...stocked, qty: Math.max(0, (stocked.qty || 0) - (rec.qty || 1)) });
+    const what = rec.type === 'done' ? `${db.task.get(rec.task)?.title} on ${rec.day} (−${rec.price?.points} pts)` : rec.type === 'purchase' ? `${db.reward.get(rec.reward)?.title} (+${rec.charged} pts back)` : rec.type === 'moment' ? `${rec.title} on ${rec.day}`
+      : rec.type === 'skip' ? `${rec.query} (−${rec.points} pts, ${usd(rec.price)} no longer saved)`
+      : rec.type === 'spend' ? `${rec.name} ×${rec.qty} (${usd(rec.price)})` : `${rec.type} on ${rec.day}`;
     return `Undid ${rec.type}: ${what}`;
   },
 
@@ -881,9 +1126,10 @@ async function config(opt, game) {
   ].join('\n');
 }
 
-const WRITES = new Set(['undo', 'init', 'energy', 'done', 'rework', 'moment', 'buy', 'reward', 'task', 'skill', 'stat', 'place', 'kind', 'review', 'import']);
-const READS = new Set(['status', 'next', 'log', 'replay', 'list', 'export']);
-const ALIASES = { setup: 'init', ls: 'list', did: 'done', redo: 'rework', shop: 'buy' };
+const WRITES = new Set(['undo', 'init', 'energy', 'done', 'rework', 'moment', 'buy', 'reward', 'task', 'skill', 'stat', 'place', 'kind', 'review', 'import',
+  'item', 'skip', 'purchase', 'wish', 'loadout']);
+const READS = new Set(['status', 'next', 'log', 'replay', 'list', 'export', 'have', 'inventory']);
+const ALIASES = { setup: 'init', ls: 'list', did: 'done', redo: 'rework', shop: 'buy', items: 'inventory', inv: 'inventory', owned: 'have', spend: 'purchase' };
 
 function help() {
   return readFileSync(new URL(import.meta.url), 'utf8').split('\n').filter((l) => l.startsWith('//   ')).map((l) => l.slice(5)).join('\n');

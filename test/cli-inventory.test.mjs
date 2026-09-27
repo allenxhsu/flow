@@ -89,7 +89,7 @@ test('purchase: real money — a new item, or a restock of one you own; no penal
     assert.match(run('have', 'mug'), /You own 0|You own nothing like "mug"/);
 
     run('reward', 'add', '--title', 'Ice cream', '--price', '10');
-    run('skip', 'Rug', '--price', '30');
+    run('skip', 'Rug', '--price', '30', '--at', '17:00');
     assert.match(run('buy', 'ice'), /Ice cream: −10 pts/);
     assert.match(fails('purchase', 'Thing'), /--price/);
   } finally { p.done(); }
