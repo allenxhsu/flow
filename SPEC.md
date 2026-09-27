@@ -145,3 +145,67 @@ second in the same week replaces the first.
 3. Mac app (shell-kit), Apple Health, retire project-planner's character sheet.
 
 Changes to other repos go in separate PRs, opened when their phase needs them.
+
+## Inventory (phase 1.5)
+
+Use what you already own before buying more. Skipping a purchase pays; buying
+is allowed and simply visible.
+
+- **Check before buying:** search ("You own 2: Desk drawer, Car"), a shopping
+  list whose entries are flagged when the inventory has a match, and Claude
+  asking in check-ins. Matching is fuzzy on name, aliases and category.
+  (Phase 2: share a product page to Flow; barcode scan.)
+- **Items:** name, category, aliases, storage place (a place; stash tabs are
+  places), quantity, rough price, optional photo (a sync-kit asset), and for
+  consumables a low-stock level — at or below it the item joins the shopping
+  list by itself. Added by quick add (+photo) and by a room sweep with Claude.
+  (Phase 2: order emails from Gmail with the player's go-ahead; barcode scan.)
+- **Skip ("I have it"):** points = the price avoided, 1 point per dollar,
+  capped at **100 points per day** across all skips. Points go to the balance
+  and to "money saved"; **no XP** (no skill earned it).
+- **Buy anyway:** records the money spent and adds or restocks the item. **No
+  penalty.** The character sheet shows spent vs saved per month.
+- **Equip:** loadouts per context (Work bag, Gym bag, Car, Desk…) fill slots
+  Head, Body, Feet, Hands, Bag, Tech, Vehicle; one loadout is active; each has a
+  packing checklist; items are *in use* (equipped in any loadout) or *stored*.
+  The replay hero wears the active loadout.
+- **Gear bonus grows with use, never with buying:** an item linked to a skill
+  earns +1% for every 10 completions of that skill's tasks done while it was
+  equipped in the active loadout, up to +10%. Only the best such item counts
+  (no stacking). New gear starts at +0%. It is one more bonus inside the 2.5×
+  cap. Each completion records the gear equipped at the time, so the count is
+  a fact, not a guess.
+
+### Contract (write the tests against this before the code)
+
+Records — definitions (last-write-wins): `item`, `loadout`, `wish`.
+Events (write-once): `skip`, `spend`.
+
+```js
+makeItem(db, { name, category = '', aliases = [], place = null, qty = 1, price = 0,
+  consumable = false, lowStock = 0, skills = [], slot = null, photo = null })   // → item record
+findItems(db, query)          // → [{ item, score }] best first; matches name, aliases, category
+makeSkip(db, { query, price, item = null, at })   // → { type:'skip', …, price, points } points capped per day
+makeSpend(db, { name, price, item = null, qty = 1, at })   // → { type:'spend', …, price }
+makeWish(db, { name, qty = 1 })                   // → wish record
+shoppingList(db)              // → [{ name, qty, wish?, lowStock?, matches: [{ item, score }] }]
+makeLoadout(db, { name, slots = {}, active = false })   // slots: { head, body, feet, hands, bag, tech, vehicle } → item ids
+activeLoadout(db)             // → loadout or null
+gearBonus(db, task, at)       // → { item, uses, bonus } for the best linked item, bonus 0–0.10
+inventory(records, now)       // → { items, stashes:[{place, items}], loadouts, active, inUse:Set,
+                              //     lowStock, moneySaved, savedThisMonth, spentThisMonth, skipsToday }
+```
+
+`makeDone` gains `gear: [itemIds]` (the active loadout's items at the time)
+and `price.bonuses.gear`; `balanceOf` adds skip points; constants
+`SKIP_POINTS_PER_DOLLAR = 1`, `SKIP_DAILY_CAP = 100`, `GEAR_STEP_USES = 10`,
+`GEAR_STEP = 0.01`, `GEAR_MAX = 0.10`, `SLOTS`.
+
+## Art direction (replaces "pixel art" for the game screens)
+
+The **inventory** and the **Day Replay** use rich **vector, dark-fantasy UI**
+drawn in code: ornate framed panels, metal and leather textures, glowing gems,
+lit item slots, lighting and soft shadow — sharp at any size. Original work,
+inspired by the look of 2010s action-RPG inventories, never copying any game's
+art, icons, fonts or names. The rest of the app keeps the ui-kit look. The
+replay is redone in this style (its API and timing stay).
