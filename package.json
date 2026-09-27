@@ -1,0 +1,10 @@
+{
+  "name": "flow",
+  "private": true,
+  "type": "module",
+  "description": "Flow: work and life as a game of getting faster and better. A toolkit app.",
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "test": "node --test"
+  }
+}
