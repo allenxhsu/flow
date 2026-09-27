@@ -341,6 +341,16 @@ const restores = (task) => (task.stamina || 0) < 0 || (task.mana || 0) < 0;
  *                index of the task it paused after)
  *   batchIndex — same-batch tasks directly before this one, each ≤ 10 min apart
  */
+/** Minutes of restoring moments that overlap the span [from, to]. */
+function restingMinutes(db, from, to) {
+  let ms = 0;
+  for (const m of db.moments || []) {
+    if (!((m.energy?.stamina || 0) < 0 || (m.energy?.mana || 0) < 0)) continue;
+    ms += Math.max(0, Math.min(m.end, to) - Math.max(m.start, from));
+  }
+  return ms / 60000;
+}
+
 export function chainAt(db, task, start) {
   let cursor = start;
   let chained = 0;
@@ -353,7 +363,9 @@ export function chainAt(db, task, start) {
     const t = db.task.get(d.task);
     if (batchOpen && t?.batch === task.batch && gap <= BATCH_GAP_MIN) batchIndex++;
     else batchOpen = false;
-    if (gap > COMBO_GAP_MIN) break;
+    // Rest pauses a combo: time in a restoring moment (Rest, a meal) inside
+    // the gap does not count towards it.
+    if (gap - restingMinutes(db, d.end, cursor) > COMBO_GAP_MIN) break;
     if (!t || !restores(t)) chained++;
     cursor = Math.min(cursor, d.start ?? d.end);
   }

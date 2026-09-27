@@ -141,7 +141,7 @@ test('rest pauses a combo, never breaks it (a rest task in the gap)', () => {
   assert.ok(next.price.bonuses.combo >= 0.2 - 1e-9, `combo kept after rest, got ${next.price.bonuses.combo}`);
 });
 
-test('rest pauses a combo, never breaks it (a Rest moment in the gap)', { todo: 'BUG: a logged Rest moment (SPEC › Moments lists Rest) breaks the combo instead of pausing it' }, () => {
+test('rest pauses a combo, never breaks it (a Rest moment in the gap)', () => {
   const g = world();
   const t = g.task({ title: 'Mail', skill: 'sk_mail', estimate: 10 });
   g.done(t, `${D}T09:10:00`, 10);
