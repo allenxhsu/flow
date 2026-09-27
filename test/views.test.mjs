@@ -135,3 +135,22 @@ test('Now: a small tier badge next to the player level', () => {
   assert.match(html, /id="hud-level"/);
   assert.match(html, /<span class="sc-badge tier-badge"[^>]*id="hud-tier"[^>]*>Grind<\/span>/);
 });
+
+// The shop previews a purchase at the global tier's debt multiplier, not a fixed ×2.
+import * as shop from '../src/views/shop.js';
+test('Shop: the debt preview and wording follow the tier (Steady ×1.5)', () => {
+  const g = game();
+  g.add(M.makeReview(g.db(), { satisfaction: 7, at: T('2026-09-27T20:00:00'), difficulty: { tier: 'steady' } }));
+  g.reward({ id: 'reward_cake', title: 'Cake', price: 100 });
+  const html = shop.render(ctxOf(g));
+  assert.match(html, /costs 150/, 'balance 0, price 100, below zero ×1.5');
+  assert.match(html, /×1\.5/);
+  assert.doesNotMatch(html, /costs double/);
+});
+test('Shop: at Push the wording still says double', () => {
+  const g = game();
+  g.reward({ id: 'reward_cake', title: 'Cake', price: 100 });
+  const html = shop.render(ctxOf(g));
+  assert.match(html, /costs 200/);
+  assert.match(html, /double/);
+});
