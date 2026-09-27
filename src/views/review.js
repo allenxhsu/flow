@@ -30,7 +30,7 @@ export function render(ctx) {
   const field = (name, label) => `<label class="sc-field"><span>${esc(label)} <output class="num" data-for="${name}">–</output></span><input type="range" name="${name}" min="0" max="10" step="0.5" value="5" data-unset="1"></label>`;
   return `<div class="view">
     <form class="sc-panel sc-panel--lit pad stack" data-form="review" id="review-form">
-      <div class="row-between"><h2>Weekly review · ${esc(g.week)}</h2>${s.due ? '<span class="sc-pill" style="--tint: var(--sc-warning)">due</span>' : `<span class="small sc-faint">last ${esc(s.latest.day)}</span>`}</div>
+      <div class="row-between"><h2>Weekly review · ${esc(g.week)}</h2>${s.due ? '<span class="sc-pill" style="--tint: var(--sc-warning)">due</span>' : `<span class="small sc-faint">${s.latest ? `last ${esc(s.latest.day)}` : 'first review due Sunday'}</span>`}</div>
       <div class="form-grid">
         <label class="sc-field wide"><span>Life satisfaction <output class="num" data-for="satisfaction">7</output>/10</span><input type="range" name="satisfaction" min="0" max="10" step="0.5" value="7"></label>
         ${g.stats.map((st) => field(`rate_${st.id}`, `${st.icon || ''} ${st.name}`)).join('')}

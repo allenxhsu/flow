@@ -119,3 +119,14 @@ test('inventory: skipsToday is today’s skip records; inventory(records) defaul
   assert.ok(inv.skipsToday.every((s) => s.type === 'skip' && s.day === D));
   assert.equal(M.inventory.length, 1);
 });
+
+test('jeans go in the Legs slot, separate from the shirt on Body', () => {
+  const g = game();
+  const shirt = item(g, { name: 'White shirt', category: 'Clothes', slot: 'body' });
+  const jeans = item(g, { name: 'Jeans', category: 'Clothes', slot: 'legs' });
+  const work = loadout(g, { name: 'Work', slots: { body: shirt.id, legs: jeans.id }, active: true });
+  assert.equal(M.activeLoadout(g.db()).slots.legs, jeans.id);
+  assert.equal(M.activeLoadout(g.db()).slots.body, shirt.id);
+  assert.ok(M.SLOTS.includes('legs'));
+  assert.ok(work);
+});

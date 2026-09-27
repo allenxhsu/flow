@@ -174,7 +174,7 @@ is allowed and simply visible.
   a low-stock item asks for enough to get back to its **usual** quantity
   (`usual`, default lowStock + 1; have 1, usual 4 → buy 3).
 - **Equip:** loadouts per context (Work bag, Gym bag, Car, Desk…) fill slots
-  Head, Body, Feet, Hands, Bag, Tech, Vehicle; one loadout is active; each has a
+  Head, Body, Legs, Feet, Hands, Bag, Tech, Vehicle; one loadout is active; each has a
   packing checklist; items are *in use* (equipped in any loadout) or *stored*.
   The replay hero wears the active loadout.
 - **Gear bonus grows with use, never with buying:** an item linked to a skill
@@ -200,7 +200,7 @@ restockFor(db, spend)         // → the item record to write with it: the owned
                               //   or a new item { name, qty, price } when the spend names no item
 makeWish(db, { name, qty = 1 })                   // → wish record
 shoppingList(db)              // → [{ name, qty, wish?, lowStock?, matches: [{ item, score }] }]
-makeLoadout(db, { name, slots = {}, active = false })   // slots: { head, body, feet, hands, bag, tech, vehicle } → item ids
+makeLoadout(db, { name, slots = {}, active = false })   // slots: { head, body, legs, feet, hands, bag, tech, vehicle } → item ids
 activeLoadout(db)             // → loadout or null; if several are active, the latest written wins
 gearBonus(db, task, at)       // → { item, uses, bonus } for the best linked item, bonus 0–0.10;
                               //   { item: null, uses: 0, bonus: 0 } when none is equipped
@@ -215,11 +215,31 @@ and `price.bonuses.gear`; `balanceOf` adds skip points; constants
 `SKIP_POINTS_PER_DOLLAR = 1`, `SKIP_DAILY_CAP = 100`, `GEAR_STEP_USES = 10`,
 `GEAR_STEP = 0.01`, `GEAR_MAX = 0.10`, `SLOTS`.
 
-## Art direction (replaces "pixel art" for the game screens)
+## Art direction (decided after concept rounds)
 
-The **inventory** and the **Day Replay** use rich **vector, dark-fantasy UI**
-drawn in code: ornate framed panels, metal and leather textures, glowing gems,
-lit item slots, lighting and soft shadow — sharp at any size. Original work,
-inspired by the look of 2010s action-RPG inventories, never copying any game's
-art, icons, fonts or names. The rest of the app keeps the ui-kit look. The
-replay is redone in this style (its API and timing stay).
+**Isometric pixel art in the spirit of 16-bit adventure games** — the original
+Day Replay's charm (bright palette, hearts, magic bar, gem counter, clock, the
+framed text box with a speaker name tab), redrawn as an **isometric** world.
+The player compared concepts in StarCraft, Diablo 1/2/Resurrected and Sims styles
+and chose this one "first", **with all the metric bars and the inventory system**.
+
+- **Rendering:** drawn at low resolution (640×360 logical) with hard pixel edges
+  and a limited palette (≤ 64 colours, no smoothing), shown at an integer scale.
+- **World:** 2:1 isometric tiles; zones Home, Road, Factory, Town as isometric
+  buildings (house, cottage, factory with window bands and roller door,
+  warehouse), paths, trees, crates; the hero walks between places.
+- **The hero wears the active loadout:** head, body, legs, feet items are drawn
+  on the sprite (e.g. hard hat, white shirt, jeans, work boots), large enough
+  to read (~16×32 px). NPCs from moments with `who`.
+- **Top HUD:** hearts = stamina, magic bar = mana, gem counter = points,
+  combo/batch banner, clock.
+- **Text box:** framed, speaker name tab, time and place, the event and its
+  points breakdown.
+- **Side panel (tabs STATS · GEAR · SHOP):** every meter (stamina, mana, each
+  stat with its level and the underdog marker, XP to next level); GEAR = the
+  paper doll (Tech, Head, Bag, Hands, Body, Feet, Car key, Legs, Home key) with
+  the loadout name and gear bonus, then stash tabs per storage place as a grid
+  with item tooltips ("HDMI cable ×2 · Desk drawer, Car · Skip buying +15 pts"),
+  and money saved vs spent.
+
+Original work only — no copied sprites, icons, fonts or UI from any game.

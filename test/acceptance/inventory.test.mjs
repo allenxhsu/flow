@@ -252,7 +252,7 @@ test('shopping list: a consumable at or below its low-stock level joins by itsel
 // ─── Loadouts ──────────────────────────────────────────────────────────────
 
 test('loadouts: SLOTS are head, body, feet, hands, bag, tech, vehicle', () => {
-  assert.deepEqual(M.SLOTS, ['head', 'body', 'feet', 'hands', 'bag', 'tech', 'vehicle']);
+  assert.deepEqual(M.SLOTS, ['head', 'body', 'legs', 'feet', 'hands', 'bag', 'tech', 'vehicle']);
   const g = game();
   const hat = item(g, { name: 'Hard hat', slot: 'head' });
   const laptop = item(g, { name: 'Laptop', slot: 'tech' });
