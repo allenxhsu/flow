@@ -1,0 +1,195 @@
+// Settings: sync, the hero, places, moment kinds, sound, backup.
+
+import { makePlace, newId, ZONES } from '../model.js';
+import { esc, materialize } from '../util.js';
+
+/** Starting colours for the hero sprite — data for the replay, not page styling. */
+export const HERO_DEFAULTS = { hair: '#4a3222', skin: '#e0b48c', shirt: '#2f7fd0', trousers: '#34405a' };
+const HERO_PARTS = [['hair', 'Hair'], ['skin', 'Skin'], ['shirt', 'Shirt'], ['trousers', 'Trousers']];
+
+const opt = (v, l, sel) => `<option value="${esc(v)}" ${sel ? 'selected' : ''}>${esc(l)}</option>`;
+
+function syncSection(ctx) {
+  const s = ctx.store.getSettings();
+  const st = ctx.store.syncStatus();
+  if (ctx.store.inPortal()) {
+    return `<section class="sc-panel pad stack" id="sync">
+      <h2>Sync</h2>
+      <p class="sc-muted" style="margin:0">Synced through the Portal, workspace <span class="sc-mono">flow</span>. Your sign-in is the credential: nothing to paste.</p>
+      <sc-sync-status></sc-sync-status>
+    </section>`;
+  }
+  return `<form class="sc-panel pad stack" data-form="sync" id="sync">
+    <h2>Sync</h2>
+    <p class="small sc-muted" style="margin:0">Off the Portal, point Flow at a sync-kit server's workspace, e.g. <span class="sc-mono">https://host/w/flow</span>, with a device token.</p>
+    <div class="form-grid">
+      <label class="sc-field wide"><span>Server URL</span><input class="sc-input" name="url" type="url" value="${esc(s.url)}" placeholder="https://…/w/flow" autocomplete="off"></label>
+      <label class="sc-field wide"><span>Token</span><input class="sc-input" name="token" type="password" value="${esc(s.token)}" autocomplete="off"></label>
+      <label class="check-field"><input class="sc-check" type="checkbox" name="enabled" ${s.enabled || !s.url ? 'checked' : ''}> Sync on</label>
+      <button class="sc-button sc-button--primary" type="submit">Save</button>
+    </div>
+    <sc-sync-status></sc-sync-status>
+    ${st.lastError ? `<div class="sc-alert sc-alert--danger small"><strong>Last error</strong> ${esc(st.lastError)}</div>` : ''}
+  </form>`;
+}
+
+function placesSection(ctx) {
+  const { db } = ctx;
+  const zoneSel = (z) => `<select class="sc-select" name="zone">${ZONES.map((x) => opt(x, x, x === z)).join('')}</select>`;
+  return `<section class="sc-panel pad stack" id="places">
+    <h2>Places</h2>
+    <div class="list">${db.places.map((p) => `
+      <form class="form-grid" data-form="place"><input type="hidden" name="id" value="${esc(p.id)}">
+        <label class="sc-field"><span>Name</span><input class="sc-input" name="name" required value="${esc(p.name)}"></label>
+        <label class="sc-field"><span>Zone</span>${zoneSel(p.zone)}</label>
+        <div class="row"><button class="sc-button sc-button--sm" type="submit">Save</button><button class="sc-button sc-button--ghost sc-button--sm" type="button" data-action="remove-place" data-id="${esc(p.id)}">Remove</button></div>
+      </form>`).join('')}</div>
+    <form class="form-grid" data-form="place" id="add-place">
+      <label class="sc-field"><span>New place</span><input class="sc-input" name="name" required placeholder="e.g. Library"></label>
+      <label class="sc-field"><span>Zone</span>${zoneSel('town')}</label>
+      <button class="sc-button sc-button--primary sc-button--sm" type="submit">Add place</button>
+    </form>
+  </section>`;
+}
+
+function kindsSection(ctx) {
+  const { db } = ctx;
+  const placeSel = (v) => `<select class="sc-select" name="place">${opt('', '—', !v)}${db.places.map((p) => opt(p.id, p.name, p.id === v)).join('')}</select>`;
+  const fields = (k = {}) => `
+    <label class="sc-field"><span>Icon</span><input class="sc-input" name="icon" maxlength="4" value="${esc(k.icon || '')}"></label>
+    <label class="sc-field"><span>Title</span><input class="sc-input" name="title" required value="${esc(k.title || '')}"></label>
+    <label class="sc-field"><span>Place</span>${placeSel(k.place)}</label>
+    <label class="sc-field"><span>Stamina / h</span><input class="sc-input" type="number" step="0.5" min="-10" max="10" name="staminaPerHour" value="${esc(k.staminaPerHour ?? 0)}"></label>
+    <label class="sc-field"><span>Mana / h</span><input class="sc-input" type="number" step="0.5" min="-10" max="10" name="manaPerHour" value="${esc(k.manaPerHour ?? 0)}"></label>`;
+  return `<section class="sc-panel pad stack" id="kinds">
+    <h2>Moment kinds</h2>
+    <p class="small sc-faint" style="margin:0">Energy per hour; negative restores. Moments never earn or cost points.</p>
+    <div class="list">${db.kinds.map((k) => `
+      <form class="form-grid item" data-form="kind"><input type="hidden" name="id" value="${esc(k.id)}">${fields(k)}
+        <div class="row"><button class="sc-button sc-button--sm" type="submit">Save</button><button class="sc-button sc-button--ghost sc-button--sm" type="button" data-action="remove-kind" data-id="${esc(k.id)}">Remove</button></div>
+      </form>`).join('')}</div>
+    <form class="form-grid" data-form="kind" id="add-kind">${fields({ icon: '•' })}<button class="sc-button sc-button--primary sc-button--sm" type="submit">Add kind</button></form>
+  </section>`;
+}
+
+export function render(ctx) {
+  const set = ctx.db.settings;
+  const hero = { ...HERO_DEFAULTS, ...(set.hero || {}) };
+  return `<div class="view">
+    ${syncSection(ctx)}
+    <form class="sc-panel pad stack" data-form="player" id="player">
+      <h2>Player</h2>
+      <div class="form-grid">
+        <label class="sc-field"><span>Name</span><input class="sc-input" name="name" value="${esc(set.name || 'Player')}"></label>
+        <label class="sc-field wide"><span>Mission</span><input class="sc-input" name="mission" value="${esc(set.mission || '')}" placeholder="what the game is for"></label>
+        <label class="check-field"><input class="sc-check" type="checkbox" name="sound" data-setting="sound" ${set.sound ? 'checked' : ''}> Replay sound (chiptune)</label>
+        <button class="sc-button sc-button--primary" type="submit">Save</button>
+      </div>
+    </form>
+    <form class="sc-panel pad stack" data-form="hero" id="hero">
+      <h2>Hero colours</h2>
+      <div class="form-grid">${HERO_PARTS.map(([k, l]) => `<label class="sc-field"><span>${l}</span><input type="color" name="${k}" value="${esc(hero[k])}"></label>`).join('')}
+        <button class="sc-button sc-button--primary" type="submit">Save hero</button></div>
+    </form>
+    ${placesSection(ctx)}
+    ${kindsSection(ctx)}
+    <section class="sc-panel pad stack" id="backup">
+      <h2>Backup</h2>
+      <p class="small sc-muted" style="margin:0">Every record, deletions included, in one file. Importing merges by the newer edit and never deletes.</p>
+      <div class="row"><button class="sc-button" data-action="export">Export</button>
+        <label class="sc-button" style="cursor:pointer">Import…<input type="file" accept=".json,application/json" data-import hidden></label></div>
+      <div class="small sc-faint">This device <span class="sc-mono">${esc(ctx.store.deviceId())}</span> · store ${esc(ctx.store.storeKind())} · ${ctx.store.allRecords().length} records · storage ${esc(ctx.store.persistence())}</div>
+    </section>
+    <section class="sc-panel pad stack"><h2>Appearance</h2><sc-theme-picker></sc-theme-picker></section>
+  </div>`;
+}
+
+function settingsRecord(ctx) {
+  return ctx.store.getRecord('settings') || { id: 'settings', type: 'settings', name: 'Player', mission: '' };
+}
+async function saveSettings(ctx, changes) {
+  const cur = settingsRecord(ctx);
+  await ctx.store.save({ ...cur, id: 'settings', type: 'settings', ...changes });
+}
+
+/** Places and kinds: the first edit writes the defaults it replaces. */
+async function saveList(ctx, type, rec) {
+  const base = materialize(type, ctx.store.allRecords().filter((r) => !r.deletedAt));
+  const byId = new Map(base.map((r) => [r.id, r]));
+  byId.set(rec.id, { ...(byId.get(rec.id) || ctx.store.getRecord(rec.id) || {}), ...rec });
+  await ctx.store.save([...byId.values()]);
+}
+
+export const actions = {
+  'sync-now': async (el, ctx) => { await ctx.store.syncNow(); ctx.render({ force: true }); },
+  export: async (el, ctx) => {
+    const doc = await ctx.store.exportStore();
+    const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `flow-backup-${ctx.g.day}.json`;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    ctx.toast(`Exported ${doc.counts.total} records.`, 'success');
+  },
+  'remove-place': async (el, ctx) => {
+    const id = el.dataset.id;
+    if (ctx.db.tasks.some((t) => t.place === id) || ctx.db.skills.some((s) => s.place === id)) throw new Error('A skill or task is at that place.');
+    if (!(await ctx.confirm('Remove place?', 'Past moments keep it by id.', 'Remove', 'danger'))) return;
+    await saveList(ctx, 'place', { id });
+    await ctx.store.remove(ctx.store.getRecord(id));
+  },
+  'remove-kind': async (el, ctx) => {
+    await saveList(ctx, 'kind', { id: el.dataset.id, archived: true });
+  },
+};
+
+export async function onChange(ev, ctx) {
+  const t = ev.target;
+  if (t.matches('[data-import]') && t.files?.[0]) {
+    const text = await t.files[0].text();
+    const r = await ctx.store.importStore(text);
+    ctx.toast(`Imported: ${r.added} added, ${r.replaced} replaced, ${r.kept} kept.`, 'success');
+    t.value = '';
+  } else if (t.dataset.setting === 'sound') {
+    await saveSettings(ctx, { sound: t.checked });
+  }
+}
+
+export const forms = {
+  sync: async (d, form, ctx) => {
+    await ctx.store.applySettings({ url: d.url, token: d.token, enabled: d.enabled === 'on' });
+    const st = ctx.store.syncStatus();
+    ctx.toast(st.lastError ? `Sync failed: ${st.lastError}` : ctx.store.syncConfigured() ? 'Sync on.' : 'Sync off.', st.lastError ? 'danger' : 'success');
+    ctx.render({ force: true });
+  },
+  player: async (d, form, ctx) => { await saveSettings(ctx, { name: (d.name || '').trim() || 'Player', mission: (d.mission || '').trim(), sound: d.sound === 'on' }); ctx.toast('Saved.', 'success'); },
+  hero: async (d, form, ctx) => {
+    const hero = Object.fromEntries(HERO_PARTS.map(([k]) => [k, /^#[0-9a-f]{6}$/i.test(d[k]) ? d[k] : HERO_DEFAULTS[k]]));
+    await saveSettings(ctx, { hero });
+    ctx.toast('Hero saved.', 'success');
+  },
+  place: async (d, form, ctx) => {
+    if (d.id) {
+      if (!ZONES.includes(d.zone)) throw new Error('Pick a zone.');
+      await saveList(ctx, 'place', { id: d.id, type: 'place', name: d.name.trim(), zone: d.zone });
+    } else {
+      const rec = makePlace(ctx.db, { name: d.name.trim(), zone: d.zone });
+      await saveList(ctx, 'place', rec);
+      ctx.toast(`${rec.name} added.`, 'success');
+    }
+  },
+  kind: async (d, form, ctx) => {
+    const n = (v) => { const x = Number(v || 0); if (!Number.isFinite(x) || x < -10 || x > 10) throw new Error('Energy per hour is −10 to 10.'); return x; };
+    if (!d.title?.trim()) throw new Error('A moment kind needs a title.');
+    const rec = { id: d.id || newId('kind'), type: 'kind', title: d.title.trim(), icon: (d.icon || '').trim(), place: d.place || null, staminaPerHour: n(d.staminaPerHour), manaPerHour: n(d.manaPerHour) };
+    await saveList(ctx, 'kind', rec);
+    ctx.toast(`${rec.title} ${d.id ? 'saved' : 'added'}.`, 'success');
+  },
+};
+
+export function mounted(view, ctx) {
+  for (const el of view.querySelectorAll('sc-sync-status')) { try { el.status = ctx.store.syncStatus(); } catch { /* older widget */ } }
+}

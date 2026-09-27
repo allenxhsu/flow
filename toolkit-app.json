@@ -1,0 +1,26 @@
+{
+  "id": "flow",
+  "name": "Flow",
+  "mark": "FL",
+  "colorToken": "flow",
+  "workspace": "flow",
+  "static": {
+    "dir": ".",
+    "build": null,
+    "include": [
+      "index.html",
+      "src/**",
+      "ui-kit/**",
+      "sync-kit/js/**"
+    ]
+  },
+  "entry": "index.html",
+  "offline": true,
+  "csp": null,
+  "connectScheme": "flow",
+  "pwa": {
+    "shortName": "Flow",
+    "themeColor": "#03060A",
+    "display": "standalone"
+  }
+}
