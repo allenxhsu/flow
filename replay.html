@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Flow Day Replay</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; background: #12111f; color: #f6f3e9; font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    main { max-width: 820px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    p.lede { margin: 0 0 14px; color: #9aa0b8; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Day Replay</h1>
+    <p class="lede">A sample factory workday, built with Flow's own rules. Tap a building to see what happened there.</p>
+    <div id="replay"></div>
+  </main>
+  <script type="module">
+    import { sampleReplay } from './src/replay/sample.js';
+    import { mountReplay } from './src/replay/index.js';
+
+    const params = new URLSearchParams(location.search);
+    const replay = sampleReplay();
+    const player = mountReplay(document.getElementById('replay'), replay, {
+      sound: params.get('sound') === '1',
+      onPlace: (place) => console.info('place', place.name, place.beats.length),
+    });
+    window.flowReplay = player;
+    if (params.has('t')) player.seek(Number(params.get('t')));
+    if (params.get('autoplay') === '1') player.play();
+  </script>
+</body>
+</html>
