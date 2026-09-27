@@ -124,9 +124,9 @@ test('definitions: edit, archive, stats, places, kinds, export and import', () =
     assert.deepEqual(p.json().stats.map((s) => s.name), ['Body', 'Mind', 'Work', 'People', 'Home']);
 
     assert.match(run('place', 'add', '--name', 'Garage', '--zone', 'home'), /Garage \(home\)/);
-    assert.equal(p.json().places.length, 12);
+    assert.equal(p.json().places.length, 13);
     assert.match(run('kind', 'add', '--title', 'Call', '--place', 'garage', '--mana', '1.5'), /mana 1\.5; at Garage/);
-    assert.equal(p.json().kinds.length, 7);
+    assert.equal(p.json().kinds.length, 8);
     assert.match(run('moment', 'call', '--from', '19:00', '--to', '19:30', '--who', 'Whitney'), /mana −0\.8/);
 
     assert.match(run('reward', 'add', '--title', 'Cinema', '--price', '120', '--once'), /one-off/);
