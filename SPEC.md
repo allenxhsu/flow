@@ -227,3 +227,73 @@ palettes: steel / crystal / chitin).
 Original work only: no Blizzard (or any game's) art, units, icons, UI frames,
 faction names or sounds — "inspired by the genre and its polish". The rest of
 the app keeps the ui-kit look.
+
+## Difficulty
+
+Five named tiers change how hard the game plays. The default is **Push**,
+which is the game described above, unchanged. A tier changes four things
+together: harder targets, bigger rewards, less forgiveness and tighter energy.
+
+| Tier | Unlocks at level | Points × | Target step | Rework + | Debt × | Energy cost × | Grace days / 7 |
+|---|---|---|---|---|---|---|---|
+| Steady | 1 | 0.8 | 3% | −0.25 | 1.5 | 0.85 | 2 |
+| **Push** (default) | 1 | 1 | 5% | 0 | 2 | 1 | 1 |
+| Grind | 3 | 1.25 | 8% | +0.25 | 2 | 1.15 | 1 |
+| Relentless | 6 | 1.5 | 11% | +0.5 | 2.5 | 1.3 | 0 |
+| Legend | 10 | 2 | 15% | +0.75 | 3 | 1.5 | 0 |
+
+- **Points ×** applies after the 2.5× bonus cap:
+  `points = base × min(2.5, 1 + bonuses) × tier.points`.
+- **Target step** replaces the 5% in both the flow target and the
+  history-based estimate.
+- **Rework +** is added to the rework multiplier (1.5 / 1.75 / 2, and 2 for
+  critical work). Rework uses the tier its completion was priced at: a Legend
+  job reworked is a Legend rework.
+- **Debt ×** replaces the 2× on the part of a charge below zero. A purchase
+  uses the global tier on its day. A rework uses its completion's tier.
+- **Energy cost ×** multiplies positive task costs after mastery and batch
+  discounts. Restoring amounts are never scaled.
+- **Grace days** is how many missed days a daily streak forgives in any
+  7-day stretch.
+
+**Global plus per-skill.** A global tier applies to every skill, and a skill
+can override it (for example Legend on Run and Steady on Mail). A task plays
+at its skill's tier.
+
+**Changing it.** Difficulty is set only in a weekly review, through the
+review's `difficulty: { tier, skills }`. It takes effect the day after the
+review. With Sunday reviews, that makes it next week's setting. A review
+without `difficulty` keeps the previous setting. A review with one replaces
+the whole setting, so a skill left out goes back to the global tier. Before
+any review sets it, everything is at Push.
+
+**Unlocking.** Raising the global tier needs the player's level to be at least
+the tier's unlock level. Raising a skill's override needs that skill's level
+to be at least the unlock level. Choosing a tier you have not unlocked is
+refused. Lowering is always allowed, and a tier you already chose stays in
+effect even if your level later falls.
+
+Every price snapshots its tier (`price.difficulty`), so changing difficulty
+never changes points you have already earned.
+
+### Contract
+
+- `DIFFICULTY`: an array, easiest first, of
+  `{ id, name, unlock, points, targetStep, reworkAdd, debt, energy, grace }`.
+  Ids are `steady`, `push`, `grind`, `relentless`, `legend`.
+  `DEFAULT_DIFFICULTY = 'push'`.
+- `difficultyOn(db, day, skillId?)` returns the tier record in effect.
+- `makeReview(db, { …, difficulty: { tier, skills } })` validates the tiers
+  and unlocks at the review's time, and stores `difficulty` on the review.
+- `priceDone(...)` returns `difficulty` (the tier id).
+- `makeRework` returns `difficulty` and uses its numbers.
+- `makePurchase` returns `difficulty` and uses its debt multiplier.
+- `chargeFor(balance, amount, debt = DEBT_MULTIPLIER)`.
+- `dailyStreak(days, day, grace = 1)`.
+- `play(...).difficulty` is
+  `{ tier, name, skills: {skillId: tierId}, unlocked: [ids], next: {id, name, unlock} | null, changesAt: 'review' }`.
+- CLI: `flow difficulty` shows the current setting and the unlocks.
+  `flow review … --difficulty <tier> [--skill-difficulty <skill>=<tier> …]`
+  sets it.
+- App: the review screen shows the five tiers as cards (locked ones greyed
+  out, each showing its level), with per-skill overrides below them.
