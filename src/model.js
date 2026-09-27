@@ -4,10 +4,12 @@
 //
 // The data is sync-kit records in workspace "flow". Two kinds:
 //
-//   definitions — stat, skill, task, reward, settings. Edited in place, and
-//                 last-write-wins is the right rule for them.
-//   events      — done, rework, purchase, energy, review. Written once and
-//                 never edited, so two devices can never overwrite each other.
+//   definitions — settings, stat, skill, task, reward, place, kind. Edited in
+//                 place, and last-write-wins is the right rule for them.
+//   events      — done, rework, purchase, energy, review, moment. Written once
+//                 and never edited, so two devices can never overwrite each other.
+//                 A review redone in the same ISO week is a new event; the
+//                 latest one counts for that week.
 //
 // Every event that moves points carries the points it was priced at (`price`,
 // `charged`), so a later calibration never rewrites the past. Everything else
@@ -221,7 +223,7 @@ export function makeTask(db, fields, { now = Date.now() } = {}) {
     if (!Number.isFinite(v) || v < -ENERGY_MAX || v > ENERGY_MAX) throw new Error(`${k} is from -${ENERGY_MAX} (restores) to ${ENERGY_MAX}`);
     t[k] = v;
   }
-  return { id: t.id || newId('task', now), type: 'task', created: t.created || dayOf(now), ...t, estimate: Number(t.estimate), batch: t.batch ? String(t.batch).trim() : null };
+  return { ...t, id: t.id || newId('task', now), type: 'task', created: t.created || dayOf(now), estimate: Number(t.estimate), batch: t.batch ? String(t.batch).trim() : null };
 }
 
 export function makeReward({ title, price, repeatable = true, now = Date.now() }) {
@@ -259,7 +261,9 @@ export function actual(done, reworks = []) {
 
 /** A task's recent average, best, target and history-based estimate, from completions before `before`. */
 export function taskStats(db, task, before = Infinity, rw = reworkByDone(db)) {
-  const runs = db.done.filter((d) => d.task === task.id && (d.end ?? 0) < before).map((d) => ({ ...d, ...actual(d, rw.get(d.id)) }));
+  // Only rework already logged by `before` counts: a price never sees the future.
+  const known = (d) => (rw.get(d.id) || []).filter((r) => (r.at ?? 0) < before);
+  const runs = db.done.filter((d) => d.task === task.id && (d.end ?? 0) < before).map((d) => ({ ...d, ...actual(d, known(d)) }));
   const better = betterOf(task);
   const recent = runs.slice(-HISTORY_RUNS);
   const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
@@ -329,16 +333,31 @@ const restores = (task) => (task.stamina || 0) < 0 || (task.mana || 0) < 0;
 /**
  * Where a completion starting at `start` falls in the running combo and batch.
  * Rest pauses a combo: it neither grows it nor breaks it, and the gap is
- * measured from the end of the rest.
+ * measured from the end of the rest. The chain is walked back from the
+ * records rather than read off the previous one's stored index, because a
+ * rest's stored index cannot tell "paused after a task" from "no chain yet".
+ *
+ *   comboIndex — non-rest tasks chained before this one (a rest keeps the
+ *                index of the task it paused after)
+ *   batchIndex — same-batch tasks directly before this one, each ≤ 10 min apart
  */
 export function chainAt(db, task, start) {
-  const prev = [...db.done].reverse().find((d) => (d.end ?? 0) <= start);
-  if (!prev) return { comboIndex: 0, batchIndex: 0 };
-  const gap = (start - prev.end) / 60000;
-  const prevTask = db.task.get(prev.task);
-  let comboIndex = 0;
-  if (gap <= COMBO_GAP_MIN) comboIndex = restores(task) ? (prev.comboIndex || 0) : (prev.comboIndex || 0) + (prevTask && restores(prevTask) ? 0 : 1);
-  const batchIndex = task.batch && prevTask?.batch === task.batch && gap <= BATCH_GAP_MIN ? (prev.batchIndex || 0) + 1 : 0;
+  let cursor = start;
+  let chained = 0;
+  let batchIndex = 0;
+  let batchOpen = !!task.batch;
+  for (let i = db.done.length - 1; i >= 0; i--) {
+    const d = db.done[i];
+    if ((d.end ?? 0) > start) continue;
+    const gap = (cursor - d.end) / 60000;
+    const t = db.task.get(d.task);
+    if (batchOpen && t?.batch === task.batch && gap <= BATCH_GAP_MIN) batchIndex++;
+    else batchOpen = false;
+    if (gap > COMBO_GAP_MIN) break;
+    if (!t || !restores(t)) chained++;
+    cursor = Math.min(cursor, d.start ?? d.end);
+  }
+  const comboIndex = restores(task) ? Math.max(0, chained - 1) : chained;
   return { comboIndex, batchIndex };
 }
 
@@ -443,7 +462,8 @@ export function makePurchase(db, rewardRef, { at = Date.now() } = {}) {
   const reward = typeof rewardRef === 'string' ? db.reward.get(rewardRef) : rewardRef;
   if (!reward || reward.archived) throw new Error(`no reward "${rewardRef}"`);
   if (!reward.repeatable && db.purchases.some((p) => p.reward === reward.id)) throw new Error(`${reward.title} is a one-off and already bought`);
-  const balance = balanceOf(db, Infinity);
+  // The balance at the moment of buying, so a purchase logged later is charged as it would have been.
+  const balance = balanceOf(db, at);
   return { id: newId('purchase', at), type: 'purchase', reward: reward.id, day: dayOf(at), at, price: reward.price, charged: chargeFor(balance, reward.price) };
 }
 
@@ -463,7 +483,7 @@ export function makeRework(db, doneRef, { minutes, at = Date.now(), note = '' })
   const penalty = Math.round(minutes * perMinute * multiplier);
   return {
     id: newId('rework', at), type: 'rework', done: done.id, task: done.task, day: dayOf(at), at, minutes, repeat,
-    multiplier, perMinute: Math.round(perMinute * 100) / 100, penalty, charged: chargeFor(balanceOf(db), penalty), note,
+    multiplier, perMinute: Math.round(perMinute * 100) / 100, penalty, charged: chargeFor(balanceOf(db, at), penalty), note,
   };
 }
 
@@ -518,6 +538,16 @@ export function makeReview(db, { satisfaction, ratings = {}, win = '', lesson = 
   }
   const day = dayOf(at);
   return { id: newId('review', at), type: 'review', week: isoWeek(day), day, at, satisfaction: score(satisfaction, 'satisfaction'), ratings: clean, win, lesson, next };
+}
+
+/** The last review of each ISO week, oldest week first: redoing a review replaces it. */
+export function latestPerWeek(reviews) {
+  const byWeek = new Map();
+  for (const r of [...reviews].sort((a, b) => a.day.localeCompare(b.day) || (a.at ?? 0) - (b.at ?? 0))) {
+    const w = r.week || isoWeek(r.day);
+    byWeek.set(w, r);
+  }
+  return [...byWeek.values()];
 }
 
 // ─── periods, streaks ───────────────────────────────────────────────────────
@@ -590,7 +620,7 @@ export function pickNext(db, now, g = null) {
   const candidates = open.filter((t) => !t.batch || released.has(t.batch)).filter((t) => !exhausted || restores(t) || free(t) || soon(t));
   const rank = (t) => [
     soon(t) ? 0 : 1,
-    t.deadline || '9999-12-31',
+    soon(t) ? t.deadline : '', // a far deadline must not jump the energy and underdog order
     affordable(t) ? 0 : 1,
     under.has(db.skill.get(t.skill)?.stat) ? 0 : 1,
     skills.get(t.skill)?.toNext ?? Infinity,
@@ -607,7 +637,14 @@ export function pickNext(db, now, g = null) {
     if (restores(t)) r.push('restores energy');
     return r;
   };
-  const suggestions = candidates.map((t) => ({ task: t.id, title: t.title, why: why(t), batch: t.batch ? batches.get(t.batch).map((x) => x.id) : null, cost: cost(t) }));
+  // A released batch is offered once, as a whole, led by its best-ranked task.
+  const offered = new Set();
+  const suggestions = [];
+  for (const t of candidates) {
+    if (t.batch && offered.has(t.batch)) continue;
+    if (t.batch) offered.add(t.batch);
+    suggestions.push({ task: t.id, title: t.title, why: why(t), batch: t.batch ? batches.get(t.batch).map((x) => x.id) : null, cost: cost(t) });
+  }
   return { next: suggestions[0] || null, alternatives: suggestions.slice(1, 4), queued, exhausted, empty: energy.empty || [] };
 }
 
@@ -686,7 +723,8 @@ export function play(records, now = Date.now()) {
   const weeks = new Map();
   for (const d of db.done) { const w = isoWeek(d.day); weeks.set(w, (weeks.get(w) || 0) + 1); }
   const reworkWeeks = new Set(db.rework.map((r) => isoWeek(db.done.find((d) => d.id === r.done)?.day || r.day)));
-  const reviews = db.reviews;
+  // One review counts per ISO week: a second one that week replaces the first.
+  const reviews = latestPerWeek(db.reviews);
   const latest = reviews[reviews.length - 1] || null;
   const before = reviews.slice(-4, -1);
   const trend = latest && before.length ? latest.satisfaction - before.reduce((n, r) => n + r.satisfaction, 0) / before.length : null;
@@ -724,6 +762,16 @@ export function play(records, now = Date.now()) {
 }
 
 // ─── the day, as a story ────────────────────────────────────────────────────
+
+/** The game as it stood at `ms`: events after it are left out, definitions kept. */
+function asOf(db, ms) {
+  const upTo = (xs, key) => xs.filter((x) => (x[key] ?? 0) < ms);
+  return {
+    ...db,
+    done: upTo(db.done, 'end'), rework: upTo(db.rework, 'at'), purchases: upTo(db.purchases, 'at'),
+    energy: upTo(db.energy, 'at'), moments: upTo(db.moments, 'end'), reviews: upTo(db.reviews, 'at'),
+  };
+}
 
 /** A walk between two places takes about this long, however far the gap. */
 export const WALK_MIN = 5;
@@ -783,12 +831,15 @@ export function replayDay(records, day, { now = Date.now() } = {}) {
         add('travel', walk);
         gap -= walk;
         cursor += walk;
+        at = e.place; // the hero waits where the walk ended
       }
       if (gap > 0) { beats.push({ kind: 'idle', start: cursor, end: e.start, place: at, zone: zoneOf(at), text: '…' }); add('idle', gap); }
     } else if (e.place && at && e.place !== at) {
       beats.push({ kind: 'walk', start: e.start, end: e.start, from: at, to: e.place, fromZone: zoneOf(at), toZone: zoneOf(e.place), text: `→ ${nameOf(e.place)}` });
     }
-    for (const k of ['stamina', 'mana']) energy[k] = Math.max(0, Math.min(ENERGY_MAX, energy[k] - (e.energy[k] || 0)));
+    // Like energyOn: what ended before the morning rating is already in it.
+    const counts = !rating || e.end >= rating.at;
+    for (const k of ['stamina', 'mana']) if (counts) energy[k] = Math.round(Math.max(0, Math.min(ENERGY_MAX, energy[k] - (e.energy[k] || 0))) * 10) / 10;
     points += e.points;
     beats.push({ ...e, zone: zoneOf(e.place), placeName: nameOf(e.place), after: { ...energy, points } });
     if (e.kind !== 'purchase') { add(zoneOf(e.place), e.end - e.start); add(`place:${e.place}`, e.end - e.start); }
@@ -797,13 +848,15 @@ export function replayDay(records, day, { now = Date.now() } = {}) {
     at = e.place || at;
   }
 
-  const g = play(db, new Date(`${day}T23:59:00`).getTime());
-  const tomorrow = pickNext(db, new Date(`${addDays(day, 1)}T08:00:00`).getTime());
+  // The finale is the day as it ended, even when replayed weeks later.
+  const past = asOf(db, new Date(`${addDays(day, 1)}T00:00:00`).getTime());
+  const totalXp = [...skillXp(past).values()].reduce((a, b) => a + b, 0);
+  const tomorrow = pickNext(past, new Date(`${addDays(day, 1)}T08:00:00`).getTime());
   const done = events.filter((e) => e.kind === 'done');
   const zones = ZONES.map((z) => ({ zone: z, minutes: Math.round((time.get(z) || 0) / 60000) })).filter((z) => z.minutes > 0);
   return {
     day,
-    start: rating?.stamina === undefined ? null : rating,
+    start: rating, // the morning energy record, or null when the day was never rated
     hero: db.settings.hero || null,
     beats,
     series,
@@ -815,8 +868,8 @@ export function replayDay(records, day, { now = Date.now() } = {}) {
       reworks: events.filter((e) => e.kind === 'rework').length,
       bestCombo: Math.max(0, ...db.done.filter((d) => d.day === day).map((d) => (d.comboIndex || 0) + 1)),
       bestBatch: Math.max(0, ...db.done.filter((d) => d.day === day && d.batchIndex > 0).map((d) => d.batchIndex + 1)),
-      level: g.player.level,
-      balance: g.balance,
+      level: levelFor(totalXp, PLAYER_STEP).level,
+      balance: balanceOf(past),
       zones,
       travel: Math.round((time.get('travel') || 0) / 60000),
       idle: Math.round((time.get('idle') || 0) / 60000),
