@@ -1,0 +1,15 @@
+// Flow for iPhone: settings shared by every target and configuration.
+//
+// Nothing personal lives here. The developer team and the bundle id prefix
+// come from ios/Local.xcconfig, which is not committed (copy
+// Local.xcconfig.example). Without it the project still builds for the
+// simulator with signing off, under the placeholder prefix below.
+
+DEVELOPMENT_TEAM =
+BUNDLE_PREFIX = org.example
+PORTAL_ORIGIN =
+
+#include? "../Local.xcconfig"
+
+// The widget reads what the app writes through this shared container.
+APP_GROUP = group.$(BUNDLE_PREFIX).flow

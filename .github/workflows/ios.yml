@@ -1,0 +1,99 @@
+# Flow for iPhone: the web tests, then the Xcode project generated, built and
+# unit-tested for the iOS Simulator with signing off.
+#
+# The project builds against shell-kit (public) and sync-kit checked out as
+# siblings, as on a developer's Mac:
+#
+#   $GITHUB_WORKSPACE/flow           this repository
+#   $GITHUB_WORKSPACE/shell-kit      allenxhsu/shell-kit at SHELL_KIT_REF
+#   $GITHUB_WORKSPACE/sync-kit  ->   flow/sync-kit (the vendored copy, swift/ included)
+#
+# SHELL_KIT_REF: the workflow_dispatch input, else the repository variable
+# SHELL_KIT_REF, else the branch below — the iOS shell's branch until it
+# merges into main; then set the variable (or this default) to main.
+name: iOS
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      shell_kit_ref:
+        description: shell-kit branch, tag or commit
+        required: false
+        default: ''
+
+env:
+  SHELL_KIT_REF: ${{ inputs.shell_kit_ref || vars.SHELL_KIT_REF || 'claude/focused-gauss-beee4q' }}
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+
+  ios:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: flow
+      - uses: actions/checkout@v4
+        with:
+          repository: allenxhsu/shell-kit
+          ref: ${{ env.SHELL_KIT_REF }}
+          path: shell-kit
+      - name: sync-kit beside shell-kit (flow's vendored copy)
+        run: |
+          ln -s flow/sync-kit sync-kit
+          test -f sync-kit/swift/Package.swift
+      - name: host.js is shell-kit's current copy
+        run: node shell-kit/scripts/copy-into.mjs --check flow/src/host.js || echo "::warning::src/host.js differs from shell-kit@${SHELL_KIT_REF}"
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          brew install xcodegen
+      - name: Generate the project
+        working-directory: flow/ios
+        run: xcodegen generate
+      - name: Build for the Simulator
+        working-directory: flow/ios
+        run: |
+          set -o pipefail
+          xcodebuild -project Flow.xcodeproj -scheme Flow -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO build | tee build.log | grep -E '(error|warning: .*Flow/|BUILD)' || true
+          grep -q 'BUILD SUCCEEDED' build.log || { tail -80 build.log; exit 1; }
+      - name: The web app is in the bundle
+        working-directory: flow/ios
+        run: |
+          app=$(find build/Build/Products -name Flow.app -type d | head -1)
+          test -f "$app/web/index.html"
+          test -f "$app/web/src/native.js"
+          test -f "$app/web/sync-kit/js/index.js"
+          test ! -e "$app/web/test" && test ! -e "$app/web/cli" && test ! -e "$app/web/docs"
+          test -d "$app/PlugIns/FlowWidgets.appex"
+      - name: Unit tests on a Simulator
+        working-directory: flow/ios
+        run: |
+          set -o pipefail
+          udid=$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          devs = json.load(sys.stdin)["devices"]
+          ios = sorted((k for k in devs if "iOS" in k), key=lambda k: [int(x) for x in k.rsplit("iOS-", 1)[-1].split("-")])
+          for runtime in reversed(ios):
+              for d in devs[runtime]:
+                  if d["name"].startswith("iPhone"):
+                      print(d["udid"]); sys.exit()
+          ')
+          echo "Simulator: $udid"
+          xcodebuild -project Flow.xcodeproj -scheme Flow -configuration Debug \
+            -destination "id=$udid" -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO test | tee test.log | grep -E '(Test Case|error|TEST|Executed)' || true
+          grep -q 'TEST SUCCEEDED' test.log || { tail -80 test.log; exit 1; }
