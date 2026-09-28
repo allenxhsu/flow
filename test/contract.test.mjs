@@ -25,7 +25,7 @@ const CONSTANTS = {
   ZONES: ['home', 'road', 'factory', 'town', 'elsewhere'], WALK_MIN: 5,
 };
 
-const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish'];
+const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish', 'world'];
 const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend'];
 const D = '2026-09-28';
 
@@ -225,4 +225,17 @@ test('contract: difficulty tiers, settings and snapshots', async () => {
   assert.equal(M.dailyStreak.length, 2, 'dailyStreak(days, day, grace = 1)');
   const d = M.play([], new Date('2026-09-28T12:00:00').getTime()).difficulty;
   assert.deepEqual(Object.keys(d).sort(), ['changesAt', 'name', 'next', 'skills', 'tier', 'unlocked']);
+});
+
+// Play (SPEC.md › Play): the world pack is one more definition. index() hands
+// the app and the game the live world record — the latest write — or null.
+test('contract (play): world is a definition; index().world is the latest world record or null', () => {
+  const firstEvent = M.RECORD_TYPES.indexOf('done');
+  assert.ok(M.RECORD_TYPES.indexOf('world') >= 0 && M.RECORD_TYPES.indexOf('world') < firstEvent);
+  assert.ok('world' in M.index([]), 'index().world');
+  assert.equal(M.index([]).world, null);
+  const a = { id: 'world', type: 'world', world: { name: 'A' }, updatedAt: 1 };
+  const b = { id: 'world', type: 'world', world: { name: 'B' }, updatedAt: 2 };
+  assert.equal(M.index([b, a]).world.world.name, 'B');
+  assert.equal(M.index([a, b, M.tombstone(b, { now: 3 })]).world, null);
 });
