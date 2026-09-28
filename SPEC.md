@@ -260,10 +260,28 @@ Original work only — no copied sprites, icons, fonts or UI from any game.
 Original work only: no Blizzard (or any game's) art, units, icons, UI frames,
 faction names or sounds — "inspired by the genre and its polish".
 
-### The app's screens match the game (decided 2026-09-28)
+### Two looks: the HUD by default, the handheld in Game mode (decided 2026-09-28)
 
-The player: "ui of rest of the system just need to match the ui of the game".
-Every screen — Now, Tasks, Skills, Bag, Shop, Review, Play, Replay, Settings, Rules —
+The player, on seeing both: keep the sci-fi strategy HUD (ui-kit, the
+StarCraft-inspired look Flow shipped with) as **the** look of the app, and
+switch to the handheld look below **only in Game mode**.
+
+- **HUD (default):** ui-kit's sci-fi HUD — the left sidebar of screens with
+  hex icons, the header with the view title, gem points and level, dark
+  panels, the sync status at the foot of the sidebar; on a phone the sidebar
+  becomes a bottom bar. This is the look of every screen, the iPhone Terminal
+  included, unless Game mode is on.
+- **Game mode:** a switch in the header (and in Settings) turns on the
+  handheld look described below for every screen; switching back restores the
+  HUD. The choice is per device (`flow.mode`: 'hud' | 'game') and is
+  remembered; nothing about the records changes.
+- The Day Replay and Play screens draw the game in both looks — only the
+  chrome around them changes.
+
+### The handheld look (Game mode)
+
+(First asked for as "ui of rest of the system just need to match the ui of the
+game"; now the Game-mode look, see above.) In Game mode every screen — Now, Tasks, Skills, Bag, Shop, Review, Play, Replay, Settings, Rules —
 takes the handheld-console look of the replay's lower screen, replacing the
 ui-kit sci-fi HUD inside Flow (the Portal's shared top bar stays):
 
