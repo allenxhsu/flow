@@ -43,8 +43,16 @@ const opId = (at) => newId('op', at);
 /**
  * + Add task: an addTask op for a plan. `work` is hours (optional), the
  * deadline 'YYYY-MM-DD' (optional).
+ *
+ * `id` is how a task Flow already has becomes the *same* task in Planner
+ * rather than a second one beside it. Planner inserts the task under exactly
+ * the id the op carries (Planner's flowops.js › addTask), and Flow's derived
+ * definitions replace a task of the same id (planner.js › withDefinitions) —
+ * so passing a Flow task's own id converts it in place, keeping every
+ * completion, run and streak already recorded against that id. Left out, a
+ * fresh `t_flow_…` id is minted and the task is new on both sides.
  */
-export function addTaskOp({ plan, name, work = null, deadline = null, me = '', now = Date.now() }) {
+export function addTaskOp({ plan, name, work = null, deadline = null, me = '', now = Date.now(), id = null }) {
   if (typeof plan !== 'string' || !plan) throw new Error('Which project?');
   const title = String(name ?? '').trim();
   if (!title) throw new Error('The task needs a name.');
@@ -56,11 +64,54 @@ export function addTaskOp({ plan, name, work = null, deadline = null, me = '', n
   }
   const due = deadline === null || deadline === undefined || deadline === '' ? null : deadline;
   if (due !== null && !isDay(due)) throw new Error('The deadline is a date, or empty.');
+  if (id !== null && id !== undefined && (typeof id !== 'string' || !id.trim())) {
+    throw new Error('A task id is a non-empty string, or leave it out for a new one.');
+  }
   return {
     id: opId(now), type: OP_TYPE, op: 'addTask', plan, at: now, me: String(me || ''),
-    task: { id: flowTaskId(), name: title, work: hours, deadline: due },
+    task: { id: id ? id.trim() : flowTaskId(), name: title, work: hours, deadline: due },
   };
 }
+
+/**
+ * Send a task Flow owns to a Planner plan, so its time starts counting there.
+ *
+ * Flow's own tasks never reach Planner: the timer writes a timesheet op only
+ * for a task that came *from* Planner (`sheetFor`), so a cycling task created
+ * in Flow and a "Daily Cycling" task typed into Planner are two unrelated
+ * things that each record half the story. This makes the Flow one real in the
+ * plan, and from then on every timer stop writes a timesheet line on it.
+ *
+ * **It does not merge the two, and cannot.** A task derived from a plan gets
+ * the id `task_pl_<plan>_<task>` (planner.js › derive), never the plain id the
+ * op carried, so the Planner task comes back as a *new* Flow task and the
+ * original stays beside it with its runs, best and streak. The caller archives
+ * the original — see the Tasks screen — and the streak starts again on the
+ * Planner one. Carrying the history across would mean rewriting every
+ * completion's task id, which is a migration and not this function's job.
+ *
+ * The task's own id is still passed through, so the plan and Flow agree on
+ * which Planner task this is and a re-sync cannot add it twice (Planner's
+ * flowops.js › addTask returns early when `getTask` already finds the id).
+ */
+export function sendToPlannerOp(task, { plan, me = '', now = Date.now() } = {}) {
+  if (!task || typeof task !== 'object') throw new Error('Which task?');
+  if (task.source) throw new Error(`"${task.title || task.id}" already comes from Planner.`);
+  const minutes = Number(task.estimate);
+  return addTaskOp({
+    plan,
+    name: task.title ?? task.name ?? '',
+    // Flow keeps an estimate in minutes; Planner's work is hours.
+    work: Number.isFinite(minutes) && minutes > 0 ? Math.round((minutes / 60) * 100) / 100 : null,
+    deadline: task.deadline || null,
+    me,
+    now,
+    id: task.id,
+  });
+}
+
+/** The id Flow will know a Planner task by, once the plan comes back. */
+export const derivedTaskId = (plan, task) => `task_pl_${plan}_${task}`;
 
 /**
  * A timesheet entry for a Planner task: the day the work started, its start
