@@ -25,7 +25,7 @@
 // push to it, so Flow can never write a plan (`document`) there.
 
 import {
-  SyncEngine, HttpTransport, LocalStore, IndexedDbStore,
+  SyncEngine, HttpTransport, LocalStore, IndexedDbStore, MemoryStore,
   SYNC_CURSOR_KEYS, publishStatus, onSyncNow,
   portalApp, portalSession, portalRemote, requestPersistentStorage, storageStatus, mergeRecord,
 } from '../sync-kit/js/index.js';
@@ -125,16 +125,31 @@ export function db() {
 export const liveRecords = () => [...allRecords(), ...db().skills.filter((s) => s.derived), ...db().tasks.filter((t) => t.source)];
 export const getRecord = (id) => byId.get(id) || null;
 
-async function openStore(name = 'flow') {
+/**
+ * IndexedDB where there is one, localStorage otherwise, and memory when the
+ * page may keep nothing (a sandboxed preview, some private modes): Flow still
+ * opens, and `persistence()` reads 'memory' so the page can say nothing is kept.
+ */
+export async function openStore(name = 'flow') {
   try {
     const idb = new IndexedDbStore({ name });
     await idb.open();
     return idb;
-  } catch {
+  } catch { /* no IndexedDB here */ }
+  try {
+    // Opening a LocalStore touches nothing, so ask localStorage itself: in a
+    // sandboxed frame merely reading the property throws.
+    const ls = globalThis.localStorage;
+    ls.setItem('flow.probe', '1');
+    ls.removeItem('flow.probe');
     const local = new LocalStore({ prefix: name });
     await local.open();
     return local;
-  }
+  } catch { /* no localStorage either */ }
+  persisted = 'memory';
+  const memory = new MemoryStore();
+  await memory.open?.();
+  return memory;
 }
 
 /** A write's clock: now, but always after the version it replaces. */
