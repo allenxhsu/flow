@@ -4,6 +4,9 @@
   "mark": "FL",
   "colorToken": "flow",
   "workspace": "flow",
+  "alsoReads": [
+    "project"
+  ],
   "static": {
     "dir": ".",
     "build": null,
