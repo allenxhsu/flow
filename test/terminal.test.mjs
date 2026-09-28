@@ -78,7 +78,8 @@ test('terminal screens: I’m tired asks Body, Mind or Both and A bit, Very or W
 });
 
 test('terminal screens: the strip carries the status and an I’m tired button, nothing else from the game', () => {
-  const html = screens.top(state());
+  // The handheld strip is Game mode's (SPEC.md › Two looks); the HUD's status is in test/modes.test.mjs.
+  const html = screens.top({ ...state(), mode: 'game' });
   assert.match(html, /ds-strip/);
   assert.match(html, /data-action="tired"/);
   assert.doesNotMatch(html, /data-go="(replay|play|shop|bag)"/);
