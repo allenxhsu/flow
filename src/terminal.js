@@ -19,12 +19,25 @@ import * as screens from './terminal/screens.js';
 import { tiredFrom, tiredToast } from './views/tired.js';
 import { readTimer, askRework } from './views/now.js';
 import { createNative } from './native.js';
+import { readMode, applyMode, toggleMode } from './mode.js';
+import { terminalChrome } from './chrome.js';
 
 const TIMER_KEY = 'flow.timer';
 const UI_KEY = 'flow.terminal';
 const SEEN_KEY = 'flow.terminal.expired';
 const ls = () => { try { return globalThis.localStorage; } catch { return null; } };
 const $ = (sel) => document.querySelector(sel);
+
+// The look (SPEC.md › Two looks): the HUD unless Game mode is on for this device.
+let mode = applyMode(document.documentElement, readMode(ls()));
+/** Dress terminal.html's four elements for the look. */
+function dress() {
+  const c = terminalChrome(mode);
+  for (const k of ['shell', 'screen', 'top', 'view']) { const el = document.getElementById(k); if (el) el.className = c[k]; }
+  const boot = document.querySelector('#view > .sc-boot, #view > .ds-boot');
+  if (boot) boot.className = mode === 'game' ? 'ds-boot' : 'sc-boot sc-muted';
+}
+dress();
 
 /** Where the player is: 'projects' | 'tasks' (with plan) | 'settings'. The timer, when running, is always on top. */
 const ui = { screen: 'projects', plan: null, adding: false, tired: false, log: null };
@@ -47,7 +60,7 @@ function context() {
   const now = Date.now();
   const me = store.plannerName(db);
   return {
-    db, now, me, ui, store, native, waiting,
+    db, now, me, ui, mode, store, native, waiting,
     g: play(db, now),
     projects: projectList(db, store.plannerRecords(), { me, now }),
     connected: store.plannerConfigured() || store.plannerRecords().length > 0,
@@ -245,6 +258,14 @@ const forms = {
 };
 
 document.addEventListener('click', (ev) => {
+  if (ev.target.closest('[data-mode-toggle]')) {
+    ev.preventDefault();
+    mode = toggleMode(ls(), document.documentElement);
+    dress();
+    render({ force: true });
+    $('#view [data-mode-toggle]')?.focus();
+    return;
+  }
   const el = ev.target.closest('[data-action]');
   if (!el || !$('#screen').contains(el)) return;
   const fn = actions[el.dataset.action];

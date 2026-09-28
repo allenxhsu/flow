@@ -6,16 +6,40 @@ import { portalApp } from '../sync-kit/js/portal.js';
 import { play, dayOf } from './model.js';
 import * as store from './sync.js';
 import { esc, fmtClock } from './util.js';
-import { statusStrip, pixelIcon } from './ds.js';
 import * as box from './box.js';
+import { readMode, applyMode, toggleMode } from './mode.js';
+import { shellHtml, navHtml, headerHtml } from './chrome.js';
 import { VIEWS } from './views/index.js';
 import { createNative } from './native.js';
 import { readTimer, openLink } from './views/now.js';
 const VIEW_KEY = 'flow.view';
 
 const $ = (sel) => document.querySelector(sel);
+const ls = () => { try { return globalThis.localStorage; } catch { return null; } };
 const ui = { view: 'now' };
 try { const v = localStorage.getItem(VIEW_KEY); if (VIEWS.some((x) => x.id === v)) ui.view = v; } catch { /* no storage */ }
+
+// The look (SPEC.md › Two looks): the HUD unless Game mode is on for this device.
+let mode = applyMode(document.documentElement, readMode(ls()));
+/** Put the look's shell in place (index.html carries the HUD's). */
+function mountShell() {
+  const shell = $('#shell');
+  if (shell?.dataset.shell === mode) return;
+  const tpl = document.createElement('template');
+  tpl.innerHTML = shellHtml(mode).trim();
+  shell.replaceWith(tpl.content);
+}
+mountShell();
+/** Switch looks without a reload: same view, same state, new chrome. */
+function switchMode(from) {
+  const inSettings = !!from?.closest('#view');
+  mode = toggleMode(ls(), document.documentElement);
+  mountShell();
+  render({ force: true });
+  // Keep the keyboard where it was: on the switch just pressed, in its new look.
+  if (inSettings) $('#view [data-mode-toggle]')?.focus();
+  else $('#header [data-mode-toggle]')?.focus({ preventScroll: true });
+}
 
 const toast = (text, tone = 'info') => box.toast(text, tone);
 const confirm = (heading, body, yes = 'OK', kind = 'primary') => box.confirm(heading, body, yes, kind);
@@ -33,7 +57,7 @@ const native = createNative({
 function context() {
   const db = store.db();
   const t = Date.now();
-  return { db, g: play(db, t), now: t, ui, store, native, toast, confirm, choose, render, go, esc };
+  return { db, g: play(db, t), now: t, ui, mode, store, native, toast, confirm, choose, render, go, esc };
 }
 
 let nativeReady = false;
@@ -75,23 +99,21 @@ function render({ force = false } = {}) {
   def.mod.mounted?.(view, ctx);
 }
 
-/** The tab row: real buttons with original pixel icons; the current one is aria-current. */
+/** The screens: the HUD's sidebar or Game mode's tab row; the current one is aria-current. */
 function renderNav() {
   const nav = $('#nav');
-  const same = nav.dataset.current === ui.view;
-  if (!same || !nav.children.length) {
-    nav.innerHTML = VIEWS.map((v) => `
-    <button type="button" class="ds-tab" data-go="${v.id}" data-view="${v.id}"${v.id === ui.view ? ' aria-current="page"' : ''}>
-      ${pixelIcon(v.id)}<span class="ds-tab-label">${v.label}</span>
-    </button>`).join('');
+  if (nav.dataset.current !== ui.view || !nav.children.length) {
+    nav.innerHTML = navHtml(VIEWS, ui.view, mode);
     nav.dataset.current = ui.view;
     nav.querySelector('[aria-current]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
   }
 }
 
+/** The HUD's title, gem points and level, or Game mode's status strip; both carry the switch. */
 function renderHeader(ctx, def) {
-  $('#view-title').textContent = def.label;
-  $('#strip').innerHTML = statusStrip(ctx.g);
+  const header = $('#header');
+  const html = headerHtml(ctx.g, def.label, mode);
+  if (header.flowHtml !== html) { header.innerHTML = html; header.flowHtml = html; }
   $('#shell').dataset.view = def.id;
   document.title = `${def.label} · Flow`;
 }
@@ -110,6 +132,8 @@ function actionsOf() {
 }
 
 document.addEventListener('click', (ev) => {
+  const toggle = ev.target.closest('[data-mode-toggle]');
+  if (toggle) { ev.preventDefault(); switchMode(toggle); return; }
   const nav = ev.target.closest('[data-go]');
   if (nav) { ev.preventDefault(); go(nav.dataset.go); return; }
   const el = ev.target.closest('[data-action]');
