@@ -1,7 +1,7 @@
 // Now: the morning rating, the HUD, what to do next, the timer, moments and
 // today's list. The one screen the player lives on.
 
-import { index, makeDone, makeEnergy, makeRework, makeMoment, reworkCandidate, ENERGY_MAX } from '../model.js';
+import { index, makeDone, makeEnergy, makeRework, makeMoment, reworkCandidate, suggestRating, ENERGY_MAX } from '../model.js';
 import { plannerRework } from '../planner.js';
 import { esc, fmtMin, fmtPts, readJson, writeJson, validTimer, elapsedMinutes, batchEnds, fmtClock } from '../util.js';
 import { plannerTag } from './tasks.js';
@@ -31,13 +31,25 @@ function endFrom(value, now = Date.now()) {
 }
 const time = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-function energyPrompt() {
+/** Apple Health's suggestion for today's rating (the iPhone app only), or null. */
+function healthSuggestion(ctx) {
+  const h = ctx.native?.state?.health;
+  if (!h || h.day !== ctx.g.day) return null;
+  const value = suggestRating(h);
+  return value == null ? null : { value, ...h };
+}
+
+function energyPrompt(ctx) {
+  const hint = healthSuggestion(ctx);
+  const start = hint ? hint.value : 7;
   const slider = (name, label) => `
-    <label class="sc-field"><span>${label} <output class="num" data-for="${name}">7</output>/10</span>
-      <input type="range" name="${name}" min="0" max="${ENERGY_MAX}" step="0.5" value="7" aria-label="${label}"></label>`;
+    <label class="sc-field"><span>${label} <output class="num" data-for="${name}">${start}</output>/10</span>
+      <input type="range" name="${name}" min="0" max="${ENERGY_MAX}" step="0.5" value="${start}" aria-label="${label}"></label>`;
+  const why = hint && [`${Math.round(hint.sleepHours * 10) / 10} h sleep`, Number.isFinite(hint.steps) ? `${Math.round(hint.steps).toLocaleString('en-US')} steps yesterday` : ''].filter(Boolean).join(', ');
   return `
   <form class="sc-panel sc-panel--lit pad stack" data-form="energy" id="energy-form">
     <div class="row-between"><h2>Good morning</h2><span class="sc-faint small">How much is in the tank today?</span></div>
+    ${hint ? `<div class="small sc-muted" id="health-suggestion">Apple Health suggests <b class="num">${hint.value}</b> (${esc(why)}). Your own rating is what counts.</div>` : ''}
     <div class="form-grid">
       ${slider('stamina', 'Stamina · body')}
       ${slider('mana', 'Mana · mind')}
@@ -251,7 +263,7 @@ function todaySection(ctx) {
 export function render(ctx) {
   const timer = readTimer();
   return `<div class="view">
-    ${ctx.g.energy.rated ? '' : energyPrompt()}
+    ${ctx.g.energy.rated ? '' : energyPrompt(ctx)}
     ${hud(ctx.g)}
     ${banners(ctx.g)}
     ${plannerAsksSection(ctx)}
@@ -282,6 +294,32 @@ async function startTimer(ctx, taskId) {
   writeJson(ls(), TIMER_KEY, { task: taskId, start: Date.now(), ...(reworkOf ? { reworkOf } : {}) });
   ctx.ui.log = null;
   ctx.render({ force: true });
+}
+
+/**
+ * A deep link from the iPhone app: the Live Activity's Finish
+ * (flow://done?task=&minutes=) opens Log done for that task with the timer's
+ * minutes — value and quality still the player's to confirm — and the
+ * widget's next task (flow://start?task=) starts its timer.
+ */
+export async function openLink(ctx, link) {
+  const t = ctx.db.task.get(link?.task);
+  if (!t) { ctx.toast('That task is not in Flow any more.', 'warning'); return; }
+  const timer = readTimer();
+  if (link.action === 'start') {
+    if (timer?.task === t.id) { ctx.render({ force: true }); return; }
+    await startTimer(ctx, t.id);
+    return;
+  }
+  if (link.action !== 'done') return;
+  const fromTimer = timer?.task === t.id;
+  ctx.ui.log = {
+    task: t.id, minutes: link.minutes ?? (fromTimer ? elapsedMinutes(timer.start, Date.now()) : t.estimate),
+    timed: fromTimer, reworkOf: fromTimer ? timer.reworkOf || null : null, fromTimer,
+  };
+  ctx.ui.batch = null;
+  ctx.render({ force: true });
+  globalThis.document?.getElementById('log-form')?.scrollIntoView({ block: 'center' });
 }
 
 export const actions = {

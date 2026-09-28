@@ -5,10 +5,12 @@
 import { ScToast } from '../ui-kit/js/toast.js';
 import { ScDialog } from '../ui-kit/js/dialog.js';
 import { portalApp } from '../sync-kit/js/portal.js';
-import { play } from './model.js';
+import { play, dayOf } from './model.js';
 import * as store from './sync.js';
+import { createNative } from './native.js';
 import { esc, fmtPts, fmtClock } from './util.js';
 import * as now from './views/now.js';
+import { readTimer, openLink } from './views/now.js';
 import * as tasks from './views/tasks.js';
 import * as skills from './views/skills.js';
 import * as shop from './views/shop.js';
@@ -40,10 +42,32 @@ async function confirm(heading, body, yes = 'OK', kind = 'primary') {
 }
 async function choose(heading, body, buttons) { return ScDialog.open({ heading, body, buttons }); }
 
+// The iPhone app (SPEC.md › iOS app): a no-op anywhere without the shell.
+const native = createNative({
+  store,
+  onChange: () => render(),
+  onOpen: (link) => { go('now'); void attempt(() => openLink(context(), link)); },
+  // Portal pairing hands over the same two values the Sync form holds; empty means signed out.
+  onRemote: ({ url, token }) => { void attempt(() => store.applySettings({ url, token, enabled: !!url })); },
+});
+
 function context() {
   const db = store.db();
   const t = Date.now();
-  return { db, g: play(db, t), now: t, ui, store, toast, confirm, choose, render, go, esc };
+  return { db, g: play(db, t), now: t, ui, store, native, toast, confirm, choose, render, go, esc };
+}
+
+let nativeReady = false;
+let healthAskedFor = null;
+/** Tell the shell what changed: the timer for the Live Activity, the widget's numbers, a new day's Health. */
+function tellNative(ctx) {
+  if (!nativeReady) return;
+  native.timer(ctx.db, readTimer());
+  native.snapshot(ctx.g);
+  if (native.platform === 'ios' && !ctx.g.energy.rated && healthAskedFor !== ctx.g.day) {
+    healthAskedFor = ctx.g.day;
+    native.requestHealth();
+  }
 }
 
 /** Run a write and say what went wrong in words, never a stack trace. */
@@ -57,9 +81,10 @@ function render({ force = false } = {}) {
   const view = $('#view');
   const active = document.activeElement;
   const typing = active && view.contains(active) && active.matches('input:not([type=range]):not([type=checkbox]):not([type=color]), textarea, select');
-  if (!force && typing) { pending = true; return; }
+  if (!force && typing) { pending = true; if (nativeReady) tellNative(context()); return; }
   pending = false;
   const ctx = context();
+  tellNative(ctx);
   const def = VIEWS.find((v) => v.id === ui.view) || VIEWS[0];
   renderNav();
   renderHeader(ctx, def);
@@ -160,6 +185,9 @@ async function boot() {
   }
   store.subscribe(() => render());
   await store.initSync();
+  // After the store is open: the shell answers with queued visits, pairing and deep links.
+  nativeReady = native.init();
+  if (nativeReady) healthAskedFor = dayOf(Date.now()); // init asked already
   render({ force: true });
 }
 

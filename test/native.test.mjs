@@ -14,7 +14,7 @@ const at = (hhmm) => T(`${D}T${hhmm}:00`);
 
 test('snapshotOf(play()) → { stamina, mana, points, level, next: { id, title, estimate }, at }', () => {
   const g = game();
-  const t = g.task({ title: 'Mail', skill: 'sk_mail', estimate: 25, mana: 1 });
+  g.task({ title: 'Mail', skill: 'sk_mail', estimate: 25, mana: 1 });
   g.energy(`${D}T06:30:00`, 7, 6.5);
   g.done(g.task({ title: 'Run', skill: 'sk_run', estimate: 30 }), `${D}T07:30:00`, 30);
   const p = M.play(g.records, at('09:00'));
@@ -25,7 +25,13 @@ test('snapshotOf(play()) → { stamina, mana, points, level, next: { id, title, 
   assert.equal(s.points, p.balance);
   assert.equal(s.level, p.player.level);
   assert.equal(s.at, at('09:00'));
-  assert.deepEqual(s.next, { id: t.id, title: 'Mail', estimate: 25 });
+  // The next task is play()'s pick, whichever it is; the widget never picks.
+  const n = p.next.next;
+  assert.ok(n);
+  assert.deepEqual(s.next, { id: n.task, title: n.title, estimate: p.tasks.find((x) => x.id === n.task).estimate });
+  const only = game();
+  const mail = only.task({ title: 'Mail', skill: 'sk_mail', estimate: 25 });
+  assert.deepEqual(snapshotOf(M.play(only.records, at('09:00'))).next, { id: mail.id, title: 'Mail', estimate: 25 });
 });
 
 test('snapshot: an unrated day has no meters, and nothing to do is next: null', () => {

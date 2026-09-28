@@ -2,8 +2,8 @@
 // carries them between devices. The only module that imports from sync-kit.
 //
 // Workspace "flow". Definitions (settings, stat, skill, task, reward, place,
-// kind) are edited in place and last-write-wins; events (done, rework,
-// purchase, energy, review, moment) are written once and never edited, so two
+// kind, …) are edited in place and last-write-wins; events (done, rework,
+// purchase, energy, review, moment, skip, spend, visit) are written once and never edited, so two
 // devices can never overwrite each other's history. See src/model.js.
 //
 // Modelled on project-planner's src/state/sync.js: IndexedDB where there is
@@ -33,7 +33,9 @@ const INTERVAL_MS = 30_000;
 /** How long after a write it goes to the server. */
 const AFTER_WRITE_MS = 1_500;
 export const STORE_EXPORT_FORMAT = 'flow.store';
-const EVENTS = new Set(['done', 'rework', 'purchase', 'energy', 'review', 'moment']);
+/** Written once, never edited: every event type of src/model.js (visit: the iPhone's arrive / leave). */
+export const EVENT_TYPES = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit'];
+const EVENTS = new Set(EVENT_TYPES);
 /** Project Planner's app id and workspace: read, never written. */
 export const PLANNER_APP = 'project';
 const PLANNER_KEY = 'flow.planner';
