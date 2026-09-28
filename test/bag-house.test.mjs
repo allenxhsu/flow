@@ -65,3 +65,18 @@ test('Labels (printed from the bookshelf): one page per sheet, escaped', () => {
   assert.match(svg, /^<svg[^>]+viewBox="0 0 612 792"/);
   assert.match(svg, /Nuts &amp; &lt;bolts&gt;/);
 });
+
+test('Bag: a stash in a nested place is titled with its path, so two "Top shelf"s are told apart', () => {
+  const g = game();
+  const place = (f) => g.add(M.makePlace(g.db(), { now: NOW, zone: 'home', ...f }));
+  const spice = place({ name: 'Spice cabinet' });
+  const tea = place({ name: 'Tea cabinet' });
+  const a = place({ name: 'Top shelf', parent: spice.id });
+  const b = place({ name: 'Top shelf', parent: tea.id });
+  g.add(M.makeItem(g.db(), { name: 'Salt', place: a.id, now: NOW }));
+  g.add(M.makeItem(g.db(), { name: 'Matcha', place: b.id, now: NOW }));
+  const html = bag.render(ctxOf(g));
+  const title = (id) => new RegExp(`data-place="${id}"[^>]*>\\s*<h3 class="stash-tab">([^<]*)`).exec(html)?.[1].trim();
+  assert.equal(title(a.id), 'Spice cabinet › Top shelf');
+  assert.equal(title(b.id), 'Tea cabinet › Top shelf');
+});

@@ -186,7 +186,7 @@ function stashSection(ctx, inv) {
     <div class="row-between"><h2 id="stash-h">Stash</h2><span class="small sc-muted">${inv.items.length} item${inv.items.length === 1 ? '' : 's'} · ${inv.inUse.size} in use</span></div>
     ${inv.stashes.length ? inv.stashes.map((s) => `
       <section class="stash" data-place="${esc(s.place || 'unfiled')}" aria-label="${esc(s.name)}">
-        <h3 class="stash-tab">${esc(s.name)} <span class="num">${s.items.length}</span></h3>
+        <h3 class="stash-tab">${esc(s.path?.length ? s.path.join(' › ') : s.name)} <span class="num">${s.items.length}</span></h3>
         <div class="cells">${s.items.map((i) => cell(ctx, inv, i, left)).join('')}</div>
       </section>`).join('') : '<div class="muted-box">Nothing stashed yet. Add what you own below — one room at a time.</div>'}
     ${shown ? `<section class="sc-panel pad stack item-detail" id="item-detail"><h3>${esc(shown.name)}</h3>${itemForm(ctx, shown)}</section>` : ''}
