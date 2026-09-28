@@ -26,7 +26,7 @@ const CONSTANTS = {
 };
 
 const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish'];
-const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend'];
+const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit'];
 const D = '2026-09-28';
 
 test('contract: every function in docs/API.md is exported with its arity', () => {
@@ -247,4 +247,38 @@ test('contract: planner — plannerTasks(planRecords, opts) → { tasks, skills 
   assert.deepEqual(Object.keys(e).sort(), ['ask', 'done', 'rework']);
   assert.equal(e.done[0].type, 'done');
   assert.equal(typeof e.done[0].planner, 'string');
+});
+
+// iOS app (SPEC.md › iOS app): the visit event, the automatic Drive moment and
+// the Health suggestion are rules, so they live in src/model.js; src/native.js
+// (the bridge to the iPhone shell) and src/sync.js depend on them.
+test('contract (iOS): makeVisit, autoDrive, suggestRating, AUTO_DRIVE_MAX_MIN', async () => {
+  assert.equal(M.makeVisit.length, 2, 'makeVisit(db, { place, arrive = null, leave })');
+  assert.equal(M.autoDrive.length, 2, 'autoDrive(db, { place, arrive })');
+  assert.equal(M.suggestRating.length, 1, 'suggestRating({ sleepHours, steps })');
+  assert.equal(M.AUTO_DRIVE_MAX_MIN, 180);
+  const g = game();
+  const v = g.add(M.makeVisit(g.db(), { place: 'place_bedroom', arrive: null, leave: T(`${D}T07:30:00`) }));
+  for (const k of ['id', 'type', 'day', 'place', 'arrive', 'leave']) assert.ok(k in v, `visit.${k}`);
+  const db = g.db();
+  assert.ok(Array.isArray(db.visits), 'index(records).visits');
+  assert.equal(db.visits[0].id, v.id);
+  const m = M.autoDrive(db, { place: 'place_desk', arrive: T(`${D}T08:00:00`) });
+  for (const k of ['id', 'type', 'kind', 'place', 'start', 'end', 'energy', 'day']) assert.ok(k in m, `drive.${k}`);
+});
+
+test('contract (iOS): every model event type is written once by the app\'s store', async () => {
+  const S = await import('../src/sync.js');
+  const events = M.RECORD_TYPES.slice(M.RECORD_TYPES.indexOf('done'));
+  assert.deepEqual([...S.EVENT_TYPES].sort(), [...events].sort());
+});
+
+test('contract (iOS): src/native.js — the bridge message names', async () => {
+  const N = await import('../src/native.js');
+  assert.deepEqual(N.TO_APP, {
+    timer: 'flow.timer', snapshot: 'flow.snapshot', geofenceSet: 'flow.geofence.set', geofenceClear: 'flow.geofence.clear',
+    geofenceList: 'flow.geofence.list', healthRequest: 'flow.health.request', visitsAck: 'flow.visits.ack',
+  });
+  assert.deepEqual(N.TO_PAGE, { visit: 'flow.visit', health: 'flow.health', geofenceStatus: 'flow.geofence.status', open: 'open' });
+  for (const f of ['createNative', 'snapshotOf', 'parseDeepLink', 'timerMessage', 'visitRecords']) assert.equal(typeof N[f], 'function', f);
 });
