@@ -15,7 +15,9 @@
 //                 A review redone in the same ISO week is a new event; the
 //                 latest one counts for that week. A visit (the iPhone app's
 //                 arrive / leave at a geofenced place) holds place ids and
-//                 times only — the coordinates never leave the device.
+//                 times only — the coordinates never leave the device. An
+//                 energy record with `feeling: 'tired'` is an "I'm tired"
+//                 check-in (makeTired): the day's energy runs from it.
 //
 // Every event that moves points carries the points it was priced at (`price`,
 // `charged`), so a later calibration never rewrites the past. Everything else
@@ -866,6 +868,31 @@ export function makeEnergy({ stamina, mana, at = Date.now() }) {
   return { id: newId('energy', at), type: 'energy', day: dayOf(at), at, stamina: v(stamina, 'stamina'), mana: v(mana, 'mana') };
 }
 
+/** "I'm tired": the chosen meter(s) drop to at most this — A bit, Very, Wiped out. */
+export const TIRED_CAPS = { bit: 6, very: 3, wiped: 1 };
+
+/**
+ * An "I'm tired" check-in: an energy record (`feeling: 'tired'`) with the
+ * chosen meter(s) at min(current, cap) and the other as it stands now. From
+ * then the day's energy runs from it, as from the morning rating. On a day
+ * not yet rated the meters stand full, as the replay assumes.
+ */
+export function makeTired(db, { body = false, mind = false, level, at = Date.now() }) {
+  if (!body && !mind) throw new Error('Tired how: body, mind or both?');
+  const cap = TIRED_CAPS[level];
+  if (cap === undefined) throw new Error(`level is one of ${Object.keys(TIRED_CAPS).join(', ')}`);
+  const day = dayOf(at);
+  const e = energyOn(db, day);
+  const now = { stamina: e.rated ? e.stamina : ENERGY_MAX, mana: e.rated ? e.mana : ENERGY_MAX };
+  return {
+    id: newId('energy', at), type: 'energy', day, at,
+    stamina: body ? Math.min(now.stamina, cap) : now.stamina,
+    mana: mind ? Math.min(now.mana, cap) : now.mana,
+    feeling: 'tired', tired: { body: !!body, mind: !!mind, level },
+  };
+}
+const TIRED_WORDS = { bit: 'a bit', very: 'very', wiped: 'wiped out' };
+
 /** Everything that moved energy on a day, in order: completions and moments. */
 function drains(db, day) {
   return [
@@ -1265,6 +1292,11 @@ export function replayDay(records, day, { now = Date.now() } = {}) {
     const reward = db.reward.get(p.reward);
     events.push({ kind: 'purchase', id: p.id, start: p.at, end: p.at, place: null, title: reward?.title || 'A reward', points: -(p.charged || 0), energy: {}, text: `Bought ${reward?.title || 'a reward'}. −${p.charged}${p.charged > p.price ? ' (on credit, doubled)' : ''}` });
   }
+  // "I'm tired" is a moment of the day where the meters drop to the check-in.
+  for (const t of db.energy.filter((x) => x.day === day && x.feeling === 'tired')) {
+    const which = t.tired?.body && t.tired?.mind ? 'body and mind' : t.tired?.body ? 'body' : 'mind';
+    events.push({ kind: 'moment', tired: true, id: t.id, start: t.at, end: t.at, place: null, title: 'Tired', who: '', points: 0, energy: {}, set: { stamina: t.stamina, mana: t.mana }, text: `Tired — ${which}, ${TIRED_WORDS[t.tired?.level] || 'tired'}.` });
+  }
   events.sort((a, b) => a.start - b.start || a.end - b.end);
   // What has no place of its own happened where the iPhone saw the player (a visit)…
   const visited = (ms) => (db.visits || []).find((v) => (v.arrive ?? v.leave) <= ms && ms <= v.leave)?.place || null;
@@ -1273,7 +1305,8 @@ export function replayDay(records, day, { now = Date.now() } = {}) {
   let here = null;
   for (const e of events) { if (!e.place) e.place = here; here = e.place || here; }
 
-  const rating = [...db.energy].reverse().find((e) => e.day === day) || null;
+  // The day starts from its morning rating; a tired check-in is a beat of its own.
+  const rating = [...db.energy].reverse().find((e) => e.day === day && e.feeling !== 'tired') || null;
   let energy = rating ? { stamina: rating.stamina, mana: rating.mana } : { stamina: ENERGY_MAX, mana: ENERGY_MAX };
   let points = balanceOf(db, events[0]?.start ?? Infinity);
   const beats = [];
@@ -1299,7 +1332,8 @@ export function replayDay(records, day, { now = Date.now() } = {}) {
     }
     // Like energyOn: what ended before the morning rating is already in it.
     const counts = !rating || e.end >= rating.at;
-    for (const k of ['stamina', 'mana']) if (counts) energy[k] = Math.round(Math.max(0, Math.min(ENERGY_MAX, energy[k] - (e.energy[k] || 0))) * 10) / 10;
+    if (e.set) energy = { ...e.set };
+    else for (const k of ['stamina', 'mana']) if (counts) energy[k] = Math.round(Math.max(0, Math.min(ENERGY_MAX, energy[k] - (e.energy[k] || 0))) * 10) / 10;
     points += e.points;
     beats.push({ ...e, zone: zoneOf(e.place), placeName: nameOf(e.place), after: { ...energy, points } });
     if (e.kind !== 'purchase') { add(zoneOf(e.place), e.end - e.start); add(`place:${e.place}`, e.end - e.start); }

@@ -82,6 +82,8 @@ export function inventory(records, now = Date.now())
 export function makeEnergy({ stamina, mana, at = Date.now() }) 
 export function suggestRating(health)                            // { sleepHours, steps } → 4–10, or null without sleep data
 export function energyOn(db, day) 
+export const TIRED_CAPS = { bit: 6, very: 3, wiped: 1 };
+export function makeTired(db, { body = false, mind = false, level, at = Date.now() })   // energy record, feeling 'tired'
 export function makeReview(db, { satisfaction, ratings = {}, win = '', lesson = '', next = '', difficulty = null, at = Date.now() }) 
 export function difficultyOn(db, day, skillId = null) 
 export function latestPerWeek(reviews) 
@@ -105,7 +107,32 @@ export function plannerRework(db, ask, minutes)          // the rework record fo
 export function plannerHistory(planRecords, opts)        // tasks (archived) and skills of plans archived since
 export function plannerSinceStamp(settings, readAt)      // the settings record stamped with plannerSince, or null
 export function plannerEvents(db, planRecords, opts)     // opts: { me, now, since } → { done, rework, ask }
+export const OP_TYPE = 'flow.op', OPS_KEEP_DAYS = 90, PENDING_ESTIMATE_MIN = 30;
+export function projectList(db, planRecords, opts)       // opts: { me, now } → [{ id, name, pinned, open, deadline, weekMinutes, tasks }]
+export function expiredOps(planRecords, opts)            // opts: { now } → addTask ops older than 90 days Planner never applied
 ```
+
+`plannerTasks` also derives a task for each `addTask` op (in `planRecords`)
+Planner has not applied: same id `task_pl_<plan>_<t_flow_…>`, `pending: true`,
+estimate from its hours else 30 min — until the plan holds that task id, it is
+marked applied there, or (with `opts.now`) it is older than 90 days.
+
+# Writing to Planner: src/planops.js (SPEC.md › Terminal › Writing to Planner)
+
+```js
+export function isOp(r)
+export function addTaskOp({ plan, name, work = null, deadline = null, me = '', now })
+  // → { id, type:'flow.op', op:'addTask', plan, at, me, task: { id:'t_flow_…', name, work, deadline } }
+export function timesheetOp({ plan, task, start, minutes, me = '' })
+  // → { id, type:'flow.op', op:'timesheet', plan, at, me, task, date, start (min into the day), hours, note:'Flow timer' }
+export function opsToWrite(held, ops)                     // refuses a non-op or an id already held (write-once)
+export async function pushOps(records, transport, { deviceId, sent })   // sends this device's unsent flow.op records only
+export function stopTimer(db, timer, { now, me, minutes, quality, value, note })   // → { done | rework, op | null, timer: null }
+export function pauseTimer(db, timer, { now, me })         // → { op | null, timer: null }
+export function plannerUrlFrom(flowUrl)                    // Portal origin → <origin>/w/project
+```
+
+`src/sync.js` adds `addOps(...ops)`, `opsWaiting()` and `plannerExpired(now)`.
 
 # The iPhone bridge: src/native.js (SPEC.md › iOS app)
 
