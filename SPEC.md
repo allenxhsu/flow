@@ -263,7 +263,7 @@ faction names or sounds — "inspired by the genre and its polish".
 ### The app's screens match the game (decided 2026-09-28)
 
 The player: "ui of rest of the system just need to match the ui of the game".
-Every screen — Now, Tasks, Skills, Bag, Shop, Review, Replay, Settings, Rules —
+Every screen — Now, Tasks, Skills, Bag, Shop, Review, Play, Replay, Settings, Rules —
 takes the handheld-console look of the replay's lower screen, replacing the
 ui-kit sci-fi HUD inside Flow (the Portal's shared top bar stays):
 

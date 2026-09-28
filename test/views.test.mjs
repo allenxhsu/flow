@@ -201,7 +201,7 @@ import { statusStrip, textBox, pixelIcon } from '../src/ds.js';
 import * as bag from '../src/views/bag.js';
 
 test('Views: every screen of the SPEC, Bag among them, each with a label, an original pixel icon and a renderer', () => {
-  assert.deepEqual(VIEWS.map((v) => v.id), ['now', 'tasks', 'skills', 'bag', 'shop', 'review', 'replay', 'settings', 'rules']);
+  assert.deepEqual(VIEWS.map((v) => v.id), ['now', 'tasks', 'skills', 'bag', 'shop', 'review', 'play', 'replay', 'settings', 'rules']);
   for (const v of VIEWS) {
     assert.equal(typeof v.label, 'string');
     assert.equal(typeof v.mod.render, 'function', `${v.id} renders`);
@@ -416,4 +416,65 @@ test('Bag: quick add writes an item at a place', async () => {
   assert.equal(it.place, 'place_warehouse');
   assert.equal(it.qty, 2);
   assert.equal(it.price, 4);
+});
+
+// ─── Play (SPEC.md › Play): the TASKS button, the desk, the letter grid ─────
+import * as playView from '../src/views/play.js';
+import * as replayView from '../src/views/replay.js';
+
+function playCtx() {
+  const g = game();
+  g.task({ id: 'task_mail', title: 'Mail', skill: 'sk_mail', estimate: 20 });
+  g.task({ id: 'task_run', title: 'Run', skill: 'sk_run', estimate: 30 });
+  const ctx = ctxOf(g);
+  ctx.records = g.records;
+  ctx.store = { allRecords: () => g.records, save: async () => {}, add: async () => {} };
+  ctx.render = () => {};
+  ctx.toast = () => {};
+  return ctx;
+}
+
+test('Play: the lower screen has a TASKS button and the game screen', () => {
+  const html = playView.render(playCtx());
+  assert.match(html, /<button[^>]*data-action="tasks"[^>]*>[^<]*TASKS/);
+  assert.match(html, /id="play-screen"/);
+  assert.match(html, /<canvas[^>]*id="play-canvas"/);
+});
+
+test('Play: TASKS and the desk open the same menu: Start, Finish, New task', () => {
+  const a = playCtx();
+  playView.actions.tasks({ dataset: {} }, a);
+  const fromButton = playView.render(a);
+  const b = playCtx();
+  playView.interact({ kind: 'desk' }, b);
+  const fromDesk = playView.render(b);
+  for (const html of [fromButton, fromDesk]) {
+    assert.match(html, /id="play-menu"/);
+    for (const label of ['Start', 'Finish', 'New task']) assert.match(html, new RegExp(`data-action="menu"[^>]*>[^<]*${label}`));
+    assert.doesNotMatch(html, /Cancel timer/, 'no timer, nothing to cancel');
+  }
+  assert.equal(a.ui.play.menu, b.ui.play.menu);
+});
+
+test('Play: Start lists the Next tasks, New task opens the letter grid', () => {
+  const ctx = playCtx();
+  playView.actions.tasks({ dataset: {} }, ctx);
+  playView.actions.menu({ dataset: { item: 'start' } }, ctx);
+  let html = playView.render(ctx);
+  assert.match(html, /data-task="task_mail"/);
+  assert.match(html, /data-task="task_run"/);
+  playView.actions.menu({ dataset: { item: 'new' } }, ctx);
+  html = playView.render(ctx);
+  assert.match(html, /id="letter-grid"/);
+  for (const ch of 'ABCDEFGHIJKLMNOPQRSTUVWXYZ') assert.match(html, new RegExp(`data-key="${ch}"`));
+  assert.match(html, /data-key="DEL"/);
+  playView.actions.key({ dataset: { key: 'H' } }, ctx);
+  playView.actions.key({ dataset: { key: 'I' } }, ctx);
+  assert.match(playView.render(ctx), /HI/);
+});
+
+test('Replay: the same game in fast forward keeps its day picker and root', () => {
+  const html = replayView.render(playCtx());
+  assert.match(html, /data-replay-day/);
+  assert.match(html, /id="replay-root"/);
 });
