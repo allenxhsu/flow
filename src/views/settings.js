@@ -33,6 +33,31 @@ function syncSection(ctx) {
   </form>`;
 }
 
+/** Project Planner, read-only: where its workspace is read from, and how the last read went. */
+function plannerSection(ctx) {
+  const st = ctx.store.plannerStatus?.() || { configured: false, plans: 0, tasks: 0 };
+  const ps = ctx.store.plannerSettingsNow?.() || { url: '', token: '' };
+  const state = `<div class="small sc-faint" id="planner-status">${st.configured ? `${st.plans} plan${st.plans === 1 ? '' : 's'} · ${st.tasks} task${st.tasks === 1 ? '' : 's'} for you${st.lastPullAt ? ` · read ${new Date(st.lastPullAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}${st.since ? ` · finishes logged since ${new Date(st.since).toLocaleDateString()}` : ''}` : 'Not connected.'}</div>
+    ${st.lastError ? `<div class="sc-alert sc-alert--danger small"><strong>Last error</strong> ${esc(st.lastError)}</div>` : ''}`;
+  const intro = '<p class="small sc-muted" style="margin:0">Your Planner tasks show up in Tasks and Now. Flow only reads Planner: tick tasks off there, and a finish or a reopen is logged here.</p>';
+  if (st.portal) {
+    return `<section class="sc-panel pad stack" id="planner">
+      <h2>Project Planner</h2>${intro}
+      <p class="small sc-muted" style="margin:0">Read through the Portal, workspace <span class="sc-mono">project</span>.</p>
+      <div class="row"><button class="sc-button sc-button--sm" data-action="planner-pull">Read now</button></div>${state}
+    </section>`;
+  }
+  return `<form class="sc-panel pad stack" data-form="planner" id="planner">
+    <h2>Project Planner</h2>${intro}
+    <div class="form-grid">
+      <label class="sc-field wide"><span>Planner server URL</span><input class="sc-input" name="url" type="url" value="${esc(ps.url)}" placeholder="https://…/w/project" autocomplete="off"></label>
+      <label class="sc-field wide"><span>Token (blank: Flow's)</span><input class="sc-input" name="token" type="password" value="${esc(ps.token)}" autocomplete="off"></label>
+      <button class="sc-button sc-button--primary" type="submit">Save</button>
+      ${st.configured ? '<button class="sc-button sc-button--sm" type="button" data-action="planner-pull">Read now</button>' : ''}
+    </div>${state}
+  </form>`;
+}
+
 function placesSection(ctx) {
   const { db } = ctx;
   const zoneSel = (z) => `<select class="sc-select" name="zone">${ZONES.map((x) => opt(x, x, x === z)).join('')}</select>`;
@@ -81,6 +106,7 @@ export function render(ctx) {
       <h2>Player</h2>
       <div class="form-grid">
         <label class="sc-field"><span>Name</span><input class="sc-input" name="name" value="${esc(set.name || 'Player')}"></label>
+        <label class="sc-field"><span>Your name in Planner</span><input class="sc-input" name="plannerName" value="${esc(set.plannerName || '')}" placeholder="${esc(set.name || 'Player')}"></label>
         <label class="sc-field wide"><span>Mission</span><input class="sc-input" name="mission" value="${esc(set.mission || '')}" placeholder="what the game is for"></label>
         <label class="check-field"><input class="sc-check" type="checkbox" name="sound" data-setting="sound" ${set.sound ? 'checked' : ''}> Replay sound (chiptune)</label>
         <button class="sc-button sc-button--primary" type="submit">Save</button>
@@ -91,6 +117,7 @@ export function render(ctx) {
       <div class="form-grid">${HERO_PARTS.map(([k, l]) => `<label class="sc-field"><span>${l}</span><input type="color" name="${k}" value="${esc(hero[k])}"></label>`).join('')}
         <button class="sc-button sc-button--primary" type="submit">Save hero</button></div>
     </form>
+    ${plannerSection(ctx)}
     ${placesSection(ctx)}
     ${kindsSection(ctx)}
     <section class="sc-panel pad stack" id="backup">
@@ -122,6 +149,12 @@ async function saveList(ctx, type, rec) {
 
 export const actions = {
   'sync-now': async (el, ctx) => { await ctx.store.syncNow(); ctx.render({ force: true }); },
+  'planner-pull': async (el, ctx) => {
+    await ctx.store.pullPlanner();
+    const st = ctx.store.plannerStatus();
+    ctx.toast(st.lastError ? `Planner: ${st.lastError}` : `Planner: ${st.tasks} task${st.tasks === 1 ? '' : 's'} for you.`, st.lastError ? 'danger' : 'success');
+    ctx.render({ force: true });
+  },
   export: async (el, ctx) => {
     const doc = await ctx.store.exportStore();
     const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' });
@@ -165,7 +198,12 @@ export const forms = {
     ctx.toast(st.lastError ? `Sync failed: ${st.lastError}` : ctx.store.syncConfigured() ? 'Sync on.' : 'Sync off.', st.lastError ? 'danger' : 'success');
     ctx.render({ force: true });
   },
-  player: async (d, form, ctx) => { await saveSettings(ctx, { name: (d.name || '').trim() || 'Player', mission: (d.mission || '').trim(), sound: d.sound === 'on' }); ctx.toast('Saved.', 'success'); },
+  player: async (d, form, ctx) => { await saveSettings(ctx, { name: (d.name || '').trim() || 'Player', plannerName: (d.plannerName || '').trim(), mission: (d.mission || '').trim(), sound: d.sound === 'on' }); ctx.toast('Saved.', 'success'); },
+  planner: async (d, form, ctx) => {
+    await ctx.store.applyPlannerSettings({ url: d.url, token: d.token });
+    const st = ctx.store.plannerStatus();
+    ctx.toast(st.lastError ? `Planner: ${st.lastError}` : st.configured ? `Planner: ${st.tasks} task${st.tasks === 1 ? '' : 's'} for you.` : 'Planner off.', st.lastError ? 'danger' : 'success');
+  },
   hero: async (d, form, ctx) => {
     const hero = Object.fromEntries(HERO_PARTS.map(([k]) => [k, /^#[0-9a-f]{6}$/i.test(d[k]) ? d[k] : HERO_DEFAULTS[k]]));
     await saveSettings(ctx, { hero });

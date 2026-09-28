@@ -2,7 +2,9 @@
 // today's list. The one screen the player lives on.
 
 import { index, makeDone, makeEnergy, makeRework, makeMoment, reworkCandidate, ENERGY_MAX } from '../model.js';
+import { plannerRework } from '../planner.js';
 import { esc, fmtMin, fmtPts, readJson, writeJson, validTimer, elapsedMinutes, batchEnds, fmtClock } from '../util.js';
+import { plannerTag } from './tasks.js';
 
 const TIMER_KEY = 'flow.timer';
 const MOMENT_KEY = 'flow.moment';
@@ -142,7 +144,7 @@ function suggestion(ctx, s, primary) {
   const cost = [s.cost.stamina ? `${Math.round(s.cost.stamina * 10) / 10} stamina` : '', s.cost.mana ? `${Math.round(s.cost.mana * 10) / 10} mana` : ''].filter(Boolean).join(' · ') || 'free';
   return `
   <div class="item ${primary ? 'next-card' : ''}" data-task="${esc(s.task)}">
-    <div class="item-head"><span class="item-title">${isBatch ? `Batch: ${s.batch.length} × ${esc(t.batch)}` : esc(s.title)}</span><span class="small sc-faint">${esc(skill?.name || '')} · ~${fmtMin(t?.estimate)} · ${cost}</span></div>
+    <div class="item-head"><span class="item-title">${isBatch ? `Batch: ${s.batch.length} × ${esc(t.batch)}` : esc(s.title)}${t ? ` ${plannerTag(t)}` : ''}</span><span class="small sc-faint">${esc(skill?.name || '')} · ~${fmtMin(t?.estimate)} · ${cost}</span></div>
     ${isBatch ? `<div class="small sc-muted">${s.batch.map((id) => esc(ctx.db.task.get(id)?.title)).join(' · ')}</div>` : ''}
     ${s.why.length ? `<div class="pills">${s.why.map((w) => `<span class="sc-pill" style="--tint: var(--sc-accent-2)">${esc(w)}</span>`).join('')}</div>` : ''}
     <div class="row">
@@ -151,6 +153,28 @@ function suggestion(ctx, s, primary) {
       <button class="sc-button sc-button--ghost sc-button--sm" data-action="log" data-task="${esc(s.task)}">Log done</button>
     </div>
   </div>`;
+}
+
+/** Tasks reopened in Planner with no hours logged there: how long did the fix take? */
+export function plannerAsksSection(ctx) {
+  const asks = ctx.store?.plannerAsks?.(ctx.now) || [];
+  if (!asks.length) return '';
+  return `
+  <section class="stack" id="planner-asks">
+    ${asks.map((a) => {
+    const d = ctx.db.done.find((x) => x.id === a.done);
+    return `
+    <form class="sc-panel pad stack" data-form="planner-fix" data-ask="${esc(a.id)}">
+      <div class="row-between"><h2>Reopened in Planner</h2><span class="sc-pill planner-tag" data-source="project">Planner · ${esc(a.project || '')}</span></div>
+      <p style="margin:0">Reopened in Planner: how long did the fix take? <b>${esc(a.title)}</b>${d ? ` <span class="sc-muted">(done ${esc(d.day)})</span>` : ''}</p>
+      <input type="hidden" name="ask" value="${esc(a.id)}">
+      <div class="form-grid">
+        <label class="sc-field"><span>Fix minutes</span><input class="sc-input" type="number" name="minutes" min="1" step="1" required></label>
+        <button class="sc-button sc-button--danger" type="submit">Log rework</button>
+      </div>
+    </form>`;
+  }).join('')}
+  </section>`;
 }
 
 function nextSection(ctx) {
@@ -230,6 +254,7 @@ export function render(ctx) {
     ${ctx.g.energy.rated ? '' : energyPrompt()}
     ${hud(ctx.g)}
     ${banners(ctx.g)}
+    ${plannerAsksSection(ctx)}
     ${timer ? timerCard(ctx, timer) : ''}
     ${ctx.ui.log ? logForm(ctx) : ''}
     ${ctx.ui.batch ? batchForm(ctx) : ''}
@@ -332,7 +357,7 @@ export const forms = {
     if (!rows.length) throw new Error('Tick at least one task.');
     const ends = batchEnds(rows.map((r) => r.minutes), Date.now());
     // Each one is priced against the ones before it, so the batch bonus climbs.
-    const records = ctx.store.allRecords();
+    const records = ctx.store.liveRecords();
     const out = [];
     let db = ctx.db;
     rows.forEach((r, i) => {
@@ -343,6 +368,13 @@ export const forms = {
     ctx.ui.batch = null;
     await ctx.store.add(out);
     ctx.toast(`Batch of ${out.length}: +${out.reduce((n, r) => n + r.price.points, 0)} points.`, 'success');
+  },
+  'planner-fix': async (d, form, ctx) => {
+    const ask = ctx.store.plannerAsks(Date.now()).find((a) => a.id === d.ask);
+    if (!ask) return;
+    const rec = plannerRework(ctx.db, ask, d.minutes);
+    await ctx.store.add(rec);
+    ctx.toast(`Rework: −${rec.penalty} XP, −${rec.charged} points (×${rec.multiplier}).`, 'warning');
   },
   'moment-stop': async (d, form, ctx) => {
     const m = readMoment();
