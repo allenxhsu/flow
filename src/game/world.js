@@ -12,6 +12,11 @@
 //   worldFor(records | db)   → the pack in effect, or the generic world
 //   levelGrid(level)         → { w, h, cell[y][x] } walkable floor, walls, roofs
 //
+// A building blocks walking and shows a roof in the flat look; in 3D it is a
+// box under a hip or flat roof, walls only with `noRoof` (the level's scene
+// adds its own), or nothing at all with `solid` (the scene draws it).
+// A line may name its speaker: "ANA: Morning!".
+//
 // Unknown keys are dropped, so a newer pack still loads; anything invalid
 // refuses the whole pack with the reason, and nothing of it is applied.
 
@@ -124,7 +129,7 @@ function level(l, i, models) {
         wall: b.wall === undefined ? '#e8e0d0' : color(b.wall, `${B} wall`),
         roof: b.roof === undefined ? '#a8765a' : color(b.roof, `${B} roof`),
         rise: b.rise === undefined ? (b.flat ? 0 : 1.4) : num(b.rise, `${B} rise`),
-        flat: !!b.flat, noRoof: !!b.noRoof,
+        flat: !!b.flat, noRoof: !!b.noRoof, solid: !!b.solid,
       };
     }),
     furniture: list(l.furniture, `${L} furniture`).map((f, k) => {

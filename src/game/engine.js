@@ -116,8 +116,10 @@ export function createGame(root, opts) {
   function paintBox() {
     if (!dlg) { box.hidden = true; box.innerHTML = ''; return; }
     const line = dlg.lines[0];
-    const who = line && typeof line === 'object' ? line.who : '';
-    const text = line && typeof line === 'object' ? line.text : line;
+    let who = line && typeof line === 'object' ? line.who : '';
+    let text = line && typeof line === 'object' ? line.text : line;
+    const named = /^([A-Z][A-Z .'-]{0,23}): (.+)$/s.exec(text || '');
+    if (named) { who = named[1] === 'YOU' ? (opts.name || 'You').toUpperCase() : named[1]; text = named[2]; }
     const choices = dlg.lines.length <= 1 && dlg.choices ? `<div class="play-choices">${dlg.choices.map((c, k) => `<button type="button" class="play-choice ${k === dlg.sel ? 'is-on' : ''}" data-k="${k}">${esc(c)}</button>`).join('')}</div>` : '';
     box.innerHTML = `${who ? `<span class="play-who">${esc(who)}</span>` : ''}<span class="play-text">${esc(text || '')}</span>${choices}${choices ? '' : '<span class="play-more">▼</span>'}`;
     box.hidden = false;

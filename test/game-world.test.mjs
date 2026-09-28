@@ -68,3 +68,15 @@ test('generic world: made-up people only, with walk laps on free floor', () => {
     for (const p of c.lap) assert.ok(floor(L, ...p) && !blocked(L, ...p), `${n.name} lap point ${p}`);
   }
 });
+
+test('buildings: solid ones block walking and are left to the scene; noRoof keeps the walls only', () => {
+  const pack = JSON.parse(JSON.stringify(GENERIC_WORLD));
+  const street = pack.levels.find((l) => l.id === 'street');
+  street.buildings.push({ x: 20, y: 0, w: 2, h: 2, solid: true }, { x: 24, y: 0, w: 2, h: 2, noRoof: true });
+  const r = validateWorld(pack);
+  assert.equal(r.ok, true, r.reason);
+  const b = r.world.levels.find((l) => l.id === 'street').buildings.slice(-2);
+  assert.deepEqual([b[0].solid, b[0].noRoof, b[1].solid, b[1].noRoof], [true, false, false, true]);
+  const grid = levelGrid(r.world.levels.find((l) => l.id === 'street'));
+  assert.ok(grid.cell[0][20].roof && grid.cell[1][25].roof, 'both block walking');
+});

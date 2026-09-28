@@ -95,7 +95,9 @@ export function buildLevel(THREE, doc, { world, level, grid, carColor }) {
 
   // Buildings, outdoors: walls, then a hip or a flat roof.
   for (const b of level.buildings || []) {
+    if (b.solid) continue;
     scene.add(boxMesh(THREE, b.x, 0, b.y, b.x + b.w, b.height, b.y + b.h, b.wall));
+    if (b.noRoof) continue;
     if (b.flat) scene.add(boxMesh(THREE, b.x - 0.05, b.height, b.y - 0.05, b.x + b.w + 0.05, b.height + 0.1, b.y + b.h + 0.05, b.roof));
     else scene.add(hip(THREE, b.x, b.y, b.x + b.w, b.y + b.h, b.height, b.rise, b.roof, 0.3));
   }
