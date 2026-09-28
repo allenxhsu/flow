@@ -21,6 +21,8 @@ import { DEFAULT_STATS, makeDone, makeRework, isDay, dayOf, isDoneFor, isoWeek }
 
 /** Flow's operations (SPEC.md › Writing to Planner): write-once records Planner applies to its plans. */
 export const OP_TYPE = 'flow.op';
+/** The day Planner publishes: what its calendar laid on a date, in order (Planner's model/dayplan.js). */
+export const AGENDA_TYPE = 'agenda';
 /** Planner keeps applied op ids this long and ignores older ops; Flow stops showing them as pending. */
 export const OPS_KEEP_DAYS = 90;
 const OPS_KEEP_MS = OPS_KEEP_DAYS * 86400000;
@@ -52,10 +54,14 @@ function readPlans(planRecords) {
   const workspaces = new Map();
   const plans = [];
   const ops = [];
+  const days = new Map();
   for (const r of planRecords || []) {
     if (!r || r.deletedAt) continue;
     if (r.type === OP_TYPE && typeof r.id === 'string') { ops.push(r); continue; }
     if (r.type === 'workspace' && typeof r.id === 'string') { workspaces.set(r.id, r); continue; }
+    // The day Planner laid out, published as a record (Planner's
+    // model/dayplan.js). Flow shows that list rather than forming its own.
+    if (r.type === AGENDA_TYPE && isDay(r.day)) { days.set(r.day, r); continue; }
     if (r.type !== 'document' || r.format !== 'project-planner') continue;
     let body = r.body;
     try { if (typeof body === 'string') body = JSON.parse(body); } catch { continue; }
@@ -64,7 +70,7 @@ function readPlans(planRecords) {
     if (!id) continue;
     plans.push({ id, body });
   }
-  return { plans, workspaces, ops };
+  return { plans, workspaces, ops, days };
 }
 
 const opAt = (op) => (Number.isFinite(+op.at) ? +op.at : Number.isFinite(+op.updatedAt) ? +op.updatedAt : null);
@@ -198,6 +204,34 @@ export function plannerTasks(planRecords, opts) {
   // With `now`, pending addTask ops older than 90 days are dropped (Planner no longer applies them).
   const { entries, skills } = derive(planRecords, opts);
   return { tasks: entries.map((e) => e.task), skills };
+}
+
+/**
+ * The tasks Planner laid on `day`, as Flow definitions, in Planner's order.
+ *
+ * This is the whole point of the agenda record: Flow's list is Planner's
+ * Today, the same tasks in the same order, rather than the open backlog
+ * sorted alphabetically — which on a real planner is hundreds of tasks going
+ * back years, and is not what anybody means by "what am I doing today".
+ *
+ * `null` — not an empty list — when Planner has not published that day, so a
+ * caller can fall back rather than show an empty screen. An empty array means
+ * Planner published the day and nothing is laid on it.
+ */
+export function plannerDay(planRecords, day, opts) {
+  const { days } = readPlans(planRecords);
+  const record = days.get(day);
+  if (!record || !Array.isArray(record.tasks)) return null;
+  const { entries } = derive(planRecords, opts || {});
+  const byKey = new Map(entries.map((e) => [`${e.task.source.plan}|${e.task.source.task}`, e]));
+  const out = [];
+  for (const row of record.tasks) {
+    const entry = byKey.get(`${row.plan}|${row.task}`);
+    // A task the day names but this player cannot see (someone else's, done,
+    // archived) is simply not theirs to do; the day is not wrong for holding it.
+    if (entry) out.push({ ...entry.task, laidAt: row.start, laidMinutes: row.minutes });
+  }
+  return out;
 }
 
 /**

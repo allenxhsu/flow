@@ -29,8 +29,8 @@ import {
   SYNC_CURSOR_KEYS, publishStatus, onSyncNow,
   portalApp, portalSession, portalRemote, requestPersistentStorage, storageStatus, mergeRecord,
 } from '../sync-kit/js/index.js';
-import { index, stamp, tombstone, RECORD_TYPES, EVENT_TYPES } from './model.js';
-import { plannerTasks, plannerEvents, plannerHistory, plannerSinceStamp, expiredOps } from './planner.js';
+import { index, stamp, tombstone, dayOf, RECORD_TYPES, EVENT_TYPES } from './model.js';
+import { plannerTasks, plannerEvents, plannerHistory, plannerSinceStamp, expiredOps, plannerDay } from './planner.js';
 import { pushOps, opsToWrite, plannerUrlFrom, isOp } from './planops.js';
 
 export const WORKSPACE = 'flow';
@@ -112,6 +112,20 @@ export function db() {
     const base = index(allRecords());
     const opts = { me: plannerName(base), skills: base.skills, stats: base.stats, now: Date.now() };
     const d = plannerById.size ? plannerTasks(plannerRecords(), opts) : { tasks: [], skills: [] };
+    // What Planner laid on today, if it has said. A Planner task that is not
+    // on it is not today's work — it is somewhere in a backlog that, on a real
+    // planner, runs to hundreds of tasks going back years. It stays in the
+    // index so a stored completion keeps its title and skill, and is marked
+    // `offToday` so the screens can leave it out. Null means Planner has not
+    // published the day, and then nothing is hidden.
+    const laid = plannerById.size ? plannerDay(plannerRecords(), dayOf(opts.now), opts) : null;
+    if (laid) {
+      const on = new Map(laid.map((t) => [t.id, t]));
+      d.tasks = d.tasks.map((t) => {
+        const row = on.get(t.id);
+        return row ? { ...t, laidAt: row.laidAt, laidMinutes: row.laidMinutes } : { ...t, offToday: true };
+      });
+    }
     // Plans archived since: only the tasks a stored completion points at, so its history keeps its title and skill.
     const h = plannerById.size ? plannerHistory(plannerRecords(), opts) : { tasks: [], skills: [] };
     const logged = new Set(base.done.map((x) => x.task));

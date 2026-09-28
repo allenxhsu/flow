@@ -66,10 +66,22 @@ export function render(ctx) {
   }
   const editing = ui.editTask;
   // A task of a Planner plan archived since is history, not a task to do.
-  const list = g.tasks.filter((t) => !(t.source && t.archived)).filter((t) => ui.showArchived || !t.archived).sort((a, b) => Number(a.archived) - Number(b.archived) || a.title.localeCompare(b.title));
+  // And a Planner task the calendar did not lay on today is not today's work:
+  // Flow's list is Planner's Today, in Planner's order (sync.js › db, and
+  // Planner's model/dayplan.js). Flow's own tasks are not Planner's to
+  // schedule, so they stay. `laidAt` first, then anything unscheduled, then
+  // alphabetical — which is the old order for everything Planner has not
+  // spoken about.
+  const list = g.tasks
+    .filter((t) => !(t.source && t.archived))
+    .filter((t) => !(t.source && t.offToday))
+    .filter((t) => ui.showArchived || !t.archived)
+    .sort((a, b) => Number(a.archived) - Number(b.archived)
+      || (a.laidAt ?? Infinity) - (b.laidAt ?? Infinity)
+      || a.title.localeCompare(b.title));
   const archived = g.tasks.filter((t) => t.archived && !t.source).length;
   return `<div class="view">
-    <div class="row-between"><h2>Tasks · ${g.tasks.filter((t) => !t.archived).length}</h2>
+    <div class="row-between"><h2>Tasks · ${list.filter((t) => !t.archived).length}</h2>
       <div class="row">${archived ? `<label class="check-field small"><input class="sc-check" type="checkbox" data-toggle="archived" ${ui.showArchived ? 'checked' : ''}> archived (${archived})</label>` : ''}
       <button class="sc-button sc-button--primary" data-action="new">+ New task</button></div></div>
     ${editing && !db.task.get(editing)?.source ? form(ctx, editing === 'new' ? null : db.task.get(editing)) : ''}
