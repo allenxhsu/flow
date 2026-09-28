@@ -95,9 +95,9 @@ test('shelveMove: the item moves to its new place and the plan marks it; unticki
   assert.equal(off.item, null);
 });
 
-test('reshelveView: a move whose item is gone is left out', () => {
+test('reshelveView: a move whose item is gone (removed from the Bag) is left out', () => {
   const { g, plan, goal } = shelves();
-  g.add({ ...goal, deletedAt: NOW + 1, updatedAt: NOW + 1 });
+  g.add({ ...goal, archived: true, updatedAt: NOW + 1 });
   const v = M.reshelveView(g.db(), plan);
   assert.equal(v.total, 2);
   assert.ok(!v.shelves.some((s) => s.moves.some((m) => m.item.id === goal.id)));
