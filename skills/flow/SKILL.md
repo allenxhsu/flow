@@ -52,9 +52,21 @@ wishes are matched by id, title or any unambiguous fragment; `flow list
 | The day | `$F replay [--day YYYY-MM-DD]` |
 | Setup | `$F init`, `$F stat add\|rename\|remove`, `$F skill add\|edit`, `$F task add\|edit\|archive\|restore`, `$F reward add\|edit\|archive`, `$F place add`, `$F kind add` |
 | Sync | `$F config --url https://<portal>/w/flow --token <device token>`, `$F sync` |
+| Planner tasks | `$F planner pull [--url https://<portal>/w/<project workspace>] [--token …]`, or `$F planner import <store-export.json>` (Planner's Settings ▸ export); `$F planner status [--json]`; the name they go by in Planner: `$F init --planner-name "…"` |
 
 `RULES.md` beside this file explains every number. Read it when the player
 asks "why?" — and answer with their actual numbers from the CLI output.
+
+**Planner tasks.** Tasks from Project Planner (plans with no assignee, or
+assigned to the player's Planner name) show up in `status`, `next` and `list
+tasks` tagged `Planner · <project>`. Flow only reads Planner: never offer to
+edit or archive one from here; the player changes and ticks off Planner tasks
+in Planner. `planner pull` and `planner import` log what was finished there by
+themselves, and a task reopened and finished again is logged as rework from
+Planner's timesheets. When one prints "how long did the fix take on X?", ask
+the player and answer with `$F rework "X" --minutes N`. A Planner task they
+finish with the timer or tell you about is logged with `done` like any other;
+ticking it off in Planner afterwards does not count it twice.
 
 ## Which session is this?
 
@@ -122,7 +134,8 @@ weekly review is (a week from today).
 Short. The player is busy.
 
 1. If today has no energy rating, ask for it first: "Stamina and mana, 0–10?"
-   → `energy`.
+   → `energy`. If Planner is set up (`planner status` lists plans), run
+   `planner pull` too, and ask any "how long did the fix take?" it prints.
 2. Ask what they have done since the last check-in; show open tasks so they
    can answer in shorthand. Log each with `done`, with the minutes they say;
    use `--at`/`--start` so batches and combos come out right (three purchase

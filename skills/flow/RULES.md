@@ -62,6 +62,40 @@ The penalty comes off XP (skill, stat and player levels can drop) and off the
 balance as a charge. **Critical** = flagged critical, has a deadline, or is for
 someone else.
 
+## Planner tasks
+
+Tasks from Project Planner are derived, never stored: the leaf tasks of live
+plans (not summaries, milestones, archived or cancelled tasks, templates or
+archived plans) that nobody is assigned to, or that are assigned to the
+player's name in Planner (case and spaces ignored). Each is a `time` task with
+cadence `once`:
+
+- **Estimate** = Planner's expected work: the task's work hours × 60, else
+  duration × the plan's hours per day × its assumed load (default 100%) × 60,
+  at least 1 minute. It is the base, like any task's estimate.
+- **Critical** when it has a deadline or its urgency is ASAP or High.
+- **Skill**: the task's Planner skill, else the project's, its folder, its
+  workspace, the project name — matched to a Flow skill by name, or a new
+  skill under Work.
+- **Energy**: 2 per hour of estimate (to 0.5, at most 10): stamina for
+  physical work, mana for mental (the default).
+
+**Done in Planner = logged here** at Planner's done time, with the estimate as
+its minutes and quality 1, priced by the normal rules, unless a completion of
+that task already covers it (logged with the timer or `done` no more than 24 h
+before it, or after it). It is the same record on every device, so it never
+counts twice. **Reopened in Planner** and finished again more than 24 h after
+the completion that covered it: rework of that completion, the fix = Planner's
+timesheet hours on the task after it, × 60. With no hours logged there, Flow
+asks for the minutes. Rework already logged against that completion (the
+timer's "is this rework?") covers it, so nothing is charged twice.
+
+**From when.** Planner history from before Flow first read Planner is not
+logged: the first successful read stamps `settings.plannerSince` (once; it
+never moves), and only finishes at or after it are logged or count as
+reopens (`flow planner status` shows the date). A plan archived since still
+logs its finishes and reopens; templates never count.
+
 ## Balance, shop and debt
 
 Balance = points earned + skip points − rework charges − purchases, as charged. Debt is

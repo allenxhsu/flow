@@ -227,6 +227,28 @@ test('contract: difficulty tiers, settings and snapshots', async () => {
   assert.deepEqual(Object.keys(d).sort(), ['changesAt', 'name', 'next', 'skills', 'tier', 'unlocked']);
 });
 
+// Planner tasks (SPEC.md › Planner tasks › Contract): src/planner.js, pure.
+// The app, the sync and the CLI read these two; change this test first.
+test('contract: planner — plannerTasks(planRecords, opts) → { tasks, skills }; plannerEvents(db, planRecords, opts) → { done, rework, ask }', async () => {
+  const P = await import('../src/planner.js');
+  assert.equal(typeof P.plannerTasks, 'function');
+  assert.equal(typeof P.plannerEvents, 'function');
+  assert.equal(P.plannerTasks.length, 2, 'plannerTasks(planRecords, { me, skills, stats })');
+  assert.equal(P.plannerEvents.length, 3, 'plannerEvents(db, planRecords, { me, now })');
+  const body = JSON.stringify({ id: 'plan_a', name: 'Website relaunch', tasks: [{ id: 't1', name: 'Write copy', level: 1, duration: 1, work: 1, percent: 100, doneAt: '2026-09-28T10:00', assignments: [] }], resources: [] });
+  const plans = [{ id: 'plan_a', type: 'document', format: 'project-planner', body, updatedAt: 1 }];
+  const d = P.plannerTasks(plans, { me: 'Ana', skills: [], stats: M.DEFAULT_STATS });
+  assert.deepEqual(Object.keys(d).sort(), ['skills', 'tasks']);
+  assert.ok(Array.isArray(d.tasks) && Array.isArray(d.skills));
+  const [t] = d.tasks;
+  for (const k of ['id', 'type', 'title', 'project', 'skill', 'measure', 'cadence', 'estimate', 'stamina', 'mana', 'deadline', 'urgent', 'source']) assert.ok(k in t, `task.${k}`);
+  assert.deepEqual(Object.keys(t.source).sort(), ['app', 'plan', 'task']);
+  const e = P.plannerEvents(M.index([]), plans, { me: 'Ana', now: T(`${D}T21:00:00`), since: T(`${D}T00:00:00`) });
+  assert.deepEqual(Object.keys(e).sort(), ['ask', 'done', 'rework']);
+  assert.equal(e.done[0].type, 'done');
+  assert.equal(typeof e.done[0].planner, 'string');
+});
+
 // House inventory (SPEC.md "House inventory"): nested places, item details, file records.
 const HOUSE_FUNCTIONS = {
   placePath: 2, placesWithin: 2, placeTree: 1, movePlace: 3, placeRemoval: 2,
