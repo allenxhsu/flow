@@ -5,8 +5,10 @@
 // The data is sync-kit records in workspace "flow". Two kinds:
 //
 //   definitions — settings, stat, skill, task, reward, place, kind, item,
-//                 loadout, wish. Edited in place, and last-write-wins is the
-//                 right rule for them.
+//                 loadout, wish, world. Edited in place, and last-write-wins
+//                 is the right rule for them. `world` is the player's private
+//                 world pack for the game (id 'world'); without one the game
+//                 draws its generic world (src/game/).
 //   events      — done, rework, purchase, energy, review, moment, skip, spend. Written once
 //                 and never edited, so two devices can never overwrite each other.
 //                 A review redone in the same ISO week is a new event; the
@@ -123,7 +125,7 @@ export const GEAR_MAX = 0.10;
 /** A loadout's slots, in paper-doll order. */
 export const SLOTS = ['head', 'body', 'legs', 'feet', 'hands', 'bag', 'tech', 'vehicle'];
 
-const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish'];
+const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish', 'world'];
 const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend'];
 export const RECORD_TYPES = [...DEFINITIONS, ...EVENTS];
 
@@ -204,7 +206,15 @@ export function index(records) {
     wishes: lastWrites(by.wish),
     skips: by.skip.sort(byStart),
     spends: by.spend.sort(byStart),
+    world: worldRecord(records),
   };
+}
+
+/** The world pack record: the latest write of any world record, or null when that write removed it. */
+function worldRecord(records) {
+  let latest = null;
+  for (const r of records) if (r?.type === 'world' && (!latest || (r.updatedAt ?? 0) >= (latest.updatedAt ?? 0))) latest = r;
+  return latest && !latest.deletedAt ? latest : null;
 }
 
 /** One record per id: the latest write wins (a later copy wins a tie), in first-seen order. */

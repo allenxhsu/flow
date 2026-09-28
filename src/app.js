@@ -14,6 +14,7 @@ import * as skills from './views/skills.js';
 import * as shop from './views/shop.js';
 import * as review from './views/review.js';
 import * as replay from './views/replay.js';
+import * as playView from './views/play.js';
 import * as settings from './views/settings.js';
 import * as rules from './views/rules.js';
 
@@ -23,6 +24,7 @@ const VIEWS = [
   { id: 'skills', label: 'Skills', glyph: '✦', mod: skills },
   { id: 'shop', label: 'Shop', glyph: '◆', mod: shop },
   { id: 'review', label: 'Review', glyph: '◷', mod: review },
+  { id: 'play', label: 'Play', glyph: '◈', mod: playView },
   { id: 'replay', label: 'Replay', glyph: '▦', mod: replay },
   { id: 'settings', label: 'Settings', glyph: '⚙', mod: settings },
   { id: 'rules', label: 'Rules', glyph: '§', mod: rules },

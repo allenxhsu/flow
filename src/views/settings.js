@@ -2,6 +2,7 @@
 
 import { makePlace, newId, ZONES } from '../model.js';
 import { esc, materialize } from '../util.js';
+import { validateWorld, worldRecord, worldFor } from '../game/world.js';
 
 /** Starting colours for the hero sprite — data for the replay, not page styling. */
 export const HERO_DEFAULTS = { hair: '#4a3222', skin: '#e0b48c', shirt: '#2f7fd0', trousers: '#34405a' };
@@ -72,6 +73,17 @@ function kindsSection(ctx) {
   </section>`;
 }
 
+/** Play's world: the generic one, or a private pack imported from a flow.world file. */
+function worldSection(ctx) {
+  const pack = ctx.db.world;
+  return `<section class="sc-panel pad stack" id="world-pack">
+    <h2>World pack</h2>
+    <p class="small sc-muted" style="margin:0">Play and Replay draw ${pack ? `your pack, <b>${esc(worldFor(ctx.db).name)}</b>` : 'the generic world'}. A pack is a private <span class="sc-mono">flow.world</span> file: your own rooms, places and people. It syncs to your devices like your tasks.</p>
+    <div class="row"><label class="sc-button" style="cursor:pointer">Import…<input type="file" accept=".json,application/json" data-world-import hidden></label>
+      ${pack ? '<button class="sc-button sc-button--ghost" data-action="world-remove">Remove</button>' : ''}</div>
+  </section>`;
+}
+
 export function render(ctx) {
   const set = ctx.db.settings;
   const hero = { ...HERO_DEFAULTS, ...(set.hero || {}) };
@@ -93,6 +105,7 @@ export function render(ctx) {
     </form>
     ${placesSection(ctx)}
     ${kindsSection(ctx)}
+    ${worldSection(ctx)}
     <section class="sc-panel pad stack" id="backup">
       <h2>Backup</h2>
       <p class="small sc-muted" style="margin:0">Every record, deletions included, in one file. Importing merges by the newer edit and never deletes.</p>
@@ -141,6 +154,14 @@ export const actions = {
     await saveList(ctx, 'place', { id });
     await ctx.store.remove(ctx.store.getRecord(id));
   },
+  'world-remove': async (el, ctx) => {
+    const rec = ctx.store.getRecord('world');
+    if (!rec) return;
+    if (!(await ctx.confirm('Remove the world pack?', 'Play and Replay go back to the generic world. The file you imported is untouched.', 'Remove', 'danger'))) return;
+    await ctx.store.remove(rec);
+    ctx.toast('World pack removed: the generic world is back.', 'success');
+    ctx.render({ force: true });
+  },
   'remove-kind': async (el, ctx) => {
     await saveList(ctx, 'kind', { id: el.dataset.id, archived: true });
   },
@@ -148,7 +169,14 @@ export const actions = {
 
 export async function onChange(ev, ctx) {
   const t = ev.target;
-  if (t.matches('[data-import]') && t.files?.[0]) {
+  if (t.matches('[data-world-import]') && t.files?.[0]) {
+    const r = validateWorld(await t.files[0].text());
+    t.value = '';
+    if (!r.ok) { ctx.toast(`World pack refused: ${r.reason}`, 'danger'); return; }
+    await ctx.store.save(worldRecord(r.world));
+    ctx.toast(`World pack imported: ${r.world.name}.`, 'success');
+    ctx.render({ force: true });
+  } else if (t.matches('[data-import]') && t.files?.[0]) {
     const text = await t.files[0].text();
     const r = await ctx.store.importStore(text);
     ctx.toast(`Imported: ${r.added} added, ${r.replaced} replaced, ${r.kept} kept.`, 'success');
