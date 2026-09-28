@@ -75,9 +75,10 @@ const hhmm = (ms) => { const d = new Date(ms); return `${String(d.getHours()).pa
 /**
  * The strip along the top of every screen: five hearts for stamina (one per
  * 2 points), the green magic bar for mana, the gem counter for points, the
- * player's level and the clock.
+ * player's level and the clock. Game mode only (SPEC.md › Two looks);
+ * `after` is HTML placed at its end (the Game mode switch).
  */
-export function statusStrip(g) {
+export function statusStrip(g, { after = '' } = {}) {
   const e = g.energy || {};
   const rated = !!e.rated;
   const st = rated ? e.stamina : 0;
@@ -89,7 +90,7 @@ export function statusStrip(g) {
     <span class="mp"><span class="mp-label" aria-hidden="true">MP</span><span class="magic" role="meter" aria-label="Mana" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${mana}"${rated ? '' : ' aria-valuetext="not rated yet"'}><i style="width:${pct}%"></i></span></span>
     <span class="gem" title="Points balance${g.balance < 0 ? ' (in debt)' : ''}">${pixelIcon('gem', { colors: { o: INK, b: 'var(--gem)', w: '#ffffff' }, size: 3 })}<span id="strip-gem" class="num${g.balance < 0 ? ' debt' : ''}">${fmtPts(g.balance)}</span></span>
     <span class="lv" id="strip-level" title="Player level · difficulty ${esc(g.difficulty?.name || 'Push')}">LV ${g.player?.level ?? 1}</span>
-    <span class="clock num" aria-hidden="true">${hhmm(g.now ?? Date.now())}</span>
+    <span class="clock num" aria-hidden="true">${hhmm(g.now ?? Date.now())}</span>${after}
   </div>`;
 }
 

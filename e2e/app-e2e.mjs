@@ -18,6 +18,8 @@ const require = createRequire(process.env.PLAYWRIGHT_ROOT || '/opt/node22/lib/no
 const { chromium } = require('playwright');
 
 const APP = process.env.APP_URL || 'http://127.0.0.1:8201/';
+// The look to drive (SPEC.md › Two looks): MODE=hud (default) or MODE=game.
+const MODE = process.env.MODE === 'game' ? 'game' : 'hud';
 const SHOTS = process.env.SHOTS || null;
 const syncArg = process.argv.indexOf('--sync');
 const SYNC = syncArg > 0 ? { url: process.argv[syncArg + 1], token: process.argv[syncArg + 2] } : null;
@@ -30,6 +32,7 @@ const expected = (text) => /Failed to load resource.*404/.test(text);
 
 async function openPage(browser, name) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await context.addInitScript((m) => { try { localStorage.setItem('flow.mode', m); } catch { /* none */ } }, MODE);
   const page = await context.newPage();
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !expected(m.text())) errors.push(`${name}: ${m.text()}`); });
@@ -40,18 +43,19 @@ async function openPage(browser, name) {
   return { context, page, errors };
 }
 
-// The tab row sits along the bottom on a phone; a tab is a real button and
-// the current one carries aria-current="page".
+// The screens (the HUD's bottom bar or Game mode's tab row) sit along the
+// bottom on a phone; each is a real button and the current one carries
+// aria-current="page".
 const go = async (page, view) => {
-  await page.click(`.ds-tabs [data-go="${view}"]`);
-  await page.waitForSelector(`.ds-tabs [data-go="${view}"][aria-current="page"]`);
+  await page.click(`#nav [data-go="${view}"]`);
+  await page.waitForSelector(`#nav [data-go="${view}"][aria-current="page"]`);
 };
 const overflow = (page) => page.evaluate(() => {
   const doc = document.documentElement.scrollWidth > window.innerWidth + 1;
   const view = document.querySelector('#view');
   return doc || view.scrollWidth > view.clientWidth + 1;
 });
-const shot = async (page, name) => { if (SHOTS) { await page.waitForTimeout(350); await page.evaluate(() => document.querySelectorAll('.ds-toast').forEach((t) => t.remove())); fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: `${SHOTS}/app-${name}.png`, fullPage: false }); } };
+const shot = async (page, name) => { if (SHOTS) { await page.waitForTimeout(350); await page.evaluate(() => document.querySelectorAll('.ds-toast, .sc-toast-item').forEach((t) => t.remove())); fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: `${SHOTS}/app-${name}.png`, fullPage: false }); } };
 const setRange = (page, sel, value) => page.$eval(sel, (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }, String(value));
 const dialogButton = async (page, id) => { await page.waitForSelector(`[data-dialog-button="${id}"]`); await page.click(`[data-dialog-button="${id}"]`); };
 const todayItem = (page, text) => page.locator('#today .item').filter({ hasText: text }).first();
@@ -186,8 +190,8 @@ async function mainFlow(browser) {
   await page.click('#reward-form [type=submit]');
   await page.waitForSelector('#view [data-action=buy]');
   await page.click('#view [data-action=buy]');
-  await page.waitForSelector('dialog.ds-dialog:has-text("Into debt")');
-  check((await page.textContent('dialog.ds-dialog')).includes(`charged ${(balance + 100).toLocaleString('en-US')}`), 'debt warning names the doubled charge');
+  await page.waitForSelector('sc-dialog:has-text("Into debt"), dialog.ds-dialog:has-text("Into debt")');
+  check((await page.textContent('sc-dialog, dialog.ds-dialog')).includes(`charged ${(balance + 100).toLocaleString('en-US')}`), 'debt warning names the doubled charge');
   await shot(page, 'shop-debt');
   await dialogButton(page, 'ok');
   await page.waitForSelector('#purchases');
@@ -214,7 +218,7 @@ async function mainFlow(browser) {
   await page.click('#loadout-form [type=submit]');
   await page.waitForSelector('#doll [data-slot=feet]:has-text("Work boots")');
   check(true, 'loadout equipped on the paper doll');
-  const before = Number((await page.textContent('#strip-gem')).replace(/[^\d−-]/g, '').replace('−', '-'));
+  const before = Number((await page.textContent('#strip-gem, #hdr-balance')).replace(/[^\d−-]/g, '').replace('−', '-'));
   await page.fill('#have-form [name=query]', 'hdmi');
   await page.fill('#have-form [name=price]', '15');
   await page.click('#have-form [type=submit]');
@@ -222,7 +226,7 @@ async function mainFlow(browser) {
   check((await page.textContent('#have-result')).includes('You own 1: Desk'), 'have-it lookup names where it is');
   await page.click('#have-result [data-action=skip]');
   await page.waitForSelector('#have-result', { state: 'detached' });
-  const after = Number((await page.textContent('#strip-gem')).replace(/[^\d−-]/g, '').replace('−', '-'));
+  const after = Number((await page.textContent('#strip-gem, #hdr-balance')).replace(/[^\d−-]/g, '').replace('−', '-'));
   check(after === before + 15, 'skip adds 15 points to the gem counter');
   check((await page.textContent('#money')).includes('saved $15'), 'money saved this month');
   await page.fill('#have-form [name=query]', 'HDMI cable');
@@ -243,6 +247,8 @@ async function mainFlow(browser) {
   await page.click('#review-form [type=submit]');
   await page.waitForSelector('#sat-chart');
   await page.locator('#sat-chart svg').scrollIntoViewIfNeeded();
+  // A toast may sit over the chart (the HUD's stack bottom right): clear them before hovering.
+  await page.evaluate(() => document.querySelectorAll('.ds-toast, .sc-toast-item').forEach((t) => t.remove()));
   const box = await page.locator('#sat-chart svg').boundingBox();
   await page.mouse.move(box.x + 5, box.y + 5);
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 4 });
