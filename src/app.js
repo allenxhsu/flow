@@ -170,6 +170,7 @@ async function boot() {
   nativeReady = native.init();
   if (nativeReady) healthAskedFor = dayOf(Date.now()); // init asked already
   render({ force: true });
+  if (store.persistence() === 'memory') toast('This window cannot save anything: changes last until you close it. Open Flow in a browser tab or the app to keep them.', 'warning');
 }
 
 boot().catch((err) => {
