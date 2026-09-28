@@ -261,11 +261,12 @@ equips. There is no second copy and no import.
   or the names of the places it is in — so "garage drill" finds the drill in
   the garage, and a box's name finds what is in it. Each result shows its full
   place path. This is separate from "I have it" matching, which stays as it is.
-- **Browse by place:** the Bag's stash shows a stash per place in tree order,
-  each titled with its path (Bookcase 1 › Shelf 2), and above it the place tree
-  with a count per place (everything inside it, at any depth). Selecting a
-  place shows only the stashes inside it; the search box narrows them to the
-  items that match. Places are added, renamed, moved and deleted there too.
+- **Browse by place — at the bookshelf, not in the Bag** (the player: "there is
+  a bookshelf in the room, so interact with the bookshelf and it shows books,
+  instead of part of the Bag"). Walking up to a bookshelf in Play and pressing
+  A opens its shelves and the books on them; see *The bookshelf* below. The
+  Bag stays what the Inventory section describes; its item panel carries the
+  details, photos and receipts, and its place picker shows the nesting.
 - **Box labels:** a printable sheet per place listing what is in it — its own
   items first, then each place inside it under its path — to tape on the box.
 - **CSV:** every listed item as a row, sorted by place path then name:
@@ -302,7 +303,8 @@ labelSheet(db, placeId)       // → { place, path, lines: [{ heading } | { item
 A **reshelve plan** is a list of moves that puts a collection in a new order —
 the player's bookcases re-sorted by Dewey call number, for one. The plan is
 made outside the app (Claude, working from the inventory) and imported; the
-Bag walks the player through it and keeps the inventory true as they go.
+bookshelf in Play walks the player through it and keeps the inventory true as
+they go.
 
 - **A plan is a `reshelve` record** (a definition): a name, and moves in their
   final order, each `{ item, from, to, n, call }` — the item, the place it was
@@ -317,7 +319,7 @@ Bag walks the player through it and keeps the inventory true as they go.
 - **A book already on its new shelf** counts as shelved from the start.
 - **Progress:** pulled and shelved counts out of the total. When every move is
   shelved the plan offers to finish; a finished plan (`done: true`) leaves the
-  Bag. One plan shows at a time: the latest written that is not done.
+  bookshelf's menu. One plan shows at a time: the latest written that is not done.
 - Moves that name an item or place that no longer exists are skipped, never
   thrown: an item removed during a reshelve drops out of the plan.
 
@@ -340,6 +342,44 @@ shelveMove(db, plan, itemId, on = true)  // → { plan, item }: on → the item 
 
 `reshelve` is a definition, the last in the definitions of `RECORD_TYPES`;
 `index()` gains `reshelves` (latest write per id).
+
+## The bookshelf (Play, decided 2026-09-28)
+
+A bookshelf in the world is the player's bookcase: facing it and pressing A
+shows what is on it, shelf by shelf, from the same `item` and `place` records.
+
+- **Which bookcase a shelf is.** In a world pack, any furniture may name the
+  Flow place it stands for: `place` — a place id, or a place's name (case
+  does not matter). A `shelf` model with no `place` — the generic home's —
+  stands for every top-level place whose name says bookcase, bookshelf or
+  shelf and holds something. None: it says its text, as before.
+- **The menu** (the lower screen, like TASKS): with one bookcase it opens
+  straight on its shelves; with several it asks WHICH BOOKCASE? first. The
+  shelves list each place inside the bookcase (and the bookcase itself if
+  things sit on it directly) with how many are on it; a shelf lists its books
+  left to right; a book's details go in the text box — title, author, where,
+  and the notes (the Dewey call number lives there).
+- **Left to right** is the order of the latest reshelve plan that sends books
+  to that shelf; anything else on it follows by name.
+- **Reshelving at the shelf.** While a plan is active the bookcase's menu
+  offers RESHELVE with its progress: PULL lists the shelves books come from,
+  SHELVE the shelves they go to; a shelf lists its books with a tick, and
+  ticking does what the Reshelving section says (shelving moves the item).
+  FINISH retires the plan.
+
+### Contract
+
+```js
+// src/game/shelf.js — pure
+shelfPlaces(db, furniture)   // → [place]: the furniture's `place` (id or name) when it names one; else, for a shelf,
+                             //   the top-level places named bookcase / bookshelf / shelf that hold something, by name
+shelfRows(db, placeId)       // → [{ place, label, count }]: the place itself if it holds items directly, then every place
+                             //   inside it depth first; label is the path below placeId; count is the items directly there
+shelfBooks(db, placeId)      // → the items directly on the place, left to right (see above)
+bookText(db, item)           // → [lines] for the text box: title (and author), where it is, then its notes
+```
+
+World packs: furniture gains an optional `place` (a string, at most 80 characters).
 
 ## Art direction (decided after concept rounds)
 
