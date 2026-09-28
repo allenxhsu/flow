@@ -21,10 +21,12 @@ export function render(ctx) {
   return `<div class="view">
     <div class="row-between"><h2>Day replay</h2>
       <label class="row small"><span class="sc-label">Day</span><select class="sc-select" data-replay-day style="width:auto">${days.map((d) => `<option ${d === day ? 'selected' : ''}>${esc(d)}</option>`).join('')}</select></label></div>
-    <div id="replay-root" class="replay-root sc-panel pad" data-day="${esc(day)}">
-      <div class="muted-box" id="replay-placeholder">
-        <p style="margin:0 0 8px"><b>The replay renderer plugs in here.</b></p>
-        <p class="small" style="margin:0">It is a separate module, <span class="sc-mono">src/replay/index.js</span>, exporting <span class="sc-mono">mountReplay(el, replayDay(records, day))</span> — original 16-colour pixel art, one beat per event, 1×/2×/skip and a scrubber. Until it is here, this is the day in words.</p>
+    <div class="upper-screen" aria-label="Upper screen">
+      <div id="replay-root" class="replay-root" data-day="${esc(day)}">
+        <div class="muted-box" id="replay-placeholder">
+          <p style="margin:0 0 8px"><b>The replay renderer plugs in here.</b></p>
+          <p class="small" style="margin:0">It is a separate module, <span class="sc-mono">src/replay/index.js</span>, exporting <span class="sc-mono">mountReplay(el, replayDay(records, day))</span> — original 16-colour pixel art, one beat per event, 1×/2×/skip and a scrubber. Until it is here, this is the day in words.</p>
+        </div>
       </div>
     </div>
   </div>`;

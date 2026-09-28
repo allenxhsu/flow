@@ -40,17 +40,18 @@ async function openPage(browser, name) {
   return { context, page, errors };
 }
 
+// The tab row sits along the bottom on a phone; a tab is a real button and
+// the current one carries aria-current="page".
 const go = async (page, view) => {
-  await page.click('[data-toggle-nav]');
-  await page.click(`[data-go="${view}"]`);
-  await page.waitForSelector(`.sc-nav-item.is-active[data-go="${view}"]`);
+  await page.click(`.ds-tabs [data-go="${view}"]`);
+  await page.waitForSelector(`.ds-tabs [data-go="${view}"][aria-current="page"]`);
 };
 const overflow = (page) => page.evaluate(() => {
   const doc = document.documentElement.scrollWidth > window.innerWidth + 1;
   const view = document.querySelector('#view');
   return doc || view.scrollWidth > view.clientWidth + 1;
 });
-const shot = async (page, name) => { if (SHOTS) { await page.waitForTimeout(350); await page.evaluate(() => document.querySelectorAll('.sc-toast-item').forEach((t) => t.remove())); fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: `${SHOTS}/app-${name}.png`, fullPage: false }); } };
+const shot = async (page, name) => { if (SHOTS) { await page.waitForTimeout(350); await page.evaluate(() => document.querySelectorAll('.ds-toast').forEach((t) => t.remove())); fs.mkdirSync(SHOTS, { recursive: true }); await page.screenshot({ path: `${SHOTS}/app-${name}.png`, fullPage: false }); } };
 const setRange = (page, sel, value) => page.$eval(sel, (el, v) => { el.value = v; el.dispatchEvent(new Event('input', { bubbles: true })); }, String(value));
 const dialogButton = async (page, id) => { await page.waitForSelector(`[data-dialog-button="${id}"]`); await page.click(`[data-dialog-button="${id}"]`); };
 const todayItem = (page, text) => page.locator('#today .item').filter({ hasText: text }).first();
@@ -185,14 +186,54 @@ async function mainFlow(browser) {
   await page.click('#reward-form [type=submit]');
   await page.waitForSelector('#view [data-action=buy]');
   await page.click('#view [data-action=buy]');
-  await page.waitForSelector('sc-dialog:has-text("Into debt")');
-  check((await page.textContent('sc-dialog')).includes(`charged ${(balance + 100).toLocaleString('en-US')}`), 'debt warning names the doubled charge');
+  await page.waitForSelector('dialog.ds-dialog:has-text("Into debt")');
+  check((await page.textContent('dialog.ds-dialog')).includes(`charged ${(balance + 100).toLocaleString('en-US')}`), 'debt warning names the doubled charge');
   await shot(page, 'shop-debt');
   await dialogButton(page, 'ok');
   await page.waitForSelector('#purchases');
   check((await page.textContent('#purchases')).includes('debt ×2'), 'purchase history marks the debt');
   check((await page.textContent('#shop-balance')).includes('−100'), 'balance is −100 after buying 50 over');
   check(!(await overflow(page)), 'Shop: no horizontal overflow');
+
+  // Bag: quick add, a loadout, "have it" → skip pays points, buy anyway restocks.
+  await go(page, 'bag');
+  const addItem = async (name, place, price, slot = '') => {
+    await page.fill('#item-form [name=name]', name);
+    await page.selectOption('#item-form [name=place]', place);
+    await page.fill('#item-form [name=price]', String(price));
+    if (slot) await page.selectOption('#item-form [name=slot]', slot);
+    await page.click('#item-form [type=submit]');
+    await page.waitForSelector(`#stashes .cell:has-text("${name}")`);
+  };
+  await addItem('HDMI cable', 'place_desk', 15);
+  await addItem('Work boots', 'place_floor', 80, 'feet');
+  check((await page.locator('#stashes section.stash').count()) === 2, 'a stash per storage place');
+  await page.fill('#loadout-form [name=name]', 'Work');
+  await page.selectOption('#loadout-form [name=slot_feet]', { label: 'Work boots' });
+  await page.check('#loadout-form [name=active]');
+  await page.click('#loadout-form [type=submit]');
+  await page.waitForSelector('#doll [data-slot=feet]:has-text("Work boots")');
+  check(true, 'loadout equipped on the paper doll');
+  const before = Number((await page.textContent('#strip-gem')).replace(/[^\d−-]/g, '').replace('−', '-'));
+  await page.fill('#have-form [name=query]', 'hdmi');
+  await page.fill('#have-form [name=price]', '15');
+  await page.click('#have-form [type=submit]');
+  await page.waitForSelector('#have-result');
+  check((await page.textContent('#have-result')).includes('You own 1: Desk'), 'have-it lookup names where it is');
+  await page.click('#have-result [data-action=skip]');
+  await page.waitForSelector('#have-result', { state: 'detached' });
+  const after = Number((await page.textContent('#strip-gem')).replace(/[^\d−-]/g, '').replace('−', '-'));
+  check(after === before + 15, 'skip adds 15 points to the gem counter');
+  check((await page.textContent('#money')).includes('saved $15'), 'money saved this month');
+  await page.fill('#have-form [name=query]', 'HDMI cable');
+  await page.fill('#have-form [name=price]', '12');
+  await page.click('#have-form [type=submit]');
+  await page.click('#have-result [data-action=spend]');
+  await page.waitForSelector('#have-result', { state: 'detached' });
+  check((await page.textContent('#money')).includes('spent $12'), 'buy anyway: spent this month');
+  check((await page.getAttribute('#stashes .cell:has-text("HDMI cable")', 'title')).includes('×2'), 'buy anyway restocks the item');
+  check(!(await overflow(page)), 'Bag: no horizontal overflow');
+  await shot(page, 'bag');
 
   // Review.
   await go(page, 'review');
@@ -234,7 +275,7 @@ async function mainFlow(browser) {
   await go(page, 'rules');
   check((await page.textContent('#rules')).includes('capped at 2.5× base'), 'rules explain the cap');
   check(!(await overflow(page)), 'Rules: no horizontal overflow');
-  for (const v of ['tasks', 'skills']) { await go(page, v); check(!(await overflow(page)), `${v}: no horizontal overflow`); }
+  for (const v of ['tasks', 'skills', 'bag']) { await go(page, v); check(!(await overflow(page)), `${v}: no horizontal overflow`); }
 
   // Export includes everything.
   const exported = await page.evaluate(async () => (await import('/src/sync.js')).exportStore());

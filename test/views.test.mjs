@@ -193,3 +193,227 @@ test('Now: Planner tasks are offered with their tag, and a reopened task asks fo
   assert.match(now.render(ctx), /Planner · Website relaunch/);
   assert.doesNotMatch(now.render(ctx), /data-form="planner-fix"/);
 });
+
+// ─── the handheld look (SPEC.md › The app's screens match the game) ────────
+import { readFileSync } from 'node:fs';
+import { VIEWS } from '../src/views/index.js';
+import { statusStrip, textBox, pixelIcon } from '../src/ds.js';
+import * as bag from '../src/views/bag.js';
+
+test('Views: every screen of the SPEC, Bag among them, each with a label, an original pixel icon and a renderer', () => {
+  assert.deepEqual(VIEWS.map((v) => v.id), ['now', 'tasks', 'skills', 'bag', 'shop', 'review', 'replay', 'settings', 'rules']);
+  for (const v of VIEWS) {
+    assert.equal(typeof v.label, 'string');
+    assert.equal(typeof v.mod.render, 'function', `${v.id} renders`);
+    const icon = pixelIcon(v.id);
+    assert.match(icon, /^<svg[^>]*class="px-icon"/, `${v.id} has a pixel icon`);
+    assert.match(icon, /shape-rendering="crispEdges"/);
+    assert.match(icon, /aria-hidden="true"/);
+  }
+  assert.equal(VIEWS.find((v) => v.id === 'bag').label, 'Bag');
+});
+
+test('Status strip: hearts = stamina (one heart per 2), magic bar = mana, gem counter = points, level', () => {
+  const g0 = game();
+  g0.energy(`${MON}T07:00:00`, 7, 5.5);
+  const html = statusStrip(play(g0.records, T(`${MON}T12:00:00`)));
+  assert.match(html, /class="ds-strip"/);
+  const hearts = [...html.matchAll(/class="heart (full|half|empty)"/g)].map((m) => m[1]);
+  assert.deepEqual(hearts, ['full', 'full', 'full', 'half', 'empty']);
+  assert.match(html, /aria-label="Stamina 7 of 10"/);
+  assert.match(html, /<[^>]*class="magic"[^>]*role="meter"[^>]*aria-label="Mana"[^>]*aria-valuenow="5.5"/);
+  assert.match(html, /id="strip-gem"[^>]*>0</);
+  assert.match(html, /id="strip-level"[^>]*>LV 1</);
+  // Before the morning rating the hearts are empty and say so.
+  const fresh = statusStrip(play([], T(`${MON}T12:00:00`)));
+  assert.match(fresh, /aria-label="Stamina not rated yet"/);
+});
+
+test('Text box: a framed box with a speaker tab, for toasts and confirmations', () => {
+  const html = textBox({ speaker: 'Flow', body: '<p>Saved.</p>', tone: 'success' });
+  assert.match(html, /^<div class="textbox textbox--success"/);
+  assert.match(html, /<span class="textbox-speaker">Flow<\/span>/);
+  assert.match(html, /<p>Saved\.<\/p>/);
+  assert.match(textBox({ speaker: '<b>', body: '' }), /&lt;b&gt;/, 'the speaker is escaped');
+});
+
+test('The pixel font is drawn from the page\'s own CSS: generated, embedded, no external origin', async () => {
+  const { fontFaceCss, buildFont } = await import('../tools/pixel-font.mjs');
+  const css = readFileSync(new URL('../src/pixel-font.css', import.meta.url), 'utf8');
+  assert.equal(css, fontFaceCss(), 'src/pixel-font.css is what tools/pixel-font.mjs generates');
+  assert.match(css, /@font-face\s*{[^}]*font-family: 'Flow Pixel'[^}]*src: url\(data:font\/ttf;base64,/);
+  const ttf = buildFont();
+  const tables = new Set();
+  const view = new DataView(ttf.buffer, ttf.byteOffset, ttf.byteLength);
+  for (let i = 0; i < view.getUint16(4); i++) tables.add(String.fromCharCode(...ttf.slice(12 + i * 16, 16 + i * 16)));
+  for (const t of ['cmap', 'glyf', 'head', 'hhea', 'hmtx', 'loca', 'maxp', 'name', 'post', 'OS/2']) assert.ok(tables.has(t), `has ${t}`);
+  for (const file of ['../index.html', '../src/styles.css', '../src/pixel-font.css']) {
+    const text = readFileSync(new URL(file, import.meta.url), 'utf8');
+    assert.doesNotMatch(text, /(https?:)?\/\/[a-z0-9.-]+\.[a-z]{2,}\//i, `${file} loads nothing from another origin`);
+  }
+});
+
+// ─── Bag (SPEC.md › Inventory; the Bag screen) ──────────────────────────────
+
+/** Running shoes in an active Gym bag, worn for 12 runs; a cable at the desk; beans running low. */
+function stocked() {
+  const g = game();
+  const run = g.task({ id: 'task_run', title: 'Run', skill: 'sk_run', estimate: 30 });
+  const shoes = g.add(M.makeItem(g.db(), { name: 'Running shoes', category: 'Shoes', skills: ['sk_run'], slot: 'feet', place: 'place_gym', price: 120 }));
+  const hdmi = g.add(M.makeItem(g.db(), { name: 'HDMI cable', category: 'Cables', aliases: ['display lead'], place: 'place_desk', qty: 2, price: 15 }));
+  const laptop = g.add(M.makeItem(g.db(), { name: 'Laptop', category: 'Tech', slot: 'tech', place: 'place_desk', price: 900 }));
+  const beans = g.add(M.makeItem(g.db(), { name: 'Coffee beans', category: 'Food', place: 'place_kitchen', consumable: true, lowStock: 1, usual: 3, qty: 1, price: 14 }));
+  const gymBag = g.add({ ...M.makeLoadout(g.db(), { name: 'Gym bag', slots: { feet: shoes.id }, active: true, checklist: ['Towel', 'Water bottle'] }), updatedAt: 2 });
+  const work = g.add({ ...M.makeLoadout(g.db(), { name: 'Work bag', slots: { tech: laptop.id } }), updatedAt: 1 });
+  for (let i = 0; i < 12; i++) {
+    const day = M.addDays('2026-08-01', i);
+    g.add({ id: `done_gear_${i}`, type: 'done', task: run.id, day, start: T(`${day}T07:00:00`), end: T(`${day}T07:30:00`),
+      minutes: 30, measure: 'time', value: 30, quality: 1, gear: [shoes.id], price: { points: 30, base: 30, energy: {} } });
+  }
+  return { g, run, shoes, hdmi, laptop, beans, gymBag, work };
+}
+const bagCtx = (g, ui = {}, at = `${MON}T12:00:00`) => {
+  const saved = [];
+  const toasts = [];
+  const ctx = { db: g.db(), g: play(g.records, T(at)), now: T(at), ui, saved, toasts,
+    store: { add: async (r) => { saved.push(...[r].flat()); }, save: async (r) => { saved.push(...[r].flat()); }, getRecord: (id) => g.db().item.get(id) || g.db().loadouts.find((l) => l.id === id) },
+    toast: (text) => toasts.push(text), confirm: async () => true, render: () => {} };
+  return ctx;
+};
+
+test('Bag: the paper doll shows the active loadout slot by slot, empty slots included', () => {
+  const { g, shoes } = stocked();
+  const html = bag.render(bagCtx(g));
+  const slots = [...html.matchAll(/data-slot="([a-z]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(slots, M.SLOTS, 'the eight slots, in order');
+  const feet = new RegExp(`data-slot="feet"[^>]*data-item="${shoes.id}"[^>]*>[\\s\\S]*?Running shoes`).exec(html);
+  assert.ok(feet, 'the shoes are on the feet');
+  assert.match(html, /data-slot="head"[^>]*>[\s\S]*?(empty|—)/, 'an empty slot says so');
+  assert.match(html, /id="doll"[\s\S]*?Gym bag/, 'named after the loadout shown');
+});
+
+test('Bag: loadouts listed with the active one marked, an Equip button on the others, the packing checklist, and the gear bonus', () => {
+  const { g, gymBag, work } = stocked();
+  const html = bag.render(bagCtx(g));
+  const tab = (id) => new RegExp(`<button[^>]*data-loadout="${id}"[^>]*>`).exec(html)?.[0];
+  assert.ok(tab(gymBag.id) && tab(work.id), 'a tab per loadout');
+  assert.match(tab(gymBag.id), /aria-pressed="true"/, 'the active one is shown first');
+  assert.match(html, /Gym bag[\s\S]{0,200}(active|equipped)/i);
+  assert.match(html, /Towel[\s\S]*Water bottle/, 'its checklist');
+  assert.match(html, /id="gear-bonus"[\s\S]*?Running shoes \+1% · 12 uses/, '+1% per 10 uses while equipped');
+  // Showing another loadout offers to equip it.
+  const other = bag.render(bagCtx(g, { loadout: work.id }));
+  assert.match(other, new RegExp(`data-action="equip"[^>]*data-loadout="${work.id}"`));
+  assert.match(other, /data-slot="tech"[^>]*>[\s\S]*?Laptop/);
+});
+
+test('Bag: Equip makes one loadout active and the others not', async () => {
+  const { g, gymBag, work } = stocked();
+  const ctx = bagCtx(g);
+  await bag.actions.equip({ dataset: { loadout: work.id } }, ctx);
+  const byId = Object.fromEntries(ctx.saved.map((r) => [r.id, r]));
+  assert.equal(byId[work.id].active, true);
+  assert.equal(byId[gymBag.id].active, false);
+});
+
+test('Bag: a stash per storage place, each item a cell with a tooltip; equipped items stay in their stash', () => {
+  const { g, shoes, hdmi, beans } = stocked();
+  const html = bag.render(bagCtx(g));
+  const places = [...html.matchAll(/<section[^>]*class="stash[^"]*"[^>]*data-place="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(places.sort(), ['place_desk', 'place_gym', 'place_kitchen']);
+  assert.match(html, /data-place="place_desk"[\s\S]*?Desk/);
+  const cell = (id) => new RegExp(`<button[^>]*class="cell[^"]*"[^>]*data-item="${id}"[^>]*>`).exec(html)?.[0];
+  assert.ok(cell(hdmi.id), 'a cell for the cable');
+  assert.match(cell(hdmi.id), /title="HDMI cable ×2 · Desk · Skip buying \+15 pts"/);
+  assert.match(cell(shoes.id), /in-use/, 'the equipped shoes are marked in use');
+  assert.match(cell(shoes.id), /Skip buying \+100 pts/, 'a skip pays at most the daily cap');
+  assert.match(cell(beans.id), /\blow\b/, 'low stock is flagged');
+});
+
+test('Bag: "have it" lookup — what you own that matches, where, and a skip button', async () => {
+  const { g, hdmi } = stocked();
+  const ctx = bagCtx(g);
+  await bag.forms.have({ query: 'display lead', price: '15' }, null, ctx);
+  assert.deepEqual(ctx.ui.have, { query: 'display lead', price: 15 });
+  const html = bag.render(ctx);
+  assert.match(html, /id="have-result"[\s\S]*You own 2: Desk/);
+  assert.match(html, new RegExp(`data-action="skip"[^>]*data-item="${hdmi.id}"[^>]*>[^<]*\\+15`), 'skip on the match, with its points');
+  assert.match(html, /data-action="spend"/, 'buying anyway is allowed');
+  // Nothing owned: no skip, buying is fine.
+  const none = bagCtx(g, { have: { query: 'ski wax', price: 20 } });
+  const miss = bag.render(none);
+  assert.match(miss, /You own nothing like/);
+  assert.doesNotMatch(miss, /data-action="skip"/);
+  assert.match(miss, /data-action="spend"/);
+});
+
+test('Bag: the skip button writes a skip record (1 pt per dollar, no XP) and says so', async () => {
+  const { g, hdmi } = stocked();
+  const ctx = bagCtx(g, { have: { query: 'display lead', price: 15 } });
+  await bag.actions.skip({ dataset: { item: hdmi.id } }, ctx);
+  assert.equal(ctx.saved.length, 1);
+  const s = ctx.saved[0];
+  assert.equal(s.type, 'skip');
+  assert.equal(s.item, hdmi.id);
+  assert.equal(s.price, 15);
+  assert.equal(s.points, 15);
+  assert.equal(s.at, ctx.now);
+  assert.equal(ctx.ui.have, null, 'the lookup is done');
+  assert.match(ctx.toasts.join(' '), /\+15/);
+});
+
+test('Bag: buy anyway records the spend and restocks the owned item (no penalty)', async () => {
+  const { g, hdmi } = stocked();
+  const ctx = bagCtx(g, { have: { query: 'HDMI cable', price: 12 } });
+  await bag.actions.spend({ dataset: { item: hdmi.id } }, ctx);
+  const spend = ctx.saved.find((r) => r.type === 'spend');
+  assert.ok(spend);
+  assert.equal(spend.price, 12);
+  assert.equal(spend.item, hdmi.id);
+  const stock = ctx.saved.find((r) => r.type === 'item');
+  assert.equal(stock.id, hdmi.id);
+  assert.equal(stock.qty, 3);
+  // Something new becomes a new item.
+  const ctx2 = bagCtx(g, { have: { query: 'Ski wax', price: 20 } });
+  await bag.actions.spend({ dataset: {} }, ctx2);
+  const fresh = ctx2.saved.find((r) => r.type === 'item');
+  assert.equal(fresh.name, 'Ski wax');
+  assert.equal(ctx2.saved.find((r) => r.type === 'spend').item, fresh.id);
+});
+
+test('Bag: money saved vs spent this month, and skip points today against the cap', () => {
+  const { g } = stocked();
+  g.add(M.makeSkip(g.db(), { query: 'Lamp', price: 15, at: T(`${MON}T09:00:00`) }));
+  g.add(M.makeSpend(g.db(), { name: 'Tape', price: 30, at: T(`${MON}T10:00:00`) }));
+  g.add(M.makeSpend(g.db(), { name: 'Old', price: 99, at: T('2026-08-10T10:00:00') }));
+  const html = bag.render(bagCtx(g));
+  assert.match(html, /id="money"[\s\S]*saved \$15[\s\S]*spent \$30/);
+  assert.match(html, /15\/100/);
+});
+
+test('Bag: the shopping list flags what you already own, and low stock asks for the usual amount', () => {
+  const { g } = stocked();
+  g.add(M.makeWish(g.db(), { name: 'HDMI cable' }));
+  const html = bag.render(bagCtx(g));
+  assert.match(html, /id="shopping"[\s\S]*HDMI cable[\s\S]*you own/i);
+  assert.match(html, /Coffee beans ×2/, 'have 1, usual 3 → buy 2');
+});
+
+test('Bag: an empty bag renders, with the quick add form', () => {
+  const html = bag.render(bagCtx(game()));
+  assert.match(html, /data-form="item"/);
+  assert.match(html, /data-form="have"/);
+  assert.match(html, /No loadouts yet|no loadout/i);
+});
+
+test('Bag: quick add writes an item at a place', async () => {
+  const { g } = stocked();
+  const ctx = bagCtx(g);
+  await bag.forms.item({ name: 'Tape', category: 'Tools', place: 'place_warehouse', qty: '2', price: '4', slot: '' }, null, ctx);
+  const it = ctx.saved[0];
+  assert.equal(it.type, 'item');
+  assert.equal(it.name, 'Tape');
+  assert.equal(it.place, 'place_warehouse');
+  assert.equal(it.qty, 2);
+  assert.equal(it.price, 4);
+});

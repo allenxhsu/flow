@@ -135,8 +135,9 @@ second in the same week replaces the first.
 ## Architecture
 
 - A toolkit app: id **`flow`**, served by the Portal (Sign in with Google,
-  PWA), synced by sync-kit in workspace `flow`, styled with ui-kit, a Mac app
-  via shell-kit later. No build step; vendored `ui-kit/` and `sync-kit/`
+  PWA), synced by sync-kit in workspace `flow`, a Mac app via shell-kit later.
+  Its screens have their own handheld look (see "The app's screens match the
+  game"); ui-kit supplies only the Portal's shared top bar. No build step; vendored `ui-kit/` and `sync-kit/`
   (each repo's `scripts/copy-into.mjs`, with `--check`).
 - Records: definitions (settings, stat, skill, task, reward, place, kind) are
   last-write-wins; events (done, rework, purchase, energy, review, moment) are

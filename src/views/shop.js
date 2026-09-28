@@ -46,7 +46,7 @@ export function render(ctx) {
       ${g.rewards.length ? `<div class="grid">${g.rewards.map((r) => rewardItem(ctx, r)).join('')}</div>` : '<div class="muted-box">No rewards yet.</div>'}</div>
     <div class="stack"><h2>Purchases</h2>
       ${g.purchases.length ? `<div class="table-wrap"><table class="sc-table" id="purchases"><thead><tr><th>When</th><th>Reward</th><th>Price</th><th>Charged</th></tr></thead><tbody>
-        ${g.purchases.map((p) => `<tr><td class="num">${when(p.at)}</td><td>${esc(p.title)}</td><td class="num">${fmtPts(p.price)}</td><td class="num">${fmtPts(p.charged)}${p.charged > p.price ? ' <span class="sc-pill" style="--tint: var(--sc-danger)">debt</span>' : ''}</td></tr>`).join('')}
+        ${g.purchases.map((p) => `<tr><td class="num">${when(p.at)}</td><td>${esc(p.title)}</td><td class="num">${fmtPts(p.price)}</td><td class="num">${fmtPts(p.charged)}${p.charged > p.price ? ` <span class="sc-pill" style="--tint: var(--sc-danger)">debt ×${DIFFICULTY.find((d) => d.id === p.difficulty)?.debt ?? DEBT_MULTIPLIER}</span>` : ''}</td></tr>`).join('')}
       </tbody></table></div>` : '<div class="muted-box">Nothing bought yet.</div>'}</div>
   </div>`;
 }
