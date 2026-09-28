@@ -469,7 +469,7 @@ export function createGame(root, opts) {
     g.fillStyle = '#f8f8f0'; g.fillRect(0, 0, VW, VH);
     g.fillStyle = '#e0e4d0'; g.beginPath(); g.ellipse(200, 92, 44, 9, 0, 0, 7); g.fill(); g.beginPath(); g.ellipse(64, 136, 54, 11, 0, 0, 7); g.fill();
     const pips = (x, y, n) => { for (let i = 0; i < 6; i++) { g.fillStyle = '#383048'; g.beginPath(); g.arc(x + 4 + i * 10, y, 4, 0, 7); g.fill(); g.fillStyle = i < n ? '#58c060' : '#f8f8f0'; g.beginPath(); g.arc(x + 4 + i * 10, y, 3, 0, 7); g.fill(); } };
-    g.fillStyle = '#383048'; g.font = '8px monospace'; g.fillText(b.n.name.toUpperCase(), 18, 20); pips(18, 30, b.hp);
+    g.fillStyle = '#383048'; g.font = '8px monospace'; g.fillText(b.n.name.toUpperCase(), 18, 44); pips(18, 54, b.hp);
     g.save(); g.translate(176, 30); g.scale(3, 3); g.drawImage(spriteFor(npcSpr.get(b.n.id), 'down', 0), 0, 0); g.restore();
     g.save(); g.translate(34, 76); g.scale(3, 3); g.drawImage(heroSpr.up0, 0, 0); g.restore();
     g.fillStyle = '#383048'; g.fillText((opts.name || 'YOU').toUpperCase(), 136, 108); pips(136, 118, b.you);
