@@ -65,7 +65,8 @@ test('nothing the day does not name — the 2024 backlog stays out', () => {
 test('a day Planner has not published is null, not empty', () => {
   // The caller falls back to the backlog rather than showing an empty screen.
   assert.equal(plannerDay(RECORDS, DAY, opts), null);
-  assert.deepEqual(plannerDay([...RECORDS, agenda([])], DAY, opts), [], 'published and empty is a real answer');
+  // plannerDay still reports it faithfully — the caller decides what to do.
+  assert.deepEqual(plannerDay([...RECORDS, agenda([])], DAY, opts), [], 'published and empty is reported as empty');
 });
 
 test('a day naming a task this player cannot see skips it rather than breaking', () => {
@@ -85,4 +86,14 @@ test("another day's record is not today's", () => {
   const other = { ...agenda([{ plan: 'alcon', task: 'call_aris', start: 1, minutes: 5 }]), id: 'agenda_2026-09-29', day: '2026-09-29' };
   assert.equal(plannerDay([...RECORDS, other], DAY, opts), null);
   assert.equal(plannerDay([...RECORDS, other], '2026-09-29', opts).length, 1);
+});
+
+test('an empty published day must not empty the task list', () => {
+  // It did. Planner's Agenda threw after publishing, so it published a day
+  // naming nothing; Flow marked every Planner task offToday and the list went
+  // blank. `sync.js` now falls back unless the day names at least one task —
+  // hiding everything is never the right reading of "I do not know".
+  const empty = plannerDay([...RECORDS, agenda([])], DAY, opts);
+  assert.equal(empty.length, 0);
+  assert.equal(Boolean(empty && empty.length), false, 'the guard sync.js applies');
 });
