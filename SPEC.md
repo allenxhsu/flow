@@ -320,6 +320,13 @@ finished in the other.
   list) | `app` (lines) | `leave`), and the desk position(s) that open TASKS.
   Unknown keys are ignored; an invalid pack is refused with the reason and
   never half-applied.
+- **One game, two clocks.** Play runs on the **real clock**: the HUD clock is
+  the time now, day and night follow it, the meters are the live ones, and a
+  running timer shows the hero at that task's place working with the elapsed
+  time. **Replay is the same game in fast forward** over a chosen day's
+  records: the hero walks the day's events in order (1×/2×/skip, scrubber, as
+  in Day Replay), in the same world — generic or the player's pack — and
+  input is off while replaying.
 - The generic world and the pack share one engine: 256×192 lower/upper screens
   at 4:3, the DS-style 3D rooms, chibi sprites, text box and menus.
 
