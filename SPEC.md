@@ -13,9 +13,11 @@ life satisfaction up ≥ 1 point. One player.
 
 **Flow is a productivity tool first.** Tasks, the timer, points, energy,
 rework, the shop, inventory, reviews and difficulty are the product. The
-playable Day Replay (walking the house, the drive, the lot and the shop floor)
-is a side quest for replaying the day, never the way work gets logged, and
-the app's screens take their look from it.
+playable game (walking the house, the drive, the lot and the shop floor) is a
+side quest for replaying the day **and also an input** (decided 2026-09-28):
+from inside it the player can start a task, finish one, and add a new one,
+writing exactly the records the app's own screens write. The app's screens
+take their look from it. See "## Play".
 
 ## Shape
 
@@ -279,6 +281,47 @@ ui-kit sci-fi HUD inside Flow (the Portal's shared top bar stays):
 Original work only, as above. The replay's personal version (the player's own
 home and workplace, and real colleagues) is kept off this public repository;
 the Replay tab here draws the generic world above.
+
+## Play (decided 2026-09-28)
+
+A **Play** tab runs the game inside Flow, on the same records and the same
+device timer (`flow.timer`) as the Now screen, so work started in one can be
+finished in the other.
+
+- **Input, two ways:** a **TASKS** button on the lower screen works anywhere;
+  walking up to the player's desk or PC and pressing the action button opens
+  the same menu. The menu lists what Now's "Next" lists (Planner tasks
+  included) and offers:
+  - **Start** — starts the timer on a task; asks "Is this rework of …?" exactly
+    as the timer does on Now.
+  - **Finish** — stops the timer (or, with no timer, asks the minutes) and
+    asks the measure's value and the quality as Log done does; the text box
+    then shows the points breakdown. Planner tasks finished here are logged in
+    Flow only (Planner stays read-only).
+  - **New task** — the title on the on-screen letter grid used for the name
+    entry, then estimate (15/30/45/60/90/120 min or typed), skill, cadence,
+    critical; written with `makeTask`. Always a Flow task, never a Planner one.
+  - **Cancel timer.**
+  Every write goes through the same model functions (`makeDone`, `makeTask`,
+  `makeRework`) and the same sync as the app; nothing is game-only.
+- **The world is data.** The public repository carries the engine and a
+  generic world (a generic home, road, workplace with a lot and a floor, a
+  shop and a restaurant; made-up NPC names). The player's own home, workplace,
+  car, colleagues and their lines are a private **world pack**: a `world`
+  record in Flow's workspace (a definition, last-write-wins), imported once in
+  Settings from a `flow.world` JSON file and synced to the player's other
+  devices like their tasks. It is never committed to any repository. Removing
+  it returns the generic world.
+- **World pack format** (`format: 'flow.world'`, `version: 1`): name, player
+  car, levels (id, name, size, rooms, doors, furniture with model ids,
+  exits), map places (id, name, kind: home | work | shop | food | other,
+  position), NPCs (id, name, level, position, sprite options, dialogue lines,
+  choices → `talk` | `walk` (a lap: +points as a moment) | `battle` (lines
+  list) | `app` (lines) | `leave`), and the desk position(s) that open TASKS.
+  Unknown keys are ignored; an invalid pack is refused with the reason and
+  never half-applied.
+- The generic world and the pack share one engine: 256×192 lower/upper screens
+  at 4:3, the DS-style 3D rooms, chibi sprites, text box and menus.
 
 ## Planner tasks (phase 2, decided 2026-09-28)
 
