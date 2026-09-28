@@ -251,3 +251,42 @@ test('difficulty: shown by flow difficulty, set in the review, per skill, from t
     p.done();
   }
 });
+
+test('flow fix: withdraw a record that should never have counted, and put it back', () => {
+  const p = player();
+  const { run, fails } = p;
+  try {
+    run('init', '--name', 'Allen', '--stats', 'Body,Work');
+    run('skill', 'add', '--name', 'Procurement', '--stat', 'work');
+    run('task', 'add', '--title', 'Purchase request', '--skill', 'procure', '--estimate', '30');
+    run('done', 'purchase', '--minutes', '30');
+    const earned = JSON.parse(run('status', '--json')).balance;
+    assert.ok(earned > 0);
+
+    const id = /\bdone_[A-Za-z0-9_]+/.exec(run('log'))[0];
+    assert.match(fails('fix', id, '--void'), /reason/i);
+    const out = run('fix', id, '--void', '--reason', 'ticked off, nothing was done');
+    assert.match(out, /Withdrew done/);
+    assert.equal(JSON.parse(run('status', '--json')).balance, 0);
+
+    const listed = run('fix', '--list');
+    assert.match(listed, /ticked off, nothing was done/);
+    const cid = /\bcorrection_\S+/.exec(listed)[0].replace(/[[\]]/g, '');
+    assert.match(run('unfix', cid), /back/);
+    assert.equal(JSON.parse(run('status', '--json')).balance, earned);
+  } finally { p.done(); }
+});
+
+test('flow fix: correct the points on a record without withdrawing it', () => {
+  const p = player();
+  const { run } = p;
+  try {
+    run('init', '--name', 'Allen', '--stats', 'Body,Work');
+    run('skill', 'add', '--name', 'Procurement', '--stat', 'work');
+    run('task', 'add', '--title', 'Talk to Jeffery', '--skill', 'procure', '--estimate', '45');
+    run('done', 'jeffery', '--minutes', '45');
+    const id = /\bdone_[A-Za-z0-9_]+/.exec(run('log'))[0];
+    assert.match(run('fix', id, '--points', '45', '--reason', '45 minutes is 45 points'), /Corrected done/);
+    assert.equal(JSON.parse(run('status', '--json')).balance, 45);
+  } finally { p.done(); }
+});

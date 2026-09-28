@@ -10,6 +10,7 @@ import * as shop from './shop.js';
 import * as review from './review.js';
 import * as replay from './replay.js';
 import * as play from './play.js';
+import * as fix from './fix.js';
 import * as settings from './settings.js';
 import * as rules from './rules.js';
 
@@ -22,6 +23,7 @@ export const VIEWS = [
   { id: 'review', label: 'Review', glyph: '◷', mod: review },
   { id: 'play', label: 'Play', glyph: '◉', mod: play },
   { id: 'replay', label: 'Replay', glyph: '▦', mod: replay },
+  { id: 'fix', label: 'Fix', glyph: '✎', mod: fix },
   { id: 'settings', label: 'Settings', glyph: '⚙', mod: settings },
   { id: 'rules', label: 'Rules', glyph: '§', mod: rules },
 ];

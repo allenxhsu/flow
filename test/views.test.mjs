@@ -201,7 +201,7 @@ import { statusStrip, textBox, pixelIcon } from '../src/ds.js';
 import * as bag from '../src/views/bag.js';
 
 test('Views: every screen of the SPEC, Bag among them, each with a label, an original pixel icon and a renderer', () => {
-  assert.deepEqual(VIEWS.map((v) => v.id), ['now', 'tasks', 'skills', 'bag', 'shop', 'review', 'play', 'replay', 'settings', 'rules']);
+  assert.deepEqual(VIEWS.map((v) => v.id), ['now', 'tasks', 'skills', 'bag', 'shop', 'review', 'play', 'replay', 'fix', 'settings', 'rules']);
   for (const v of VIEWS) {
     assert.equal(typeof v.label, 'string');
     assert.equal(typeof v.mod.render, 'function', `${v.id} renders`);

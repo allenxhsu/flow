@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as M from '../src/model.js';
-import { game, T } from './helpers.mjs';
+import { game, baseRecords, T } from './helpers.mjs';
 
 // name → arity (Function.length: parameters before the first default)
 const FUNCTIONS = {
@@ -27,7 +27,7 @@ const CONSTANTS = {
 };
 
 const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish', 'world'];
-const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit'];
+const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit', 'correction'];
 const D = '2026-09-28';
 
 test('contract: every function in docs/API.md is exported with its arity', () => {
@@ -333,4 +333,22 @@ test('contract (terminal): makeTired(db, { body, mind, level, at }) → an energ
   for (const k of ['id', 'type', 'day', 'at', 'stamina', 'mana', 'feeling', 'tired']) assert.ok(k in r, `tired.${k}`);
   assert.equal(r.type, 'energy');
   assert.deepEqual(r.tired, { body: true, mind: false, level: 'bit' });
+});
+
+test('contract: corrections — makeCorrection, undoCorrection and what index() hands the screens', () => {
+  const g2 = M.index(baseRecords());
+  assert.deepEqual(M.AMENDABLE, ['minutes', 'points', 'note']);
+  assert.deepEqual(M.CORRECTION_KINDS, ['void', 'amend']);
+  assert.ok(Array.isArray(g2.corrections), 'index(records).corrections');
+  assert.ok(g2.correction instanceof Map, 'index(records).correction: target id → its corrections');
+
+  const w = game();
+  const t = w.task({ title: 'Mail', skill: 'sk_mail', measure: 'time', cadence: 'anytime', estimate: 30 });
+  const d = w.done(t, `${D}T10:00:00`, 30);
+  const c = M.makeCorrection(w.db(), { target: d.id, kind: 'void', reason: 'logged twice', at: T(`${D}T11:00:00`) });
+  for (const k of ['id', 'type', 'target', 'of', 'kind', 'reason', 'at', 'day']) assert.ok(k in c, `correction.${k}`);
+  assert.equal(c.of, 'done', 'the type it corrects, so a list can say what it was');
+  assert.equal(typeof M.undoCorrection, 'function');
+  assert.equal(M.undoCorrection(c, { now: T(`${D}T12:00:00`), device: 'dev1' }).deletedAt, T(`${D}T12:00:00`));
+  assert.throws(() => M.undoCorrection({ id: 'done_x', type: 'done' }), /correction/);
 });

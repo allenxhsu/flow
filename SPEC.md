@@ -64,6 +64,57 @@ take their look from it. See "## Play".
   the timer asks "is this rework of X?" when starting a task finished in the
   last 14 days.
 
+## Corrections (decided 2026-09-28)
+
+Rework is for work that was really done and then had to be redone. A
+**correction** is for the other case: a record that should never have counted —
+a completion logged twice, a tick that earned points for nothing, minutes typed
+wrong. Events are write-once, so nothing is edited or deleted in place. A
+correction is its own write-once event naming the event it corrects, and every
+screen derives from the corrected records, so points, levels, balances and the
+history follow at once while the original stays in the store.
+
+- **Two kinds.** `void` withdraws the event: it stops counting anywhere —
+  points, levels, balances, streaks, personal bests, targets, achievements, the
+  replay — as if it had never been written. `amend` replaces named numbers on it
+  and leaves the rest: **`minutes`**, **`points`** and **`note`**, and nothing
+  else, because everything else is derived.
+- **Any event can be corrected** (done, rework, purchase, energy, review,
+  moment, skip, spend, visit) and a correction names exactly one event by id.
+  Voiding a `done` also withdraws the rework logged against it: a penalty for
+  a completion that never happened is not a debt.
+- **A correction is honest about points.** An amended `points` is the number
+  the player typed, not a reprice; a void simply removes the points the event
+  carried. Nothing recomputes a price, so a correction cannot quietly rewrite
+  the past the way calibration must never.
+- **Corrections are events too.** Several may name one event and the latest
+  wins field by field. A correction written in error is undone by deleting the
+  correction record — the one deletion Flow allows, because it puts a record
+  back rather than taking one away.
+- **A reason is required**, in the player's words, and is shown beside the
+  withdrawn record for as long as it exists.
+- Corrections are the player's own, not something the app writes for itself.
+  Nothing derives or automates them; when Flow itself should stop logging
+  something, that is a rule, not a correction.
+
+### Contract
+
+- `makeCorrection(db, { target, kind, patch, reason, at })` → the record
+  `{ id, type: 'correction', target, kind, patch, reason, at, day }`, or throws:
+  no such event, a target that is not an event, a blank reason, an unknown
+  kind, an `amend` of a field that is not amendable or with no field at all,
+  and a `void` of an event already voided.
+- `AMENDABLE = ['minutes', 'points', 'note']`.
+- `index(records)` applies them: a voided event is in no list, an amended one
+  carries its new numbers and `corrected: true`, and `db.corrections` holds
+  them in time order with `db.correction` mapping target id → the corrections
+  on it.
+- App: the **Fix** screen lists the recent events with what each earned, and
+  withdraws or amends one — or several at once, one reason for the batch — and
+  lists the corrections made, each undoable.
+- CLI: `flow fix <event-id> --void --reason "…"`, `flow fix <event-id>
+  --minutes N --points N --reason "…"`, `flow fix --list`, `flow unfix <id>`.
+
 ## Shop and debt
 
 - Rewards are **treat food and indulgences**, priced by the player (guide: a
@@ -461,6 +512,17 @@ plan. Flow's own tasks (dailies, habits, chores) stay alongside.
   in Tasks' open list, not in Play or the Terminal — whether or not Flow logged
   it (history before the cutoff below is not logged, but it is still done).
   Reopened in Planner, it is open again.
+- **Today is Planner's Today** (decided 2026-09-28): Planner publishes the day
+  its calendar laid (an `agenda` record, its `model/dayplan.js`), and a Planner
+  task that is not on it is not today's work — it is somewhere in a backlog
+  that on a real planner runs to hundreds of tasks going back years. It is not
+  offered anywhere: not on Now, not in Tasks, not in Play's Start menu, not in
+  the Terminal, and the picker never suggests it. It stays in the index, so a
+  stored completion keeps its title and skill. Flow's own tasks are not
+  Planner's to schedule and are never hidden by this. When Planner has not
+  published the day, or published one naming nothing, nothing is hidden: an
+  empty list is far likelier to be a failure to compute the day than a day
+  with no work on it.
 - **Shape:** each becomes a derived Flow task — never stored — with id
   `task_pl_<planId>_<taskId>`, title the task's name, project name shown,
   measure `time`, cadence `once`, `source: { app: 'project', plan, task }`:

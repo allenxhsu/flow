@@ -29,7 +29,7 @@ import {
   SYNC_CURSOR_KEYS, publishStatus, onSyncNow,
   portalApp, portalSession, portalRemote, requestPersistentStorage, storageStatus, mergeRecord,
 } from '../sync-kit/js/index.js';
-import { index, stamp, tombstone, dayOf, RECORD_TYPES, EVENT_TYPES } from './model.js';
+import { index, stamp, tombstone, undoCorrection as undo, dayOf, RECORD_TYPES, EVENT_TYPES } from './model.js';
 import { plannerTasks, plannerEvents, plannerHistory, plannerSinceStamp, expiredOps, plannerDay } from './planner.js';
 import { pushOps, opsToWrite, plannerUrlFrom, isOp } from './planops.js';
 
@@ -214,6 +214,17 @@ export async function remove(record) {
   const current = byId.get(record.id) || record;
   if (EVENTS.has(current.type)) throw new Error('events are never deleted');
   await persist([tombstone(current, { now: clockFor(current.id), device: deviceId() })]);
+}
+
+/**
+ * Undo a correction (SPEC.md › Corrections): the one deletion Flow allows,
+ * because it puts a record back rather than taking one away. The correction
+ * itself is tombstoned, so the undo travels to the other devices too.
+ */
+export async function undoCorrection(id) {
+  const rec = byId.get(id);
+  if (!rec) throw new Error(`no correction ${id}`);
+  await persist([undo(rec, { now: clockFor(rec.id), device: deviceId() })]);
 }
 
 // ------------------------------------------------------------ export / import
