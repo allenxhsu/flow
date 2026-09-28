@@ -12,6 +12,7 @@ Start with [SPEC.md](SPEC.md). The rules are [src/model.js](src/model.js).
 ./serve.sh            # http://localhost:8201 (no build step)
 npm test              # node --test: the model's tests and the page's pure helpers
 node e2e/app-e2e.mjs  # Playwright (global install) against ./serve.sh, at 390px
+node e2e/bag-e2e.mjs  # the Bag (house inventory), at 390px and 1280px
 node e2e/app-e2e.mjs --sync http://127.0.0.1:8092/w/flow <token>   # + two-device sync
 ```
 

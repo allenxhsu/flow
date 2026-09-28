@@ -12,6 +12,7 @@ import * as now from './views/now.js';
 import * as tasks from './views/tasks.js';
 import * as skills from './views/skills.js';
 import * as shop from './views/shop.js';
+import * as bag from './views/bag.js';
 import * as review from './views/review.js';
 import * as replay from './views/replay.js';
 import * as settings from './views/settings.js';
@@ -21,6 +22,7 @@ const VIEWS = [
   { id: 'now', label: 'Now', glyph: '▶', mod: now },
   { id: 'tasks', label: 'Tasks', glyph: '☰', mod: tasks },
   { id: 'skills', label: 'Skills', glyph: '✦', mod: skills },
+  { id: 'bag', label: 'Bag', glyph: '▣', mod: bag },
   { id: 'shop', label: 'Shop', glyph: '◆', mod: shop },
   { id: 'review', label: 'Review', glyph: '◷', mod: review },
   { id: 'replay', label: 'Replay', glyph: '▦', mod: replay },

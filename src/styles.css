@@ -116,3 +116,28 @@ input[type='color'] { width: 100%; height: 34px; padding: 2px; background: var(-
   .sc-content { padding: var(--sc-space-3); }
   .timer { font-size: var(--sc-text-xl); }
 }
+
+/* Bag: the house inventory. The tree beside the list; stacked on a phone. */
+.bag-layout { display: grid; grid-template-columns: minmax(200px, 260px) minmax(0, 1fr); gap: var(--sc-space-4); align-items: start; }
+.bag-places { display: grid; gap: 2px; }
+.bag-place { display: flex; align-items: center; gap: var(--sc-space-2); width: 100%; min-height: 32px; padding: 4px 8px 4px calc(8px + var(--depth, 0) * 14px); background: none; border: 1px solid transparent; color: var(--sc-text); font: inherit; text-align: left; cursor: pointer; }
+.bag-place:hover { border-color: var(--sc-line); }
+.bag-place.is-active { background: var(--sc-panel-2); border-color: var(--sc-app); }
+.bag-place-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bag-count { font-family: var(--sc-font-mono); font-size: var(--sc-text-sm); color: var(--sc-text-3); }
+.bag-place-form { padding-top: var(--sc-space-2); border-top: 1px solid var(--sc-line); }
+.bag-item { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto; align-items: center; gap: var(--sc-space-3); padding: var(--sc-space-2) var(--sc-space-3); border: 1px solid var(--sc-line); background: var(--sc-panel-2); min-width: 0; }
+.bag-thumb { width: 44px; height: 44px; padding: 0; border: 1px solid var(--sc-line); background: var(--sc-sunken); cursor: pointer; overflow: hidden; }
+.bag-thumb img, .bag-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.bag-thumb span { display: block; width: 100%; height: 100%; }
+.bag-photos { display: flex; flex-wrap: wrap; gap: var(--sc-space-2); align-items: center; }
+.bag-photos figure { margin: 0; display: grid; gap: 2px; justify-items: center; }
+.bag-photo { width: 96px; height: 96px; padding: 0; border: 1px solid var(--sc-line); background: var(--sc-sunken); cursor: zoom-in; overflow: hidden; }
+.bag-add { cursor: pointer; justify-self: start; }
+.bag-viewer { display: block; max-width: 100%; max-height: 70vh; margin: 0 auto; }
+@media (max-width: 760px) {
+  .bag-layout { grid-template-columns: minmax(0, 1fr); }
+  .bag-tree { order: 2; } /* search and the list first; the tree below */
+  .bag-item { grid-template-columns: 44px minmax(0, 1fr) auto; }
+  .bag-item > .num { display: none; }
+}
