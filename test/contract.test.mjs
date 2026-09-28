@@ -26,7 +26,7 @@ const CONSTANTS = {
 };
 
 const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish'];
-const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend'];
+const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'file'];
 const D = '2026-09-28';
 
 test('contract: every function in docs/API.md is exported with its arity', () => {
@@ -225,4 +225,44 @@ test('contract: difficulty tiers, settings and snapshots', async () => {
   assert.equal(M.dailyStreak.length, 2, 'dailyStreak(days, day, grace = 1)');
   const d = M.play([], new Date('2026-09-28T12:00:00').getTime()).difficulty;
   assert.deepEqual(Object.keys(d).sort(), ['changesAt', 'name', 'next', 'skills', 'tier', 'unlocked']);
+});
+
+// House inventory (SPEC.md "House inventory"): nested places, item details, file records.
+const HOUSE_FUNCTIONS = {
+  placePath: 2, placesWithin: 2, placeTree: 1, movePlace: 3, placeRemoval: 2,
+  makeFile: 2, filesOf: 2, searchItems: 2, inventoryCSV: 2, labelSheet: 2,
+};
+
+test('contract (house inventory): new functions are exported with their arity', () => {
+  for (const [name, arity] of Object.entries(HOUSE_FUNCTIONS)) {
+    assert.equal(typeof M[name], 'function', name);
+    assert.equal(M[name].length, arity, `${name}.length`);
+  }
+});
+
+test('contract (house inventory): constants, and file is the last event', () => {
+  assert.equal(M.FILE_MAX_BYTES, 2 * 1024 * 1024);
+  assert.equal(M.PHOTO_MAX_PX, 1024);
+  assert.equal(M.RECORD_TYPES.at(-1), 'file');
+});
+
+test('contract (house inventory): shapes the Bag relies on', () => {
+  const g = game();
+  const garage = g.add(M.makePlace(g.db(), { name: 'Garage', zone: 'home' }));
+  const box = g.add(M.makePlace(g.db(), { name: 'Box', parent: garage.id }));
+  assert.equal(box.parent, garage.id);
+  const it = g.add(M.makeItem(g.db(), { name: 'Drill', place: box.id }));
+  for (const k of ['brand', 'model', 'serial', 'bought', 'warranty', 'notes', 'photos', 'receipts']) assert.ok(k in it, `item.${k}`);
+  const db = g.db();
+  assert.ok(Array.isArray(db.files) && db.file instanceof Map, 'index().files / .file');
+  const tree = M.placeTree(db);
+  assert.ok(tree.every((x) => x.place && Number.isInteger(x.depth)));
+  const [hit] = M.searchItems(db, 'drill');
+  assert.equal(hit.item.id, it.id);
+  assert.ok(Array.isArray(hit.path) && hit.path.every((p) => p.type === 'place'));
+  assert.deepEqual(Object.keys(M.filesOf(db, it.id)).sort(), ['photos', 'receipts']);
+  assert.equal(typeof M.inventoryCSV(db, db.items), 'string');
+  const sheet = M.labelSheet(db, garage.id);
+  assert.ok(sheet.place && Array.isArray(sheet.path) && Array.isArray(sheet.lines));
+  assert.ok(Array.isArray(M.inventory(g.records, T(`${D}T12:00:00`)).stashes[0].path));
 });
