@@ -9,10 +9,13 @@
 //                 is the right rule for them. `world` is the player's private
 //                 world pack for the game (id 'world'); without one the game
 //                 draws its generic world (src/game/).
-//   events      — done, rework, purchase, energy, review, moment, skip, spend. Written once
-//                 and never edited, so two devices can never overwrite each other.
+//   events      — done, rework, purchase, energy, review, moment, skip, spend, visit.
+//                 Written once and never edited, so two devices can never
+//                 overwrite each other.
 //                 A review redone in the same ISO week is a new event; the
-//                 latest one counts for that week.
+//                 latest one counts for that week. A visit (the iPhone app's
+//                 arrive / leave at a geofenced place) holds place ids and
+//                 times only — the coordinates never leave the device.
 //
 // Every event that moves points carries the points it was priced at (`price`,
 // `charged`), so a later calibration never rewrites the past. Everything else
@@ -126,7 +129,7 @@ export const GEAR_MAX = 0.10;
 export const SLOTS = ['head', 'body', 'legs', 'feet', 'hands', 'bag', 'tech', 'vehicle'];
 
 const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish', 'world'];
-export const EVENT_TYPES = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend'];
+export const EVENT_TYPES = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit'];
 export const RECORD_TYPES = [...DEFINITIONS, ...EVENT_TYPES];
 
 // ─── dates ──────────────────────────────────────────────────────────────────
@@ -207,6 +210,7 @@ export function index(records) {
     skips: by.skip.sort(byStart),
     spends: by.spend.sort(byStart),
     world: worldRecord(records),
+    visits: by.visit.sort((a, b) => a.leave - b.leave || a.id.localeCompare(b.id)),
   };
 }
 
@@ -267,6 +271,46 @@ export function makeMoment(db, kindRef, { start, end = Date.now(), place, who = 
     id: newId('moment', end), type: 'moment', kind: kind.id, title: kind.title, day: dayOf(start), start, end, place, who, note,
     energy: { stamina: round((kind.staminaPerHour || 0) * hours), mana: round((kind.manaPerHour || 0) * hours) },
   };
+}
+
+// ─── places: arrive and leave (the iPhone app) ──────────────────────────────
+
+/** Leave one geofenced place and arrive at another within this long, and it was a drive. */
+export const AUTO_DRIVE_MAX_MIN = 180;
+
+/**
+ * A stay at a geofenced place, written when it ends. `arrive` is null when
+ * the arrival was not seen (monitoring began with the player inside). Only
+ * the place id and the times are kept: anything else offered is dropped, so
+ * a coordinate can never reach a record. The id comes from the stay itself,
+ * so the same stay reported twice is one record.
+ */
+export function makeVisit(db, { place, arrive = null, leave }) {
+  if (!place || !db.place.has(place)) throw new Error(`no place "${place}"`);
+  if (!Number.isFinite(leave)) throw new Error('a visit is written when you leave: it needs leave');
+  if (arrive != null && !(Number.isFinite(arrive) && arrive <= leave)) throw new Error('a visit ends after it starts');
+  return { id: `visit_${place}_${leave.toString(36)}`, type: 'visit', day: dayOf(arrive ?? leave), place, arrive: arrive ?? null, leave };
+}
+
+/**
+ * The Drive moment an arrival implies: the latest departure from a geofenced
+ * place before `arrive`, when it was from somewhere else and at most
+ * AUTO_DRIVE_MAX_MIN earlier, and no moment already overlaps the time
+ * between. Its id comes from the two times, so every device (and a re-sent
+ * event) writes the same record; once written, it covers the gap itself.
+ */
+export function autoDrive(db, { place, arrive }) {
+  if (!place || !Number.isFinite(arrive)) return null;
+  let from = null;
+  for (const v of db.visits || []) if (v.leave <= arrive && (!from || v.leave > from.leave)) from = v;
+  if (!from || from.place === place) return null;
+  const start = from.leave;
+  if (!(arrive > start) || arrive - start > AUTO_DRIVE_MAX_MIN * 60000) return null;
+  if (db.moments.some((m) => m.start < arrive && m.end > start)) return null;
+  const kind = db.kind.get('kind_drive');
+  if (!kind) return null;
+  const m = makeMoment(db, kind, { start, end: arrive });
+  return { ...m, id: `moment_drive_${start.toString(36)}_${arrive.toString(36)}` };
 }
 
 export function makeTask(db, fields, { now = Date.now() } = {}) {
@@ -834,6 +878,20 @@ function drains(db, day) {
  * Today's stamina and mana: the morning rating, less what each completion
  * cost, plus what rest restored — never above the maximum or below zero.
  */
+/**
+ * Apple Health's suggestion for the morning rating: last night's sleep sets
+ * it (≥ 7.5 h → 8, ≥ 6.5 h → 6, less → 4), yesterday's steps add 1 at
+ * 8 000 or more, never above 10. No sleep data, no suggestion. Only ever a
+ * suggestion: the rating the player picks is what counts.
+ */
+export function suggestRating(health) {
+  const sleep = health?.sleepHours;
+  if (typeof sleep !== 'number' || !Number.isFinite(sleep)) return null;
+  const base = sleep >= 7.5 ? 8 : sleep >= 6.5 ? 6 : 4;
+  const steps = health.steps;
+  return Math.min(ENERGY_MAX, base + (typeof steps === 'number' && steps >= 8000 ? 1 : 0));
+}
+
 export function energyOn(db, day) {
   const rating = [...db.energy].reverse().find((e) => e.day === day) || null;
   const e = { stamina: rating ? rating.stamina : null, mana: rating ? rating.mana : null, rated: !!rating };
@@ -1208,7 +1266,10 @@ export function replayDay(records, day, { now = Date.now() } = {}) {
     events.push({ kind: 'purchase', id: p.id, start: p.at, end: p.at, place: null, title: reward?.title || 'A reward', points: -(p.charged || 0), energy: {}, text: `Bought ${reward?.title || 'a reward'}. −${p.charged}${p.charged > p.price ? ' (on credit, doubled)' : ''}` });
   }
   events.sort((a, b) => a.start - b.start || a.end - b.end);
-  // A purchase happens wherever you already were.
+  // What has no place of its own happened where the iPhone saw the player (a visit)…
+  const visited = (ms) => (db.visits || []).find((v) => (v.arrive ?? v.leave) <= ms && ms <= v.leave)?.place || null;
+  for (const e of events) if (!e.place) e.place = visited(e.start);
+  // …else wherever they already were: a purchase happens where you stood.
   let here = null;
   for (const e of events) { if (!e.place) e.place = here; here = e.place || here; }
 

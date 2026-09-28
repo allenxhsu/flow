@@ -50,6 +50,9 @@ export function makeSkill(db, { name, stat, place = null, now = Date.now() })
 export function makePlace(db, { name, zone = 'elsewhere', now = Date.now() }) 
 export const placeOfTask = (db, task)
 export function makeMoment(db, kindRef, { start, end = Date.now(), place, who = '', note = '' } = {}) 
+export const AUTO_DRIVE_MAX_MIN = 180;
+export function makeVisit(db, { place, arrive = null, leave })   // → { id: visit_<place>_<leave>, type:'visit', day, place, arrive, leave }
+export function autoDrive(db, { place, arrive })                  // → the Drive moment an arrival implies, or null
 export function makeTask(db, fields, { now = Date.now() } = {}) 
 export function makeReward({ title, price, repeatable = true, now = Date.now() }) 
 export const isCritical = (task)
@@ -77,6 +80,7 @@ export function activeLoadout(db)
 export function gearBonus(db, task, at) 
 export function inventory(records, now = Date.now()) 
 export function makeEnergy({ stamina, mana, at = Date.now() }) 
+export function suggestRating(health)                            // { sleepHours, steps } → 4–10, or null without sleep data
 export function energyOn(db, day) 
 export function makeReview(db, { satisfaction, ratings = {}, win = '', lesson = '', next = '', difficulty = null, at = Date.now() }) 
 export function difficultyOn(db, day, skillId = null) 
@@ -102,6 +106,49 @@ export function plannerHistory(planRecords, opts)        // tasks (archived) and
 export function plannerSinceStamp(settings, readAt)      // the settings record stamped with plannerSince, or null
 export function plannerEvents(db, planRecords, opts)     // opts: { me, now, since } → { done, rework, ask }
 ```
+
+# The iPhone bridge: src/native.js (SPEC.md › iOS app)
+
+The page talks to the iOS shell (shell-kit's `ShellScene`, the app in `ios/`)
+through shell-kit's `src/host.js`: the page posts `{ type, … }` to the
+`flow` message handler, and the shell calls `window.flowHost.event(event)`.
+With no shell every call is a no-op.
+
+```js
+export const TO_APP, TO_PAGE                  // the message names below
+export function snapshotOf(g)                 // play() → { stamina, mana, points, level, next: { id, title, estimate } | null, at }
+export function parseDeepLink(url)            // → { action:'done', task, minutes|null } | { action:'start', task } | null
+export function timerMessage(db, timer)       // { task, start } | null → the flow.timer message
+export function visitRecords(db, event)       // a flow.visit event → [visit?, drive moment?], nothing already written
+export function createNative({ host, store, onChange, onOpen, onRemote })
+  // → { hosted, platform, state: { health, geofence }, init(), timer(db, timer), snapshot(g),
+  //     setGeofence(place), clearGeofence(place), listGeofences(), requestHealth(), pair(), signOut(), event(e) }
+```
+
+Page → app (`post`):
+
+| type | body | when |
+|---|---|---|
+| `flow.timer` | `{ state: 'running'｜'stopped', task: { id, title, place (name) }｜null, start (ms)｜null }` | the device timer starts or ends (logged or discarded); `stopped` once at launch with no timer |
+| `flow.snapshot` | `{ stamina, mana, points, level, next: { id, title, estimate }｜null, at }` | any change of those numbers; the shell writes it to the app group for the widget |
+| `flow.geofence.set` | `{ place: { id, name } }` | "Set to where I am now": the shell uses the current location |
+| `flow.geofence.clear` | `{ place: { id, name } }` | Clear |
+| `flow.geofence.list` | `{}` | at launch (iOS) |
+| `flow.health.request` | `{}` | at launch, and once a day while the day is unrated (iOS) |
+| `flow.visits.ack` | `{ ids: [queue ids] }` | after the records a visit implies are written |
+| `portal.pair` / `portal.signOut` | `{}` | shell-kit's Portal pairing (Settings ▸ Sync) |
+
+App → page (`window.flowHost.event(e)`):
+
+| type | body | the page |
+|---|---|---|
+| `flow.visit` | `{ id (queue id), place (id), arrive (ms)｜null, leave (ms)｜null }` | writes `makeVisit` when `leave` is set and the `autoDrive` moment when `arrive` is, then acks; the shell resends until acked |
+| `flow.health` | `{ day: 'YYYY-MM-DD', sleepHours｜null, steps｜null }` | kept in memory; the morning rating shows `suggestRating` |
+| `flow.geofence.status` | `{ authorized, places: [{ id, set }] }` | Settings ▸ Places on this iPhone |
+| `open` | `{ url }` | `flow://done?task=<id>&minutes=<n>` opens Log done prefilled; `flow://start?task=<id>` starts the timer |
+
+`remote({ url, token })` (shell-kit pairing) is applied as the Sync settings.
+Coordinates never cross the bridge; Health numbers are never written.
 
 # CLI usage (cli/flow.mjs --help)
 

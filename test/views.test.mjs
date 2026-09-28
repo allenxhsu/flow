@@ -478,3 +478,97 @@ test('Replay: the same game in fast forward keeps its day picker and root', () =
   assert.match(html, /data-replay-day/);
   assert.match(html, /id="replay-root"/);
 });
+
+// ─── iOS app (SPEC.md › iOS app): geofenced places and the Health suggestion ─
+import * as settingsView from '../src/views/settings.js';
+
+/** Enough of src/sync.js for the Settings screen to render. */
+const settingsStore = () => ({
+  getSettings: () => ({ url: '', token: '', enabled: false }), syncStatus: () => ({ phase: 'idle' }), inPortal: () => false,
+  plannerStatus: () => ({ configured: false, plans: 0, tasks: 0 }), plannerSettingsNow: () => ({ url: '', token: '' }),
+  deviceId: () => 'dev1', storeKind: () => 'memory', allRecords: () => [], persistence: () => 'unknown',
+});
+const nativeOn = (platform, state = {}) => ({ platform, hosted: !!platform, state: { health: null, geofence: null, ...state } });
+
+test('Settings: "Places on this iPhone" appears only in the iPhone app', () => {
+  const g = game();
+  const base = { ...ctxOf(g), store: settingsStore() };
+  const ios = settingsView.render({ ...base, native: nativeOn('ios', { geofence: { authorized: true, places: [{ id: 'place_gym', set: true }] } }) });
+  assert.match(ios, /Places on this iPhone/);
+  assert.match(ios, /Set to where I am now/);
+  for (const html of [
+    settingsView.render(base),
+    settingsView.render({ ...base, native: nativeOn(null) }),
+    settingsView.render({ ...base, native: nativeOn('macos') }),
+  ]) {
+    assert.doesNotMatch(html, /Places on this iPhone/);
+    assert.doesNotMatch(html, /Set to where I am now/);
+  }
+});
+
+test('Settings on iOS: one row per Flow place, marked when set, with Set and (when set) Clear', () => {
+  const g = game();
+  const html = settingsView.render({ ...ctxOf(g), store: settingsStore(), native: nativeOn('ios', { geofence: { authorized: true, places: [{ id: 'place_gym', set: true }] } }) });
+  const section = /id="geofences"[\s\S]*?<\/section>/.exec(html)?.[0];
+  assert.ok(section, 'the geofence section');
+  const rows = [...section.matchAll(/data-geofence="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(rows, g.db().places.map((p) => p.id));
+  const gym = new RegExp('data-geofence="place_gym"[\\s\\S]*?</div>\\s*</div>').exec(section)[0];
+  assert.match(gym, /data-action="geofence-set"/);
+  assert.match(gym, /data-action="geofence-clear"/);
+  const desk = new RegExp('data-geofence="place_desk"[\\s\\S]*?</div>\\s*</div>').exec(section)[0];
+  assert.match(desk, /data-action="geofence-set"/);
+  assert.doesNotMatch(desk, /data-action="geofence-clear"/);
+  assert.doesNotMatch(section, /latitude|longitude|°/i, 'no coordinates on the page');
+});
+
+test('Settings on iOS: without location permission it says so, and still renders', () => {
+  const html = settingsView.render({ ...ctxOf(game()), store: settingsStore(), native: nativeOn('ios', { geofence: { authorized: false, places: [] } }) });
+  assert.match(html, /Places on this iPhone/);
+  assert.match(html, /[Ll]ocation/);
+});
+
+test('Now: the morning rating shows the Apple Health suggestion when there is one', () => {
+  const g = game();
+  const health = { day: MON, sleepHours: 7.6, steps: 9100 };
+  const html = now.render({ ...ctxOf(g, `${MON}T07:00:00`), native: nativeOn('ios', { health }) });
+  const box = /id="health-suggestion"[\s\S]*?<\/div>/.exec(html)?.[0];
+  assert.ok(box, 'a suggestion line');
+  assert.match(box, /\b9\b/, 'sleep 7.6 h → 8, +1 for 9 100 steps');
+  assert.match(box, /7\.6 h/);
+  assert.match(box, /9,100|9 100|9100/);
+  assert.match(html, /name="stamina"[^>]*value="9"/, 'the sliders start at the suggestion');
+  assert.match(html, /name="mana"[^>]*value="9"/);
+});
+
+test('Now: no Health data (a browser, or permission refused) → the rating as it always was', () => {
+  const g = game();
+  for (const native of [undefined, nativeOn(null), nativeOn('ios'), nativeOn('ios', { health: { day: MON, sleepHours: null, steps: 3000 } })]) {
+    const html = now.render({ ...ctxOf(g, `${MON}T07:00:00`), native });
+    assert.match(html, /Good morning/);
+    assert.doesNotMatch(html, /id="health-suggestion"/);
+    assert.match(html, /name="stamina"[^>]*value="7"/);
+  }
+});
+
+test('Now: Health data for another day is not suggested', () => {
+  const html = now.render({ ...ctxOf(game(), `${MON}T07:00:00`), native: nativeOn('ios', { health: { day: '2026-09-27', sleepHours: 8, steps: 9000 } }) });
+  assert.doesNotMatch(html, /id="health-suggestion"/);
+});
+
+test('Now: a deep link to Log done opens the form for that task with the minutes filled in', async () => {
+  const g = game();
+  const t = g.task({ title: 'Run', skill: 'sk_run', estimate: 30 });
+  const ctx = { ...ctxOf(g), render: () => {}, toast: () => {} };
+  await now.openLink(ctx, { action: 'done', task: t.id, minutes: 42 });
+  assert.equal(ctx.ui.log.task, t.id);
+  assert.equal(ctx.ui.log.minutes, 42);
+  const html = now.render(ctx);
+  assert.match(html, /id="log-form"/);
+  assert.match(html, /name="minutes"[^>]*value="42"/);
+  await now.openLink(ctx, { action: 'done', task: t.id, minutes: null });
+  assert.equal(ctx.ui.log.minutes, 30, 'no minutes → the estimate');
+  const warned = [];
+  await now.openLink({ ...ctx, toast: (m) => warned.push(m) }, { action: 'done', task: 'task_gone', minutes: 5 });
+  assert.equal(warned.length, 1, 'a task that is gone is said, not thrown');
+});

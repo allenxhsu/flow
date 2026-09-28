@@ -1,0 +1,14 @@
+// Copy to ios/Local.xcconfig (git-ignored) and fill in your own values.
+//
+// DEVELOPMENT_TEAM: your Apple Developer team id (Xcode ▸ Settings ▸ Accounts,
+// or developer.apple.com ▸ Membership).
+// BUNDLE_PREFIX: a reverse-DNS prefix you own; the app becomes
+// $(BUNDLE_PREFIX).flow, the widget $(BUNDLE_PREFIX).flow.widgets and the
+// app group group.$(BUNDLE_PREFIX).flow.
+// PORTAL_ORIGIN (optional): your toolkit Portal, the default for
+// Settings ▸ Sync ▸ Sign in. In an .xcconfig "//" starts a comment, so write
+// the slashes as  https:/$()/toolkit.example
+
+DEVELOPMENT_TEAM = ABCDE12345
+BUNDLE_PREFIX = com.example.you
+PORTAL_ORIGIN = https:/$()/toolkit.example

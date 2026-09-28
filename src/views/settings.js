@@ -29,6 +29,7 @@ function syncSection(ctx) {
       <label class="check-field"><input class="sc-check" type="checkbox" name="enabled" ${s.enabled || !s.url ? 'checked' : ''}> Sync on</label>
       <button class="sc-button sc-button--primary" type="submit">Save</button>
     </div>
+    ${ctx.native?.hosted ? '<div class="row"><button class="sc-button sc-button--sm" type="button" data-action="portal-pair">Sign in to the Portal</button><button class="sc-button sc-button--ghost sc-button--sm" type="button" data-action="portal-sign-out">Sign out</button></div>' : ''}
     <sc-sync-status></sc-sync-status>
     ${st.lastError ? `<div class="sc-alert sc-alert--danger small"><strong>Last error</strong> ${esc(st.lastError)}</div>` : ''}
   </form>`;
@@ -75,6 +76,28 @@ function placesSection(ctx) {
       <label class="sc-field"><span>Zone</span>${zoneSel('town')}</label>
       <button class="sc-button sc-button--primary sc-button--sm" type="submit">Add place</button>
     </form>
+  </section>`;
+}
+
+/**
+ * The iPhone app only: mark Flow places for arrive / leave. The shell reads
+ * the location and keeps it on this device; the page only ever sends and
+ * sees place ids and names.
+ */
+function geofenceSection(ctx) {
+  const n = ctx.native;
+  if (n?.platform !== 'ios') return '';
+  const st = n.state?.geofence;
+  const set = new Set((st?.places || []).filter((p) => p.set).map((p) => p.id));
+  return `<section class="sc-panel pad stack" id="geofences">
+    <h2>Places on this iPhone</h2>
+    <p class="small sc-muted" style="margin:0">Stand at a place and set it: Flow notes when you arrive and leave, and logs the drive between two places. Where a place is stays on this iPhone; only its name reaches your records.</p>
+    ${st && !st.authorized ? '<div class="sc-alert sc-alert--warning small"><strong>Location is off</strong> Allow Flow to use your location (Always, for arrive and leave) in the iPhone Settings app. Everything else works without it.</div>' : ''}
+    <div class="list">${ctx.db.places.map((p) => `
+      <div class="item" data-geofence="${esc(p.id)}">
+        <div class="item-head"><span class="item-title">${esc(p.name)}</span><span class="small sc-faint">${set.has(p.id) ? 'set on this iPhone' : 'not set'}</span></div>
+        <div class="row"><button class="sc-button sc-button--sm" data-action="geofence-set" data-id="${esc(p.id)}">Set to where I am now</button>${set.has(p.id) ? `<button class="sc-button sc-button--ghost sc-button--sm" data-action="geofence-clear" data-id="${esc(p.id)}">Clear</button>` : ''}</div>
+      </div>`).join('')}</div>
   </section>`;
 }
 
@@ -131,6 +154,7 @@ export function render(ctx) {
     </form>
     ${plannerSection(ctx)}
     ${placesSection(ctx)}
+    ${geofenceSection(ctx)}
     ${kindsSection(ctx)}
     ${worldSection(ctx)}
     <section class="sc-panel pad stack" id="backup">
@@ -194,6 +218,23 @@ export const actions = {
     ctx.toast('World pack removed: the generic world is back.', 'success');
     ctx.render({ force: true });
   },
+  'geofence-set': (el, ctx) => {
+    const p = ctx.db.place.get(el.dataset.id);
+    if (!p || !ctx.native) return;
+    ctx.native.setGeofence(p);
+    ctx.toast(`${p.name}: marking where you are now…`);
+  },
+  'geofence-clear': (el, ctx) => {
+    const p = ctx.db.place.get(el.dataset.id);
+    if (p && ctx.native) ctx.native.clearGeofence(p);
+  },
+  'portal-pair': (el, ctx) => {
+    // The Portal the Sync form names, if any; else the shell's own default.
+    let origin = '';
+    try { origin = new URL(globalThis.document?.querySelector('#sync [name=url]')?.value || ctx.store.getSettings().url).origin; } catch { /* none typed */ }
+    ctx.native?.pair(origin === 'null' ? '' : origin);
+  },
+  'portal-sign-out': (el, ctx) => ctx.native?.signOut(),
   'remove-kind': async (el, ctx) => {
     await saveList(ctx, 'kind', { id: el.dataset.id, archived: true });
   },
