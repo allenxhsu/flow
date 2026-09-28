@@ -316,6 +316,69 @@ bundle id prefix come from a local, uncommitted `ios/Local.xcconfig`.
 - Every native feature degrades cleanly: in a browser, or with a permission
   refused, the page works as it does today.
 
+## Terminal: the iPhone app (decided 2026-09-28)
+
+The iPhone app is Flow's **Terminal** (终端): the place the player picks a
+project to work on, adds tasks to it and times the work. It is separate from
+the game and the day's replay, which stay on the desktop and web app. It is
+installed like Heptabase's iPhone app — built on the Mac and installed on the
+connected iPhone with one command (`npm run ios:install`), and it opens
+anywhere, offline, syncing through the Portal when online.
+
+- **Screens:** Projects → a project's tasks → the timer. A status strip at the
+  top (stamina hearts, mana bar, points, level) and an **I'm tired** button;
+  nothing else from the game. The handheld look of the app's screens.
+- **Projects** are Planner's plans (not archived, not templates) that have at
+  least one task for the player, pinned first, then by name; each shows its
+  open task count, the next deadline and time logged this week.
+- **Tasks:** the project's open leaf tasks for the player (Planner tasks as
+  above), each with Start. **+ Add task** takes a name and, optionally, hours
+  and a deadline, and adds it **to the Planner project** (see Writing to
+  Planner); it appears at once, marked "sending to Planner" until Planner has
+  it, and can be started straight away.
+- **Timer:** one at a time, the same device timer as Now and Play
+  (`flow.timer`), with the Live Activity on the Lock Screen. Stopping it logs
+  the completion in Flow exactly as Log done does (points, energy, rework
+  question) **and** a timesheet entry on that Planner task (date, start, hours
+  = the timer's minutes / 60, the player as resource). **Pause** stops the
+  clock without finishing: it writes the timesheet entry only, and the task
+  stays open — Flow logs its completion when it is finished (in the Terminal,
+  or ticked off in Planner, which the Planner rules then log).
+- **I'm tired:** Body, Mind or Both, and A bit / Very / Wiped out. It writes an
+  energy check-in now (`makeEnergy`, `feeling: 'tired'`) with the chosen
+  meter(s) at min(current, 6 / 3 / 1) and the others unchanged; from then the
+  day's energy runs from it, as from the morning rating, so the next-task
+  picker leans to rest when a meter is low. It is available on Now as well,
+  and the replay shows it as a moment of the day.
+
+### Writing to Planner
+
+Flow never rewrites a plan. It writes **operations** into Planner's
+`project` workspace, and Planner applies them to the plan itself, so an
+unsaved edit in Planner is never overwritten (Planner's own rule).
+
+- An operation is a write-once record `{ id, type: 'flow.op', op, plan, at,
+  origin, ... }`:
+  - `op: 'addTask'` — `task: { id, name, work (hours) | null, deadline |
+    null }`. The task id is made by Flow (`t_flow_<random>`) so the task Flow
+    shows before and after Planner applies it is the same task. Planner
+    appends it at the end of the plan at outline level 1, assigned to the
+    player's resource when the plan has one by the player's Planner name,
+    else unassigned.
+  - `op: 'timesheet'` — `task, date, start (minutes into the day), hours,
+    note: 'Flow timer'`, resource as above.
+- Planner applies every operation for a plan it holds, once, and records the
+  ids it applied in the plan (`appliedOps`, kept for 90 days), which is how a
+  second device or a re-sync never applies one twice. An operation for a plan
+  that no longer exists, or a task that no longer exists, is skipped and
+  remembered as applied.
+- Until an `addTask` is applied, Flow derives the task from the operation
+  itself (same id, estimate from the hours, else 30 min) so it can be timed
+  and completed; completions keep pointing at the same id afterwards.
+- This replaces "Read-only both ways" above for these two operations only;
+  Flow still never edits or completes a Planner task (the player ticks it off
+  in Planner, and Flow logs it as above).
+
 ## Play (decided 2026-09-28)
 
 A **Play** tab runs the game inside Flow, on the same records and the same
