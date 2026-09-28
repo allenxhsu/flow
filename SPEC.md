@@ -225,6 +225,73 @@ and `price.bonuses.gear`; `balanceOf` adds skip points; constants
 `SKIP_POINTS_PER_DOLLAR = 1`, `SKIP_DAILY_CAP = 100`, `GEAR_STEP_USES = 10`,
 `GEAR_STEP = 0.01`, `GEAR_MAX = 0.10`, `SLOTS`.
 
+## House inventory (decided 2026-09-28)
+
+The Bag doubles as the **house inventory**: where everything in the house is,
+down to the shelf and the box. It uses the same `item` and `place` records as
+the rest of the inventory, in workspace `flow`, so an item filed in a box
+here is the item "I have it" finds, the shopping list matches and a loadout
+equips. There is no second copy and no import.
+
+- **Places nest.** A place can sit inside another: Garage › Shelf B › Box 3.
+  `place.parent` is a place id or null (top level). A place made inside
+  another takes its zone unless given one. A place can never be put inside
+  itself or anything inside it. The replay, tasks, skills and moments keep
+  using places exactly as before; nesting only changes how the Bag shows them.
+- **Deleting a place never deletes what is in it.** Its items and the places
+  inside it move up to its parent — to *Unfiled* (no place) when it was at
+  the top level — and so do tasks and skills that were set there. Moments
+  keep the place they happened at.
+- **Items carry the house-inventory details** besides the phase 1.5 fields:
+  `brand`, `model`, `serial`, `bought` (the purchase day), `warranty` (the
+  day it runs out), `notes`, and lists of photos and receipts. `price` stays
+  the price of one.
+- **Photos and receipts are `file` records**, because sync-kit has no asset
+  store yet: an event, written once, holding the file itself as base64 with
+  its name and type. The item lists them in order (`photos`, `receipts`: file
+  ids). Photos are resized in the page to at most **1024 px** on the long side
+  (JPEG) before they are written; any file is at most **2 MB**. Taking one off
+  an item removes its id from the list; the file record stays, as every event
+  does. (When sync-kit gains assets, file records move there.)
+- **Finding things.** A search box finds items when every word of the query
+  appears in the item's name, aliases, category, brand, model, serial, notes
+  or the names of the places it is in — so "garage drill" finds the drill in
+  the garage, and a box's name finds what is in it. Each result shows its full
+  place path. This is separate from "I have it" matching, which stays as it is.
+- **Browse by place:** the Bag shows the place tree with a count per place
+  (everything inside it, at any depth). Selecting a place lists what is in it
+  and in the places inside it.
+- **Box labels:** a printable sheet per place listing what is in it — its own
+  items first, then each place inside it under its path — to tape on the box.
+- **CSV:** every listed item as a row, sorted by place path then name:
+  Name, Place, Quantity, Category, Brand, Model, Serial, Bought, Price,
+  Warranty, Photos (count), Receipts (count), Notes. A cell starting with
+  `= + - @` is written as text (a leading `'`), so a spreadsheet never runs it.
+
+### Contract
+
+```js
+makePlace(db, { name, zone, parent = null })   // zone defaults to the parent's, else 'elsewhere'; a missing parent throws
+placePath(db, placeId)        // → [place, …] top level first, the place last; [] for none or an unknown id
+placesWithin(db, placeId)     // → Set of place ids: the place and every place inside it, at any depth
+placeTree(db)                 // → [{ place, depth }] depth first, siblings by name; a place whose parent is gone is top level
+movePlace(db, placeId, parent)   // → the place record with its new parent (null = top level); into itself throws
+placeRemoval(db, placeId)     // → the item, place, task and skill records to write with the place's tombstone
+makeItem(db, { …, brand = '', model = '', serial = '', bought = null, warranty = null, notes = '',
+  photos = [], receipts = [] })  // bought/warranty 'YYYY-MM-DD' or null; a bad day throws
+makeFile(db, { item, kind, name, mime, data, at })   // kind 'photo' | 'receipt'; → { id: 'file_…', type: 'file',
+                              //   item, kind, name, mime, data, size (bytes), day, at }; over FILE_MAX_BYTES throws
+filesOf(db, item)             // → { photos: [file], receipts: [file] } in the item's order; ids not (yet) synced are skipped
+searchItems(db, query, placeId = null)   // → [{ item, path }]: every word matches; only inside placeId (any depth) when given;
+                              //   sorted by path names then item name; an empty query lists them all
+inventoryCSV(db, items)       // → the CSV text above, CRLF line ends, header first
+labelSheet(db, placeId)       // → { place, path, lines: [{ heading } | { item, name, qty }] }
+```
+
+`FILE_MAX_BYTES = 2 * 1024 * 1024`, `PHOTO_MAX_PX = 1024`. `file` is an event
+(after `spend` in `RECORD_TYPES`); `index()` gains `files` and `file` (a Map).
+`inventory()`'s stashes gain `path` (place names, top level first).
+
 ## Art direction (decided after concept rounds)
 
 **Isometric pixel art in the spirit of 16-bit adventure games** — the original
