@@ -8,7 +8,7 @@
 //
 //   const game = createGame(root, { world, mode: 'live' | 'replay', THREE, hero, name,
 //     status: () => ({ stamina, mana, points, clock, dark, working }),
-//     onDesk, onMoment, menuOpen, onMenuKey, replay: () => clock });
+//     onDesk, onShelf, onMoment, menuOpen, onMenuKey, replay: () => clock });
 //   game.placeAt(spot); game.say(text); game.destroy();
 //
 // The root must contain the upper screen (#play-screen with #play-canvas,
@@ -266,6 +266,8 @@ export function createGame(root, opts) {
     if (deskAt(x, y) || deskAt(P.x, P.y)) return void opts.onDesk?.();
     const f = furnitureAt(x, y);
     if (f?.car) return travel();
+    // A bookshelf (or furniture that names a place): the host opens its books, or says why not.
+    if (f && (f.place || f.model === 'shelf') && opts.onShelf?.(f)) return;
     if (f?.text) return void say(f.text);
     const c = lv.grid.cell[y]?.[x];
     if (c?.wall || c?.roof) return void say(c.roof ? 'A wall.' : 'A wall.');

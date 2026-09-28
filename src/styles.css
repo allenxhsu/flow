@@ -413,17 +413,7 @@ sc-sync-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; 
 .cell.low::after { content: 'LOW'; position: absolute; right: 4px; top: 4px; padding: 0 3px; background: var(--danger); color: #fff; line-height: 1.2; }
 .cell.sel { background: var(--screen); border-color: var(--ink); }
 
-/* The house inventory: the place tree beside the stash, stacked on a phone. */
-.bag-layout { display: grid; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); gap: 12px; align-items: start; }
-.bag-side { position: sticky; top: 8px; }
-.bag-places { display: grid; gap: 2px; max-height: 60vh; overflow: auto; padding: 4px; background: var(--panel-2); border: 2px solid var(--line); }
-.bag-place { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 2px 8px 2px calc(8px + var(--depth, 0) * 14px); font: inherit; color: var(--ink); text-align: left; background: none; border: 2px solid transparent; cursor: pointer; }
-.bag-place:hover { border-color: var(--line); }
-.bag-place.is-active { background: var(--screen); border-color: var(--accent); color: var(--accent); }
-.bag-place-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bag-count { color: var(--sub); }
-.bag-place-form { padding: 10px; background: var(--panel-2); border: 2px dashed var(--line); }
-#stash-list > .stash:first-child { margin-top: 16px; }
+/* The house inventory: an item's photos and receipts. */
 .bag-photos { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .bag-photos figure { margin: 0; display: grid; gap: 2px; justify-items: center; }
 .bag-photos img { width: 96px; height: 96px; object-fit: cover; border: 2px solid var(--ink); image-rendering: auto; }
@@ -431,15 +421,6 @@ sc-sync-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; 
 .bag-receipts li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .bag-add { cursor: pointer; justify-self: start; }
 
-/* Reshelving: a checklist per shelf. */
-.rs-groups { display: grid; gap: 8px; }
-.rs-group { background: var(--panel-2); border: 2px solid var(--line); }
-.rs-group > summary { display: flex; justify-content: space-between; gap: 8px; padding: 8px 10px; cursor: pointer; color: var(--accent); }
-.rs-row { display: grid; grid-template-columns: auto 48px 92px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 6px 10px; border-top: 2px dashed var(--line); cursor: pointer; }
-.rs-row.done { background: var(--screen); }
-.rs-row.done .rs-name { text-decoration: line-through; color: var(--sub); }
-.rs-name { overflow-wrap: anywhere; }
-.rs-where { text-align: right; }
 
 .money { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 8px; }
 .money-cell { display: grid; gap: 2px; padding: 8px 10px; background: var(--panel-2); border: 2px solid var(--line); }
@@ -541,12 +522,6 @@ sc-sync-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; 
   .doll { grid-template-columns: minmax(0, 1fr); }
   .slots { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cells { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
-  .bag-layout { grid-template-columns: minmax(0, 1fr); }
-  .bag-side { position: static; }
-  .bag-places { max-height: 40vh; }
-  .rs-row { grid-template-columns: auto 44px minmax(0, 1fr); }
-  .rs-row .rs-call { display: none; }
-  .rs-where { grid-column: 2 / -1; text-align: left; }
   .skill-tier { grid-template-columns: minmax(0, 1fr) auto; }
   .skill-tier .sc-select { grid-column: 1 / -1; }
 }

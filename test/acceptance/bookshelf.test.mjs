@@ -55,10 +55,10 @@ test('shelfPlaces: nothing that fits — no bookcases, or other furniture with n
 test('world pack: furniture may name a place; the generic home has a shelf', () => {
   const pack = JSON.parse(JSON.stringify(GENERIC_WORLD));
   shelfOf(pack).place = 'Bookcase 1';
-  assert.equal(shelfOf(validateWorld(pack)).place, 'Bookcase 1');
-  assert.ok(shelfOf(validateWorld(GENERIC_WORLD)), 'the generic home keeps its shelf');
+  assert.equal(shelfOf(validateWorld(pack).world).place, 'Bookcase 1');
+  assert.ok(shelfOf(validateWorld(GENERIC_WORLD).world), 'the generic home keeps its shelf');
   shelfOf(pack).place = 'x'.repeat(81);
-  assert.throws(() => validateWorld(pack));
+  assert.equal(shelfOf(validateWorld(pack).world).place.length, 80, 'cut to 80 characters, as the pack’s other names are cut');
 });
 
 // ─── shelves and books ──────────────────────────────────────────────────────

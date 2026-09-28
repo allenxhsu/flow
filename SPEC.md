@@ -379,7 +379,7 @@ shelfBooks(db, placeId)      // → the items directly on the place, left to rig
 bookText(db, item)           // → [lines] for the text box: title (and author), where it is, then its notes
 ```
 
-World packs: furniture gains an optional `place` (a string, at most 80 characters).
+World packs: furniture gains an optional `place` (text, cut to 80 characters like the pack's other names).
 
 ## Art direction (decided after concept rounds)
 

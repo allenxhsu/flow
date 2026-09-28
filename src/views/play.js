@@ -3,9 +3,12 @@
 // the lower screen carries the status and the TASKS button. TASKS (or the
 // action button at a desk) opens the menu that starts, finishes and adds tasks
 // through the same model functions, the same `flow.timer` and the same store
-// as the Now screen. Nothing here is game-only.
+// as the Now screen. Nothing here is game-only. A bookshelf (SPEC.md › The
+// bookshelf) opens the player's bookcase: its shelves, the books on each, and
+// the reshelve checklist while a plan is active.
 
-import { play as playOf, index, makeMoment, placeOfTask } from '../model.js';
+import { play as playOf, index, makeMoment, placeOfTask, activeReshelve, reshelveView, markPulled, shelveMove, labelSheet } from '../model.js';
+import { shelfPlaces, shelfRows, shelfBooks, bookText, labelSvg } from '../game/shelf.js';
 import { esc, readJson, writeJson, validTimer, fmtClock, fmtPts } from '../util.js';
 import { worldFor, spotFor } from '../game/world.js';
 import { menuTasks, reworkQuestion, startTimer, finishQuestions, finishTask, newTask, typeKey, ESTIMATES, CADENCES, LETTER_ROWS } from '../game/actions.js';
@@ -68,9 +71,85 @@ function menuBody(ctx) {
     case 'new-cadence': return `<h3>HOW OFTEN?</h3><div class="play-items">${CADENCES.map((c) => item('answer', c, `data-value="${c}"`)).join('')}</div>`;
     case 'new-critical': return `<h3>CRITICAL?</h3><p><small>Critical work pays double for rework.</small></p><div class="play-items">${item('answer', 'No', 'data-value="no"')}${item('answer', 'Yes, critical', 'data-value="yes"')}</div>`;
     case 'cancel': return `<h3>CANCEL THE TIMER?</h3><p>Nothing is logged.</p><div class="play-items">${item('cancel-yes', 'Yes, discard it')}${back()}</div>`;
+    default: return shelfBody(ctx);
+  }
+}
+
+// ─── the bookshelf ──────────────────────────────────────────────────────
+
+const shelfBack = (to) => item('shelf-back', 'Back', `data-to="${to}"`);
+const pathOf = (db, id) => {
+  const out = []; const seen = new Set();
+  for (let p = db.place.get(id); p && !seen.has(p.id); p = db.place.get(p.parent)) { seen.add(p.id); out.unshift(p.name); }
+  return out.join(' › ') || 'Unfiled';
+};
+
+function shelfBody(ctx) {
+  const S = state(ctx);
+  const { db } = ctx;
+  const D = S.draft;
+  const plan = activeReshelve(db);
+  const v = plan ? reshelveView(db, plan) : null;
+  switch (S.menu) {
+    case 'shelf-cases': return `<h3>WHICH BOOKCASE?</h3><div class="play-items">
+      ${(D.cases || []).map((id) => db.place.get(id)).filter(Boolean).map((p) => item('shelf-case', p.name, `data-place="${esc(p.id)}"`)).join('')}${item('close', 'Close')}</div>`;
+    case 'shelf-rows': {
+      const bc = db.place.get(D.bookcase);
+      const rows = bc ? shelfRows(db, bc.id) : [];
+      return `<h3>${esc((bc?.name || 'BOOKCASE').toUpperCase())}</h3><div class="play-items">
+        ${rows.map((r) => item('shelf-row', r.label, `data-place="${esc(r.place.id)}"`, `${r.count}`)).join('') || '<p>Nothing on it yet.</p>'}
+        ${v ? item('shelf-reshelve', `RESHELVE ${v.shelved}/${v.total} shelved`, '', plan.name) : ''}
+        ${item('shelf-labels', 'Labels', '', 'print one per shelf')}
+        ${(D.cases || []).length > 1 ? shelfBack('shelf-cases') : ''}${item('close', 'Close')}</div>`;
+    }
+    case 'shelf-books': {
+      const books = shelfBooks(db, D.row);
+      return `<h3>${esc(pathOf(db, D.row).toUpperCase())}</h3><p><small>Left to right · ${books.length}</small></p><div class="play-items">
+        ${books.map((b) => item('shelf-book', b.name, `data-item="${esc(b.id)}"`, b.brand || '')).join('') || '<p>Empty.</p>'}${shelfBack('shelf-rows')}</div>`;
+    }
+    case 'shelf-book': {
+      const b = db.item.get(D.book);
+      return `<h3>BOOK</h3>${b ? bookText(db, b).map((l, k) => `<p>${k ? esc(l) : `<b>${esc(l)}</b>`}</p>`).join('') : ''}
+        <div class="play-items">${shelfBack('shelf-books')}</div>`;
+    }
+    case 'rs': return v ? `<h3>RESHELVE · ${esc(plan.name.toUpperCase())}</h3><p>${v.pulled}/${v.total} pulled · ${v.shelved}/${v.total} shelved</p>
+      <div class="play-items">${item('rs-mode', '1 · Pull', 'data-mode="pull"', 'empty a shelf')}${item('rs-mode', '2 · Shelve', 'data-mode="shelve"', 'put a shelf up')}
+      ${item('rs-finish', v.shelved === v.total ? 'Finish — all shelved' : 'Finish early')}${shelfBack('shelf-rows')}</div>` : `<h3>RESHELVE</h3><p>No plan.</p><div class="play-items">${shelfBack('shelf-rows')}</div>`;
+    case 'rs-groups': {
+      if (!v) return '';
+      const groups = D.mode === 'pull' ? v.sources : v.shelves;
+      const on = (m) => (D.mode === 'pull' ? m.isPulled : m.isShelved);
+      return `<h3>${D.mode === 'pull' ? 'PULL FROM WHICH SHELF?' : 'SHELVE WHICH SHELF?'}</h3><div class="play-items">
+        ${groups.map((g) => item('rs-group', g.path.join(' › ') || 'Unfiled', `data-place="${esc(g.place?.id || '')}"`, `${g.moves.filter(on).length}/${g.moves.length}`)).join('')}${shelfBack('rs')}</div>`;
+    }
+    case 'rs-books': {
+      if (!v) return '';
+      const groups = D.mode === 'pull' ? v.sources : v.shelves;
+      const g = groups.find((x) => (x.place?.id || '') === D.group);
+      const on = (m) => (D.mode === 'pull' ? m.isPulled : m.isShelved);
+      return `<h3>${esc((g?.path.join(' › ') || '').toUpperCase())}</h3><p><small>${D.mode === 'pull' ? 'Take each one off; it says where it goes.' : 'Put them up left to right. A tick moves the book.'}</small></p><div class="play-items">
+        ${(g?.moves || []).map((m) => item('rs-tick', `${on(m) ? '✓' : '·'} ${m.call ? `${m.call} ` : ''}${m.item.name}`, `data-item="${esc(m.item.id)}"`, D.mode === 'pull' ? `→ ${pathOf(db, m.to)}` : `#${m.n}`)).join('')}${shelfBack('rs-groups')}</div>`;
+    }
     default: return '';
   }
 }
+
+/** Print the labels of the open bookcase, a page per shelf. */
+function printLabels(ctx) {
+  const { db } = ctx;
+  const bc = state(ctx).draft.bookcase;
+  const sheets = shelfRows(db, bc).filter((r) => r.count).map((r) => labelSheet(db, r.place.id));
+  if (!sheets.length) { say('Nothing on these shelves to label yet.'); return; }
+  const w = globalThis.open?.('', '_blank');
+  if (!w) { say('Allow pop-ups to print labels.'); return; }
+  w.document.write(`<!doctype html><meta charset="utf-8"><title>Shelf labels</title><style>@page{size:letter;margin:0}body{margin:0}svg{display:block;width:8.5in;height:11in;page-break-after:always}</style>${sheets.map((x) => labelSvg(x)).join('')}`);
+  w.document.close();
+  w.focus();
+  w.print();
+}
+
+/** The records as they are now: Play does not re-render, so its menu reads the store itself. */
+const fresh = (ctx) => (ctx.store?.allRecords ? { ...ctx, db: index(ctx.store.allRecords()) } : ctx);
 
 function menuHtml(ctx) {
   const S = state(ctx);
@@ -111,7 +190,7 @@ export function render(ctx) {
 function refresh(ctx) {
   const host = globalThis.document?.getElementById('play-menu-host');
   if (host) {
-    host.innerHTML = menuHtml(ctx);
+    host.innerHTML = menuHtml(fresh(ctx));
     const items = [...host.querySelectorAll('.play-item')];
     const S = state(ctx);
     S.sel = Math.max(0, Math.min(S.sel, items.length - 1));
@@ -169,6 +248,14 @@ function placeHero(ctx, timer) {
 /** Walking up to a desk (or anything else the world says) and pressing A. */
 export function interact(ev, ctx) {
   if (ev?.kind === 'desk') go(ctx, 'main', {});
+  if (ev?.kind === 'shelf') {
+    const cases = shelfPlaces(fresh(ctx).db, ev.furniture).map((p) => p.id);
+    if (!cases.length) return false;
+    if (cases.length === 1) go(ctx, 'shelf-rows', { cases, bookcase: cases[0] });
+    else go(ctx, 'shelf-cases', { cases });
+    return true;
+  }
+  return undefined;
 }
 
 export const actions = {
@@ -212,6 +299,45 @@ export const actions = {
     go(ctx, 'new-estimate');
   },
   'cancel-yes': (el, ctx) => { writeJson(ls(), TIMER_KEY, null); close(ctx); say('The timer is discarded. Nothing was logged.'); },
+  // The bookshelf.
+  'shelf-case': (el, ctx) => go(ctx, 'shelf-rows', { ...state(ctx).draft, bookcase: el.dataset.place }),
+  'shelf-row': (el, ctx) => go(ctx, 'shelf-books', { ...state(ctx).draft, row: el.dataset.place }),
+  'shelf-book': (el, ctx) => {
+    const db = fresh(ctx).db;
+    const b = db.item.get(el.dataset.item);
+    if (!b) return;
+    go(ctx, 'shelf-book', { ...state(ctx).draft, book: b.id });
+    say(bookText(db, b).join(' '));
+  },
+  'shelf-back': (el, ctx) => go(ctx, el.dataset.to, state(ctx).draft),
+  'shelf-labels': (el, ctx) => printLabels(fresh(ctx)),
+  'shelf-reshelve': (el, ctx) => go(ctx, 'rs', state(ctx).draft),
+  'rs-mode': (el, ctx) => go(ctx, 'rs-groups', { ...state(ctx).draft, mode: el.dataset.mode === 'pull' ? 'pull' : 'shelve' }),
+  'rs-group': (el, ctx) => go(ctx, 'rs-books', { ...state(ctx).draft, group: el.dataset.place || '' }),
+  'rs-tick': async (el, ctx) => {
+    const db = fresh(ctx).db;
+    const plan = activeReshelve(db);
+    if (!plan) return;
+    const S = state(ctx);
+    const m = reshelveView(db, plan).shelves.flatMap((g) => g.moves).find((x) => x.item.id === el.dataset.item);
+    if (!m) return;
+    if (S.draft.mode === 'pull') await ctx.store.save(markPulled(plan, m.item.id, !m.isPulled));
+    else {
+      const r = shelveMove(db, plan, m.item.id, !m.isShelved);
+      await ctx.store.save(r.item ? [r.item, r.plan] : [r.plan]);
+      if (r.item) say(`${m.item.name} → ${pathOf(db, m.to)} (#${m.n}).`);
+    }
+    const keep = S.sel;
+    refresh(ctx);
+    S.sel = keep;
+  },
+  'rs-finish': async (el, ctx) => {
+    const plan = activeReshelve(fresh(ctx).db);
+    if (!plan) return;
+    await ctx.store.save({ ...plan, done: true });
+    go(ctx, 'shelf-rows', state(ctx).draft);
+    say(`${plan.name}: reshelving finished.`);
+  },
 };
 
 async function answer(ctx, v) {
@@ -255,7 +381,9 @@ function menuKey(k) {
   const step = { left: -1, right: 1, up: inGrid ? -cols : -1, down: inGrid ? cols : 1 }[k];
   if (step) { S.sel = Math.max(0, Math.min(items.length - 1, S.sel + step)); items.forEach((b, i) => b.classList.toggle('is-sel', i === S.sel)); items[S.sel].scrollIntoView?.({ block: 'nearest' }); return; }
   if (k === 'a') { items[S.sel]?.click(); return; }
-  if (k === 'b') { if (S.menu === 'new' && S.draft.title) { S.draft.title = typeKey(S.draft.title, 'DEL'); const keep = S.sel; refresh(ctx); S.sel = keep; host.querySelectorAll('.play-item').forEach((b, i) => b.classList.toggle('is-sel', i === S.sel)); return; } if (S.menu === 'main') close(ctx); else go(ctx, 'main', {}); }
+  if (k === 'b') { if (S.menu === 'new' && S.draft.title) { S.draft.title = typeKey(S.draft.title, 'DEL'); const keep = S.sel; refresh(ctx); S.sel = keep; host.querySelectorAll('.play-item').forEach((b, i) => b.classList.toggle('is-sel', i === S.sel)); return; } const up = { 'shelf-rows': (S.draft.cases || []).length > 1 ? 'shelf-cases' : null, 'shelf-books': 'shelf-rows', 'shelf-book': 'shelf-books', rs: 'shelf-rows', 'rs-groups': 'rs', 'rs-books': 'rs-groups' };
+    if (S.menu in up || S.menu === 'shelf-cases') { if (up[S.menu]) go(ctx, up[S.menu], S.draft); else close(ctx); return; }
+    if (S.menu === 'main') close(ctx); else go(ctx, 'main', {}); }
 }
 
 export async function mounted(view, ctx) {
@@ -281,6 +409,7 @@ export async function mounted(view, ctx) {
       return { stamina: p.energy.rated ? p.energy.stamina : 10, mana: p.energy.rated ? p.energy.mana : 10, points: p.balance, clock: c.clock, dark: c.dark, working: timer ? { task: timer.task, since: timer.start } : null };
     },
     onDesk: () => { menuCtx = ctx; interact({ kind: 'desk' }, ctx); },
+    onShelf: (furniture) => { menuCtx = ctx; return interact({ kind: 'shelf', furniture }, ctx); },
     menuOpen: () => !!state(ctx).menu,
     onMenuKey: menuKey,
     onMoment: async ({ who }) => {
