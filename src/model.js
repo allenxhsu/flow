@@ -934,8 +934,15 @@ export function filesOf(db, item) {
   return { photos: pick(it?.photos), receipts: pick(it?.receipts) };
 }
 
-const fold = (s) => String(s ?? '').normalize('NFKD').replace(/[̀-ͯ]/g, '').toLowerCase();
-const pathKey = (path) => path.map((p) => p.name).join('\u0000');
+const fold = (s) => String(s ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+/** Place paths in tree order: name by name, a place before the places inside it. */
+function byPath(a, b) {
+  for (let k = 0; k < Math.min(a.length, b.length); k++) {
+    const c = byName(a[k], b[k]);
+    if (c) return c;
+  }
+  return a.length - b.length;
+}
 
 /**
  * Where things are: items whose name, aliases, category, brand, model,
@@ -954,11 +961,7 @@ export function searchItems(db, query, placeId = null) {
     const hay = fold([item.name, ...(item.aliases || []), item.category, item.brand, item.model, item.serial, item.notes, ...path.map((p) => p.name)].join(' \u0000 '));
     if (qWords.every((w) => hay.includes(w))) out.push({ item, path });
   }
-  return out.sort((a, b) => {
-    const pa = pathKey(a.path);
-    const pb = pathKey(b.path);
-    return (pa === pb ? 0 : pa.localeCompare(pb, undefined, { numeric: true, sensitivity: 'base' })) || byName(a.item, b.item);
-  });
+  return out.sort((a, b) => byPath(a.path, b.path) || byName(a.item, b.item));
 }
 
 const CSV_COLUMNS = [
