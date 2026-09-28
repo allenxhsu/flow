@@ -154,3 +154,42 @@ test('Shop: at Push the wording still says double', () => {
   assert.match(html, /costs 200/);
   assert.match(html, /double/);
 });
+
+// ─── Planner tasks (SPEC.md › Planner tasks): tagged, linked, never edited ──
+import * as tasksView from '../src/views/tasks.js';
+import { plannerTasks } from '../src/planner.js';
+
+function withPlanner() {
+  const g = game();
+  g.task({ id: 'task_own', title: 'Inbox zero', skill: 'sk_mail', estimate: 20 });
+  const body = JSON.stringify({ id: 'plan_web', name: 'Website relaunch', tasks: [{ id: 't1', name: 'Write copy', level: 1, duration: 1, work: 1, assignments: [] }], resources: [] });
+  const d = plannerTasks([{ id: 'plan_web', type: 'document', format: 'project-planner', body, updatedAt: 1 }], { me: 'Ana', skills: g.db().skills, stats: g.db().stats });
+  g.records.push(...d.skills, ...d.tasks);
+  return g;
+}
+
+test('Tasks: a Planner task is tagged "Planner · <project>" and links to Planner instead of Edit', () => {
+  const html = tasksView.render(ctxOf(withPlanner()));
+  const row = /<div class="item" data-task="task_pl_plan_web_t1">([\s\S]*?)\n  <\/div>/.exec(html);
+  assert.ok(row, 'the Planner task has a row');
+  assert.match(row[1], /Planner · Website relaunch/);
+  assert.match(row[1], /href="\.\.\/project\/"[^>]*>Open in Planner</);
+  assert.doesNotMatch(row[1], /data-action="edit"/);
+  assert.doesNotMatch(row[1], /data-action="archive"/);
+  const own = /<div class="item" data-task="task_own">([\s\S]*?)\n  <\/div>/.exec(html);
+  assert.match(own[1], /data-action="edit"/, 'Flow’s own tasks keep Edit');
+  assert.doesNotMatch(own[1], /Planner ·/);
+});
+
+test('Now: Planner tasks are offered with their tag, and a reopened task asks for its fix minutes', () => {
+  const g = withPlanner();
+  const ctx = ctxOf(g);
+  const done = M.makeDone(g.db(), 'task_pl_plan_web_t1', { end: T(`${MON}T09:00:00`), minutes: 60 });
+  g.records.push(done);
+  const ask = { done: done.id, task: 'task_pl_plan_web_t1', title: 'Write copy', project: 'Website relaunch', planner: new Date(T(`${MON}T11:00:00`)).toISOString(), at: T(`${MON}T11:00:00`), id: 'rework_pl_plan_web_t1_1' };
+  const html = now.render({ ...ctxOf(g), store: { plannerAsks: () => [ask] } });
+  assert.match(html, /Reopened in Planner: how long did the fix take\?/);
+  assert.match(html, /data-form="planner-fix"/);
+  assert.match(now.render(ctx), /Planner · Website relaunch/);
+  assert.doesNotMatch(now.render(ctx), /data-form="planner-fix"/);
+});

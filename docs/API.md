@@ -92,10 +92,19 @@ export const WALK_MIN = 5;
 export function replayDay(records, day, { now = Date.now() } = {}) 
 ```
 
+# Public API of src/planner.js (Planner tasks, SPEC.md › Planner tasks)
+
+```js
+export const PLANNER_COVER_MS = 86400000;
+export function plannerTasks(planRecords, opts)          // opts: { me, skills, stats } → { tasks, skills }
+export function plannerRework(db, ask, minutes)          // the rework record for an answered ask
+export function plannerEvents(db, planRecords, opts)     // opts: { me, now } → { done, rework, ask }
+```
+
 # CLI usage (cli/flow.mjs --help)
 
 ```
-flow init --name "Allen" [--mission "…"] [--stats "Body,Mind,Craft,Work,Bonds"]
+flow init --name "Ana" [--mission "…"] [--stats "Body,Mind,Craft,Work,Bonds"] [--planner-name "…"]
 flow status [--json]                     level, balance, energy, next, streaks, review due
 flow next [--json]                       the next task, why, and the alternatives
 flow energy <stamina> <mana> [--at HH:MM]   this morning's rating, 0–10 each
@@ -131,6 +140,9 @@ flow difficulty [--json]                 the tier now, per-skill overrides, what
 flow log [--days 7]
 flow replay [--day YYYY-MM-DD]
 flow list [tasks|skills|stats|rewards|places|kinds]
+flow planner pull [--url https://…/w/project] [--token …]   read Project Planner's workspace (never written)
+flow planner import <store-export.json>   Planner's Settings ▸ export, instead of a server
+flow planner status [--json]            your Planner tasks, what was logged, reopened tasks to answer
 flow sync
 flow config [--url https://…/w/flow --token …] [--device NAME] [--clear]
 flow export [file] | import <file> [--restamp]

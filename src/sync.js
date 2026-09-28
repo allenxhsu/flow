@@ -10,13 +10,20 @@
 // one (localStorage otherwise), the Portal's own origin and session cookie
 // when served there, a pasted URL + token anywhere else, a sync every 30 s,
 // on focus and shortly after every write.
+//
+// Planner tasks (SPEC.md › Planner tasks): Project Planner's workspace
+// `project` is pulled read-only — through the Portal session, or a pasted
+// server URL + token — into a second local store, and never pushed to. Its
+// plans become derived tasks in db(), and what was finished or reopened there
+// is logged here by plannerEvents (src/planner.js).
 
 import {
   SyncEngine, HttpTransport, LocalStore, IndexedDbStore,
   SYNC_CURSOR_KEYS, publishStatus, onSyncNow,
-  portalApp, portalSession, portalRemote, requestPersistentStorage, storageStatus,
+  portalApp, portalSession, portalRemote, requestPersistentStorage, storageStatus, mergeRecord,
 } from '../sync-kit/js/index.js';
 import { index, stamp, tombstone, RECORD_TYPES } from './model.js';
+import { plannerTasks, plannerEvents } from './planner.js';
 
 export const WORKSPACE = 'flow';
 export const APP_ID = 'flow';
@@ -27,6 +34,10 @@ const INTERVAL_MS = 30_000;
 const AFTER_WRITE_MS = 1_500;
 export const STORE_EXPORT_FORMAT = 'flow.store';
 const EVENTS = new Set(['done', 'rework', 'purchase', 'energy', 'review', 'moment']);
+/** Project Planner's app id and workspace: read, never written. */
+export const PLANNER_APP = 'project';
+const PLANNER_KEY = 'flow.planner';
+const PLANNER_CURSOR = 'planner.cursor.pull';
 
 let recordStore = null;
 let engine = null;
@@ -36,6 +47,14 @@ let portal = null;
 let settings = { url: '', token: '', enabled: false };
 let lastStatus = { phase: 'idle', lastSyncAt: null, lastError: null, pulled: 0, pushed: 0, label: WORKSPACE };
 let persisted = 'unknown';
+let plannerStore = null;
+let plannerPortal = null;
+let plannerSettings = { url: '', token: '' };
+let plannerState = { lastPullAt: null, lastError: null, pulling: false };
+/** Planner's records, read-only, by id. */
+const plannerById = new Map();
+/** Flow has synced once this session: until then a covering completion may not be here yet. */
+let flowSynced = false;
 
 /** Every record this device holds, tombstones included, by id. */
 const byId = new Map();
@@ -71,20 +90,26 @@ function changed(reason) {
 
 /** All records, tombstones included. */
 export const allRecords = () => [...byId.values()];
-/** The live records indexed by the model. Cached until the next change. */
+/** The live records indexed by the model, with the derived Planner tasks. Cached until the next change. */
 export function db() {
-  if (!cachedDb) cachedDb = index(allRecords());
+  if (!cachedDb) {
+    const base = index(allRecords());
+    const d = plannerById.size ? plannerTasks(plannerRecords(), { me: plannerName(base), skills: base.skills, stats: base.stats }) : { tasks: [], skills: [] };
+    cachedDb = d.tasks.length ? index([...allRecords(), ...d.skills, ...d.tasks]) : base;
+  }
   return cachedDb;
 }
+/** The live records plus the derived Planner definitions, for rebuilding an index with more records. */
+export const liveRecords = () => [...allRecords(), ...db().skills.filter((s) => s.derived), ...db().tasks.filter((t) => t.source)];
 export const getRecord = (id) => byId.get(id) || null;
 
-async function openStore() {
+async function openStore(name = 'flow') {
   try {
-    const idb = new IndexedDbStore({ name: 'flow' });
+    const idb = new IndexedDbStore({ name });
     await idb.open();
     return idb;
   } catch {
-    const local = new LocalStore({ prefix: 'flow' });
+    const local = new LocalStore({ prefix: name });
     await local.open();
     return local;
   }
@@ -191,20 +216,30 @@ async function requestPersistence() {
 /** Open the store, read every record, work out where to sync. Call once. */
 export async function initSync() {
   try { settings = { ...settings, ...JSON.parse(read(SETTINGS_KEY, '{}')) }; } catch { /* defaults */ }
+  try { plannerSettings = { ...plannerSettings, ...JSON.parse(read(PLANNER_KEY, '{}')) }; } catch { /* defaults */ }
   if (portalApp() === APP_ID) {
-    try { portal = portalRemote(APP_ID, await portalSession()); } catch { portal = null; }
+    try {
+      const session = await portalSession();
+      portal = portalRemote(APP_ID, session);
+      plannerPortal = portalRemote(PLANNER_APP, session);
+    } catch { portal = null; plannerPortal = null; }
   }
   recordStore = await openStore();
   for (const r of await recordStore.all()) byId.set(r.id, r);
+  try {
+    plannerStore = await openStore('flow-planner');
+    for (const r of await plannerStore.all()) plannerById.set(r.id, r);
+  } catch { plannerStore = null; }
   changed('load');
   void requestPersistence();
   if (typeof window !== 'undefined') {
     onSyncNow(() => { void syncNow(); });
-    window.addEventListener('focus', () => { if (syncConfigured()) void syncNow(); });
+    window.addEventListener('focus', () => { if (syncConfigured()) void syncNow(); else void pullPlanner(); });
     document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && syncConfigured()) void syncNow(); });
   }
   rebuild();
   if (syncConfigured()) void syncNow();
+  else void pullPlanner();
 }
 
 function rebuild() {
@@ -260,6 +295,8 @@ export async function syncNow() {
         for (const r of result.applied) byId.set(r.id, r);
         changed('remote');
       }
+      flowSynced = true;
+      void pullPlanner();
       return result;
     } catch {
       return null;
@@ -269,4 +306,90 @@ export async function syncNow() {
     }
   })();
   return running;
+}
+
+// ------------------------------------------------------------------ planner
+//
+// Read-only both ways: records only ever come in from Planner's workspace, and
+// nothing in this store is sent anywhere. Flow's own writes for Planner tasks
+// (the done and rework records) go into Flow's store like any other event.
+
+export const plannerRecords = () => [...plannerById.values()];
+export const plannerSettingsNow = () => ({ ...plannerSettings });
+export const plannerInPortal = () => !!plannerPortal;
+export const plannerConfigured = () => !!(plannerPortal || plannerSettings.url);
+/** The player's name in Planner: Settings, else the player's name. */
+export const plannerName = (base = db()) => base.settings.plannerName || base.settings.name || '';
+
+export function plannerStatus() {
+  const live = plannerRecords().filter((r) => !r.deletedAt && r.type === 'document' && r.format === 'project-planner');
+  return { ...plannerState, configured: plannerConfigured(), portal: !!plannerPortal, plans: live.length, tasks: db().tasks.filter((t) => t.source?.app === PLANNER_APP).length };
+}
+
+function plannerTransport() {
+  if (plannerPortal) return new HttpTransport({ baseUrl: plannerPortal.baseUrl, label: plannerPortal.workspace, onUnauthorized });
+  if (plannerSettings.url) return new HttpTransport({ baseUrl: plannerSettings.url, token: plannerSettings.token || settings.token, label: PLANNER_APP });
+  return null;
+}
+
+/** Save where Planner's workspace is, off the Portal. A changed URL starts reading from scratch. */
+export async function applyPlannerSettings(next) {
+  const url = (next.url || '').trim().replace(/\/+$/, '');
+  if (url !== plannerSettings.url && plannerStore) await plannerStore.setMeta(PLANNER_CURSOR, 0);
+  plannerSettings = { url, token: (next.token || '').trim() };
+  write(PLANNER_KEY, JSON.stringify(plannerSettings));
+  if (plannerConfigured()) await pullPlanner();
+  else changed('planner');
+}
+
+let pulling = null;
+/** Pull Planner's workspace (never push), then log what was finished or reopened there. */
+export async function pullPlanner() {
+  const transport = plannerTransport();
+  if (!transport || !plannerStore) { await autoLog(); return null; }
+  if (pulling) return pulling;
+  plannerState = { ...plannerState, pulling: true };
+  pulling = (async () => {
+    try {
+      const applied = [];
+      for (let page = 0; page < 20; page++) {
+        const since = (await plannerStore.meta(PLANNER_CURSOR)) ?? 0;
+        const { records, cursor } = await transport.pull({ since, deviceId: deviceId() });
+        const won = records.filter((r) => { const here = plannerById.get(r.id); return mergeRecord(here, r) === r && (!here || here.updatedAt !== r.updatedAt); });
+        if (won.length) { await plannerStore.put(won); for (const r of won) plannerById.set(r.id, r); applied.push(...won); }
+        await plannerStore.setMeta(PLANNER_CURSOR, cursor);
+        if (records.length < 1000) break; // a full page means there is more
+      }
+      plannerState = { ...plannerState, lastPullAt: Date.now(), lastError: null };
+      if (applied.length) changed('planner');
+      await autoLog();
+      return applied.length;
+    } catch (err) {
+      plannerState = { ...plannerState, lastError: err?.message || String(err) };
+      return null;
+    } finally {
+      plannerState = { ...plannerState, pulling: false };
+      pulling = null;
+    }
+  })();
+  return pulling;
+}
+
+/** The fix-minutes questions for tasks reopened in Planner with no hours logged there. */
+export function plannerAsks(now = Date.now()) {
+  if (!plannerById.size) return [];
+  return plannerEvents(db(), plannerRecords(), { me: plannerName(), now }).ask;
+}
+
+/**
+ * Write the completions and rework Planner implies. Their ids are the same on
+ * every device, so two devices noticing one finish write one record. With
+ * sync on, it waits for Flow's first sync: a covering completion from another
+ * device might not be here yet.
+ */
+async function autoLog() {
+  if (!plannerById.size || (syncConfigured() && !flowSynced)) return;
+  const out = plannerEvents(db(), plannerRecords(), { me: plannerName(), now: Date.now() });
+  const fresh = [...out.done, ...out.rework].filter((r) => !byId.has(r.id));
+  if (fresh.length) await add(fresh);
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // flow.mjs — Flow from the terminal, and the /flow skill's only way to touch the game.
 //
-//   flow init --name "Allen" [--mission "…"] [--stats "Body,Mind,Craft,Work,Bonds"]
+//   flow init --name "Ana" [--mission "…"] [--stats "Body,Mind,Craft,Work,Bonds"] [--planner-name "…"]
 //   flow status [--json]                     level, balance, energy, next, streaks, review due
 //   flow next [--json]                       the next task, why, and the alternatives
 //   flow energy <stamina> <mana> [--at HH:MM]   this morning's rating, 0–10 each
@@ -37,6 +37,9 @@
 //   flow log [--days 7]
 //   flow replay [--day YYYY-MM-DD]
 //   flow list [tasks|skills|stats|rewards|places|kinds]
+//   flow planner pull [--url https://…/w/project] [--token …]   read Project Planner's workspace (never written)
+//   flow planner import <store-export.json>   Planner's Settings ▸ export, instead of a server
+//   flow planner status [--json]            your Planner tasks, what was logged, reopened tasks to answer
 //   flow sync
 //   flow config [--url https://…/w/flow --token …] [--device NAME] [--clear]
 //   flow export [file] | import <file> [--restamp]
@@ -53,12 +56,13 @@ process.emitWarning = function (warning, ...rest) {
   return emitWarning.call(process, warning, ...rest);
 };
 
-import { realpathSync, mkdirSync, readFileSync, writeFileSync, renameSync, chmodSync } from 'node:fs';
+import { realpathSync, mkdirSync, readFileSync, writeFileSync, renameSync, chmodSync, existsSync } from 'node:fs';
 import { homedir, hostname } from 'node:os';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import * as M from '../src/model.js';
+import { plannerTasks, plannerEvents } from '../src/planner.js';
 import { FileStore } from '../sync-kit/js/stores/file.js';
 import { HttpTransport } from '../sync-kit/js/http.js';
 import { SyncEngine, SYNC_CURSOR_KEYS } from '../sync-kit/js/engine.js';
@@ -263,7 +267,17 @@ class Game {
     return this;
   }
 
-  async close() { await this.store?.close(); }
+  async close() { await this.store?.close(); await this.plannerStore?.close(); }
+
+  /** Planner's records, read-only, in their own file: opened only once something has been read. */
+  async openPlanner({ create = false } = {}) {
+    if (this.plannerStore) return this.plannerStore;
+    const path = join(HOME(), 'planner.db');
+    if (!create && !existsSync(path)) return null;
+    this.plannerStore = new FileStore({ path });
+    await this.plannerStore.open();
+    return this.plannerStore;
+  }
 
   get online() { return !!this.config.url && !this.opt.offline && !process.env.FLOW_OFFLINE; }
 
@@ -291,7 +305,12 @@ class Game {
 
   async load() {
     this.raw = (await this.store.all()).filter((r) => r && RECORD_TYPES.includes(r.type));
-    this.db = index(this.raw);
+    const planner = await this.openPlanner();
+    this.plans = planner ? await planner.all() : [];
+    const base = index(this.raw);
+    // Planner tasks are derived from the plans every time, never stored.
+    this.derived = this.plans.length ? plannerTasks(this.plans, { me: plannerName(base), skills: base.skills, stats: base.stats }) : { tasks: [], skills: [] };
+    this.db = this.derived.tasks.length ? index([...this.raw, ...this.derived.skills, ...this.derived.tasks]) : base;
     return this.db;
   }
 
@@ -535,6 +554,9 @@ function taskFields(game, o, { editing = false } = {}) {
   return f;
 }
 
+/** The player's name in Planner: settings, else the player's name. */
+const plannerName = (db) => db.settings.plannerName || db.settings.name || '';
+
 const describeTask = (db, t) => {
   const bits = [t.cadence, t.measure, `~${t.estimate} min`];
   if (t.stamina || t.mana) bits.push(`stamina ${t.stamina}, mana ${t.mana}`);
@@ -543,7 +565,7 @@ const describeTask = (db, t) => {
   if (M.isCritical(t)) bits.push('critical');
   const place = db.place.get(M.placeOfTask(db, t))?.name;
   if (place) bits.push(`at ${place}`);
-  return `${t.title} — ${db.skill.get(t.skill)?.name} (${bits.join(', ')}) [${t.id}]`;
+  return `${t.title} — ${db.skill.get(t.skill)?.name} (${bits.join(', ')})${t.source ? ` · Planner · ${t.project}` : ''} [${t.id}]`;
 };
 
 // ─── inventory helpers ──────────────────────────────────────────────────────
@@ -598,6 +620,7 @@ const commands = {
     const settings = { ...db.settings, id: 'settings', type: 'settings' };
     if (typeof opt.name === 'string') settings.name = opt.name;
     if (typeof opt.mission === 'string') settings.mission = opt.mission;
+    if (typeof opt['planner-name'] === 'string') settings.plannerName = opt['planner-name'].trim();
     if (!settings.created) settings.created = dayOf(game.now);
     await game.write(settings);
     const out = [`${existing ? 'Updated' : 'Started'} Flow for ${settings.name}${settings.mission ? ` — ${settings.mission}` : ''}`];
@@ -789,6 +812,7 @@ const commands = {
       return `Added ${describeTask(db2, rec)}`;
     }
     const task = resolve(action === 'restore' ? db.tasks.filter((t) => t.archived) : action === 'edit' ? db.tasks : db.tasks.filter((t) => !t.archived), ref, 'task');
+    if (task.source) throw new Error(`${task.title} comes from Planner (${task.project}) — change it there; Flow only reads it`);
     if (action === 'edit') {
       const rec = makeTask(db, { ...task, ...taskFields(game, opt, { editing: true }) }, { now: game.now });
       const db2 = await game.write(rec);
@@ -1149,6 +1173,14 @@ const commands = {
     return lines.length ? lines.join('\n') : `(no ${what} yet)`;
   },
 
+  async planner(game) {
+    const [action, file] = game.pos;
+    if (action === 'pull') return plannerPull(game);
+    if (action === 'import') return plannerImport(game, file);
+    if (action === 'status' || action === undefined) return plannerStatusText(game);
+    throw new Error('flow planner pull [--url …/w/project] [--token …] | import <store-export.json> | status [--json]');
+  },
+
   async sync(game) {
     if (!game.config.url) throw new Error('sync is not configured — flow config --url https://<portal>/w/flow --token <device token>');
     const r = await game.sync({ loud: true });
@@ -1179,6 +1211,101 @@ const commands = {
     return `Imported ${winners.length} of ${records.length} records${game.opt.restamp ? ' (restamped, so sync sends them)' : ''}`;
   },
 };
+
+// ─── planner (read-only) ────────────────────────────────────────────────────
+
+/** Write the completions and rework Planner implies (ids are the same on every device), and say what was written. */
+async function plannerLog(game) {
+  const db = await game.load();
+  const out = plannerEvents(db, game.plans, { me: plannerName(db), now: game.now });
+  const have = new Set([...db.done, ...db.rework].map((r) => r.id));
+  const fresh = [...out.done, ...out.rework].filter((r) => !have.has(r.id));
+  if (fresh.length) await game.write(...fresh);
+  const lines = [];
+  for (const d of out.done.filter((r) => !have.has(r.id))) lines.push(`✓ logged from Planner: ${db.task.get(d.task)?.title} (${d.day}, ${d.minutes} min) +${d.price.points} pts`);
+  for (const r of out.rework.filter((x) => !have.has(x.id))) lines.push(`↺ reopened in Planner: ${db.task.get(r.task)?.title} — ${r.minutes} min of rework from its timesheets, −${r.penalty} XP, −${r.charged} pts`);
+  for (const a of out.ask) lines.push(`? reopened in Planner: how long did the fix take on ${a.title}? — flow rework "${a.title}" --minutes N`);
+  return lines;
+}
+
+function plannerSummary(game) {
+  const plans = game.plans.filter((r) => !r.deletedAt && r.type === 'document' && r.format === 'project-planner');
+  return `Planner: ${plans.length} plan${plans.length === 1 ? '' : 's'}, ${game.derived.tasks.length} task${game.derived.tasks.length === 1 ? '' : 's'} for ${plannerName(game.db) || 'you'}`;
+}
+
+/** Read Planner's workspace over HttpTransport: pull only, never push. */
+async function plannerPull(game) {
+  const { opt, config } = game;
+  const p = { ...(config.planner || {}) };
+  if (typeof opt.url === 'string') {
+    let u;
+    try { u = new URL(opt.url); } catch { throw new Error(`"${opt.url}" is not a URL`); }
+    if (!/^https?:$/.test(u.protocol)) throw new Error('the Planner URL is http(s)://…/w/project');
+    const url = opt.url.replace(/\/$/, '');
+    if (url !== p.url && existsSync(join(HOME(), 'planner.db'))) await (await game.openPlanner()).setMeta('planner.cursor.pull', 0);
+    p.url = url;
+  }
+  if (typeof opt.token === 'string') p.token = opt.token;
+  if (!p.url) throw new Error('where is Planner? flow planner pull --url https://<portal>/w/<project workspace> [--token <device token>]');
+  if (JSON.stringify(p) !== JSON.stringify(config.planner || {})) { config.planner = p; writeConfig(config); }
+  const store = await game.openPlanner({ create: true });
+  const transport = new HttpTransport({ baseUrl: p.url, token: p.token || config.token, label: 'project' });
+  let pulled = 0;
+  try {
+    for (let page = 0; page < 20; page++) {
+      const since = (await store.meta('planner.cursor.pull')) ?? 0;
+      const { records, cursor } = await transport.pull({ since, deviceId: game.device });
+      const won = [];
+      for (const r of records) {
+        const here = (await store.get(r.id)) ?? undefined;
+        if (mergeRecord(here, r) === r && (!here || here.updatedAt !== r.updatedAt)) won.push(r);
+      }
+      if (won.length) await store.put(won);
+      pulled += won.length;
+      await store.setMeta('planner.cursor.pull', cursor);
+      if (records.length < 1000) break; // a full page means there is more
+    }
+  } catch (err) {
+    throw new Error(`reading Planner failed: ${err.code === 'unauthorized' ? 'the token was refused — flow planner pull --token <token>' : err.message}`);
+  }
+  await store.setMeta('planner.lastPullAt', Date.now());
+  const lines = await plannerLog(game);
+  return [`Read ${p.url}: ${pulled} record${pulled === 1 ? '' : 's'} changed. ${plannerSummary(game)}.`, ...lines].join('\n');
+}
+
+/** Planner's store export (Settings ▸ export), merged by the newer edit into the read-only copy. */
+async function plannerImport(game, file) {
+  if (!file) throw new Error('flow planner import <store-export.json>');
+  let doc;
+  try { doc = JSON.parse(readFileSync(file, 'utf8')); } catch (err) { throw new Error(`${file} is not a JSON file (${err.message})`); }
+  if (!Array.isArray(doc) && doc?.format !== 'project-planner.store') throw new Error(`that is not a Planner store export — it says its format is "${doc?.format ?? 'nothing'}"`);
+  const records = (Array.isArray(doc) ? doc : doc.records || []).filter((r) => r && typeof r.id === 'string' && Number.isFinite(+r.updatedAt));
+  const store = await game.openPlanner({ create: true });
+  const won = [];
+  for (const r of records) {
+    const here = (await store.get(r.id)) ?? undefined;
+    if (mergeRecord(here, r) === r && (!here || here.updatedAt !== r.updatedAt)) won.push(r);
+  }
+  if (won.length) await store.put(won);
+  const lines = await plannerLog(game);
+  return [`Imported ${won.length} of ${records.length} Planner records. ${plannerSummary(game)}.`, ...lines].join('\n');
+}
+
+async function plannerStatusText(game) {
+  const db = await game.load();
+  const out = plannerEvents(db, game.plans, { me: plannerName(db), now: game.now });
+  const tasks = game.derived.tasks.map((t) => ({ ...t, done: db.done.some((d) => d.task === t.id) }));
+  const store = await game.openPlanner();
+  const lastPullAt = store ? await store.meta('planner.lastPullAt') : null;
+  if (game.opt.json) return JSON.stringify({ url: game.config.planner?.url || null, me: plannerName(db), lastPullAt, tasks, skills: game.derived.skills, pending: out }, null, 2);
+  if (!game.plans.length) return 'No Planner plans read yet — flow planner pull --url https://<portal>/w/<project workspace>, or flow planner import <store-export.json>';
+  const lines = [`${plannerSummary(game)} (name in Planner: ${plannerName(db) || '—'}; flow init --planner-name "…" to change)`];
+  if (lastPullAt) lines.push(`Last read ${new Date(lastPullAt).toISOString()} from ${game.config.planner?.url || 'an import'}`);
+  for (const t of tasks) lines.push(`- [${t.done ? 'x' : ' '}] ${describeTask(db, t)}`);
+  if (out.done.length || out.rework.length) lines.push(`Not logged yet: ${out.done.length} finished, ${out.rework.length} reopened — flow planner pull (or import) logs them.`);
+  for (const a of out.ask) lines.push(`? reopened in Planner: how long did the fix take on ${a.title}? — flow rework "${a.title}" --minutes N`);
+  return lines.join('\n');
+}
 
 // config works without opening the database's game view.
 async function config(opt, game) {
@@ -1215,7 +1342,7 @@ async function config(opt, game) {
   ].join('\n');
 }
 
-const WRITES = new Set(['undo', 'init', 'energy', 'done', 'rework', 'moment', 'buy', 'reward', 'task', 'skill', 'stat', 'place', 'kind', 'review', 'import',
+const WRITES = new Set(['planner', 'undo', 'init', 'energy', 'done', 'rework', 'moment', 'buy', 'reward', 'task', 'skill', 'stat', 'place', 'kind', 'review', 'import',
   'item', 'skip', 'purchase', 'wish', 'loadout']);
 const READS = new Set(['status', 'next', 'log', 'replay', 'list', 'export', 'have', 'inventory', 'difficulty']);
 const ALIASES = { setup: 'init', ls: 'list', did: 'done', redo: 'rework', shop: 'buy', items: 'inventory', inv: 'inventory', owned: 'have', spend: 'purchase' };

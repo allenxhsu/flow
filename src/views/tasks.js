@@ -33,6 +33,11 @@ function form(ctx, task) {
   </form>`;
 }
 
+/** Where a Planner task is edited: Planner itself, beside Flow on the Portal. */
+export const PLANNER_HREF = '../project/';
+/** "Planner · Website relaunch": a derived task's tag. */
+export const plannerTag = (t) => (t.source?.app === 'project' ? `<span class="sc-pill planner-tag" data-source="project">Planner · ${esc(t.project || '')}</span>` : '');
+
 function row(ctx, t) {
   const skill = ctx.db.skill.get(t.skill);
   const measure = t.measure === 'time' ? 'time' : t.measure === 'count' ? `count${t.unit ? ` (${esc(t.unit)})` : ''}` : 'quality %';
@@ -40,15 +45,16 @@ function row(ctx, t) {
   return `
   <div class="item" data-task="${esc(t.id)}">
     <div class="item-head"><span class="item-title">${esc(t.title)}</span>
-      <span class="pills">${t.doneNow ? '<span class="sc-pill" style="--tint: var(--sc-success)">done</span>' : ''}${t.overdue ? '<span class="sc-pill" style="--tint: var(--sc-danger)">overdue</span>' : ''}${isCritical(t) ? '<span class="sc-pill" style="--tint: var(--sc-warning)">critical</span>' : ''}${t.batch ? `<span class="sc-pill">${esc(t.batch)}</span>` : ''}${t.archived ? '<span class="sc-pill" style="--tint: var(--sc-text-3)">archived</span>' : ''}</span></div>
+      <span class="pills">${t.doneNow ? '<span class="sc-pill" style="--tint: var(--sc-success)">done</span>' : ''}${t.overdue ? '<span class="sc-pill" style="--tint: var(--sc-danger)">overdue</span>' : ''}${isCritical(t) ? '<span class="sc-pill" style="--tint: var(--sc-warning)">critical</span>' : ''}${t.batch ? `<span class="sc-pill">${esc(t.batch)}</span>` : ''}${t.archived ? '<span class="sc-pill" style="--tint: var(--sc-text-3)">archived</span>' : ''}${plannerTag(t)}</span></div>
     <div class="row small sc-muted">
       <span>${esc(skill?.name || '?')}</span><span>${measure}</span><span>${t.cadence}</span><span>est ${fmtMin(t.estimate)}${t.estimateFrom === 'history' ? ' (from history)' : ''}</span>
       <span>⚡ ${t.stamina ?? 0} / ✧ ${t.mana ?? 0}</span>${t.deadline ? `<span>due ${esc(t.deadline)}</span>` : ''}
     </div>
     <div class="row small sc-faint"><span>runs ${t.runs}</span><span>best ${fmt(t.best)}</span><span>target ${fmt(t.target)}</span>${t.streak ? `<span>streak ${t.streak}${t.atRisk ? ' (at risk)' : ''}</span>` : ''}${t.reworks ? `<span>rework ×${t.reworks}</span>` : ''}</div>
-    <div class="row">
+    <div class="row">${t.source ? `
+      <a class="sc-button sc-button--sm" href="${PLANNER_HREF}" data-planner-link>Open in Planner</a>` : `
       <button class="sc-button sc-button--sm" data-action="edit" data-task="${esc(t.id)}">Edit</button>
-      ${t.archived ? `<button class="sc-button sc-button--ghost sc-button--sm" data-action="unarchive" data-task="${esc(t.id)}">Restore</button>` : `<button class="sc-button sc-button--ghost sc-button--sm" data-action="archive" data-task="${esc(t.id)}">Archive</button>`}
+      ${t.archived ? `<button class="sc-button sc-button--ghost sc-button--sm" data-action="unarchive" data-task="${esc(t.id)}">Restore</button>` : `<button class="sc-button sc-button--ghost sc-button--sm" data-action="archive" data-task="${esc(t.id)}">Archive</button>`}`}
     </div>
   </div>`;
 }
@@ -65,7 +71,7 @@ export function render(ctx) {
     <div class="row-between"><h2>Tasks · ${g.tasks.length - archived}</h2>
       <div class="row">${archived ? `<label class="check-field small"><input class="sc-check" type="checkbox" data-toggle="archived" ${ui.showArchived ? 'checked' : ''}> archived (${archived})</label>` : ''}
       <button class="sc-button sc-button--primary" data-action="new">+ New task</button></div></div>
-    ${editing ? form(ctx, editing === 'new' ? null : db.task.get(editing)) : ''}
+    ${editing && !db.task.get(editing)?.source ? form(ctx, editing === 'new' ? null : db.task.get(editing)) : ''}
     ${list.length ? `<div class="list">${list.map((t) => row(ctx, t)).join('')}</div>` : '<div class="muted-box">No tasks yet.</div>'}
   </div>`;
 }
