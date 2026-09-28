@@ -328,6 +328,13 @@ plan. Flow's own tasks (dailies, habits, chores) stay alongside.
   session (or the pasted server + token) into its own read-only store; the CLI
   reads it with `flow planner pull` over the same `HttpTransport`, or
   `flow planner import <store-export.json>` from Planner's Settings ▸ export.
+- **From when:** Planner history before Flow first reads it is not logged.
+  The first successful read stamps `settings.plannerSince` (ms, written once,
+  never moved later). Only Planner completions with doneAt ≥ plannerSince are
+  logged or treated as reopens; earlier ones are history. Completions and
+  reopens are still logged for tasks of a plan that has since been archived
+  (the list of tasks to do excludes archived plans, the history does not);
+  templates never count.
 
 ### Contract
 
@@ -337,10 +344,12 @@ plan. Flow's own tasks (dailies, habits, chores) stay alongside.
   the derived definitions above, from sync-kit document records
   (`type: 'document'`, `format: 'project-planner'`, `body` = Planner's saved
   JSON). Unreadable bodies are skipped, never thrown.
-- `plannerEvents(db, planRecords, { me, now })` → `{ done: [...], rework:
-  [...], ask: [{ done, task, title }] }`: the records Flow should write now and
-  the fix-minutes questions to show. Idempotent: applying its output and
-  calling it again returns nothing new.
+- `plannerEvents(db, planRecords, { me, now, since })` → `{ done: [...],
+  rework: [...], ask: [{ done, task, title }] }`: the records Flow should write
+  now and the fix-minutes questions to show, for Planner completions with
+  doneAt ≥ `since` (`settings.plannerSince`). With no `since` it logs nothing:
+  it needs the stamp. Idempotent: applying its output and calling it again
+  returns nothing new.
 
 ## Difficulty
 

@@ -243,7 +243,7 @@ test('contract: planner — plannerTasks(planRecords, opts) → { tasks, skills 
   const [t] = d.tasks;
   for (const k of ['id', 'type', 'title', 'project', 'skill', 'measure', 'cadence', 'estimate', 'stamina', 'mana', 'deadline', 'urgent', 'source']) assert.ok(k in t, `task.${k}`);
   assert.deepEqual(Object.keys(t.source).sort(), ['app', 'plan', 'task']);
-  const e = P.plannerEvents(M.index([]), plans, { me: 'Ana', now: T(`${D}T21:00:00`) });
+  const e = P.plannerEvents(M.index([]), plans, { me: 'Ana', now: T(`${D}T21:00:00`), since: T(`${D}T00:00:00`) });
   assert.deepEqual(Object.keys(e).sort(), ['ask', 'done', 'rework']);
   assert.equal(e.done[0].type, 'done');
   assert.equal(typeof e.done[0].planner, 'string');

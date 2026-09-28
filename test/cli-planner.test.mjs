@@ -54,9 +54,12 @@ test('cli planner: import shows the player’s tasks in list, status and next �
   assert.match(h.run(['task', 'edit', 'Write copy', '--estimate', '5']).stderr, /comes from Planner/);
 });
 
+const EARLY = '2026-10-01T00:00:00Z';
+
 test('cli planner: a task done in Planner is logged once; reopened with no hours asks, and flow rework answers', (t) => {
   const h = home(); t.after(h.done);
   h.ok(['init', '--name', 'Someone', '--planner-name', 'ana']);
+  h.ok(['planner', 'import', exportFile(h.dir, [task({ id: 't1', name: 'Write copy', work: 1, assignments: [{ resourceId: 'r_ana', units: 1 }] })], {}, 'first.json')], EARLY);
   const done = [task({ id: 't1', name: 'Write copy', work: 1, percent: 100, doneAt: '2026-10-02T15:30', assignments: [{ resourceId: 'r_ana', units: 1 }] })];
   assert.match(h.ok(['planner', 'import', exportFile(h.dir, done)]), /logged from Planner: Write copy \(2026-10-02, 60 min\) \+60 pts/);
   assert.doesNotMatch(h.ok(['planner', 'import', exportFile(h.dir, done, {}, 'again.json')]), /logged from Planner/, 'idempotent');
@@ -71,6 +74,7 @@ test('cli planner: a task done in Planner is logged once; reopened with no hours
 test('cli planner: a reopen with timesheet hours is logged as rework by itself', (t) => {
   const h = home(); t.after(h.done);
   h.ok(['init', '--name', 'Ana']);
+  h.ok(['planner', 'import', exportFile(h.dir, [task({ id: 't1', name: 'Write copy', work: 1 })], {}, 'first.json')], EARLY);
   const first = [task({ id: 't1', name: 'Write copy', work: 1, percent: 100, doneAt: '2026-10-01T10:00' })];
   h.ok(['planner', 'import', exportFile(h.dir, first)]);
   const again = [{ ...first[0], doneAt: '2026-10-05T09:00' }];
@@ -84,4 +88,43 @@ test('cli planner: import refuses a file that is not a Planner store export', (t
   writeFileSync(path, JSON.stringify({ format: 'flow.store', records: [] }));
   assert.match(h.run(['planner', 'import', path]).stderr, /not a Planner store export/);
   assert.match(h.run(['planner', 'pull']).stderr, /where is Planner/);
+});
+
+// SPEC.md › Planner tasks › From when: the first successful read stamps settings.plannerSince.
+test('cli planner: the first import stamps plannerSince; history before it is not logged; it never moves later', (t) => {
+  const h = home(); t.after(h.done);
+  h.ok(['init', '--name', 'Ana']);
+  const old = [task({ id: 't1', name: 'Old work', work: 1, percent: 100, doneAt: '2026-09-20T10:00' }), task({ id: 't2', name: 'Write copy', work: 1 })];
+  const out = h.ok(['planner', 'import', exportFile(h.dir, old)], EARLY);
+  assert.doesNotMatch(out, /logged from Planner/, 'finished before Flow first read Planner: history');
+  const since = JSON.parse(h.ok(['status', '--json'], EARLY)).settings.plannerSince;
+  assert.equal(since, Date.parse(EARLY));
+  assert.match(h.ok(['planner', 'status'], EARLY), /since 2026-10-01/);
+  const later = [old[0], { ...old[1], percent: 100, doneAt: '2026-10-03T10:00' }];
+  assert.match(h.ok(['planner', 'import', exportFile(h.dir, later, {}, 'later.json')]), /logged from Planner: Write copy/);
+  assert.doesNotMatch(h.ok(['log', '--days', '30']), /Old work/);
+  assert.equal(JSON.parse(h.ok(['status', '--json'])).settings.plannerSince, since, 'written once, never moved later');
+});
+
+test('cli planner: a failed read stamps nothing', (t) => {
+  const h = home(); t.after(h.done);
+  h.ok(['init', '--name', 'Ana']);
+  const path = join(h.dir, 'bad.json');
+  writeFileSync(path, '{nope');
+  assert.notEqual(h.run(['planner', 'import', path], EARLY).status, 0);
+  assert.equal(JSON.parse(h.ok(['status', '--json'])).settings.plannerSince ?? null, null);
+});
+
+test('cli planner: finishes in a plan archived since are still logged; templates never', (t) => {
+  const h = home(); t.after(h.done);
+  h.ok(['init', '--name', 'Ana']);
+  h.ok(['planner', 'import', exportFile(h.dir, [task({ id: 't1', name: 'Write copy', work: 1 })])], EARLY);
+  const done = [task({ id: 't1', name: 'Write copy', work: 1, percent: 100, doneAt: '2026-10-03T10:00' })];
+  assert.match(h.ok(['planner', 'import', exportFile(h.dir, done, { archived: true }, 'arch.json')]), /logged from Planner: Write copy/);
+  assert.doesNotMatch(h.ok(['list', 'tasks']), /\[ \] Write copy|Write copy.*Planner · Website relaunch \[/, 'not on the list of tasks to do');
+  assert.match(h.ok(['log', '--days', '7']), /Write copy 60m/, 'the history keeps its title');
+  const h2 = home(); t.after(h2.done);
+  h2.ok(['init', '--name', 'Ana']);
+  h2.ok(['planner', 'import', exportFile(h2.dir, [task({ id: 't1', name: 'Pattern', work: 1 })], { template: true })], EARLY);
+  assert.doesNotMatch(h2.ok(['planner', 'import', exportFile(h2.dir, [task({ id: 't1', name: 'Pattern', work: 1, percent: 100, doneAt: '2026-10-03T10:00' })], { template: true }, 'b.json')]), /logged from Planner/);
 });

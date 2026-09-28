@@ -8,6 +8,8 @@ import { index, makeDone, makeRework, isCritical, DEFAULT_STATS } from '../../sr
 import { baseRecords, T } from '../helpers.mjs';
 
 const NOW = T('2026-10-05T12:00:00');
+/** settings.plannerSince: when Flow first read Planner, before every finish below. */
+const SINCE = T('2026-09-01T00:00:00');
 const STATS = DEFAULT_STATS.map((s) => ({ ...s, type: 'stat' }));
 const SKILLS = baseRecords().filter((r) => r.type === 'skill');
 
@@ -85,7 +87,7 @@ test('planner: unreadable bodies are skipped, never thrown', () => {
   ];
   const out = derive([...bad, good]);
   assert.deepEqual(ids(out), ['task_pl_plan_ok_t1']);
-  assert.doesNotThrow(() => plannerEvents(index([]), [...bad, good], { me: 'Ana', now: NOW }));
+  assert.doesNotThrow(() => plannerEvents(index([]), [...bad, good], { me: 'Ana', now: NOW, since: SINCE }));
 });
 
 test('planner: deleted plan records are ignored', () => {
@@ -226,7 +228,7 @@ function world(plans, flow = baseRecords()) {
     plans, flow,
     derived: () => derive(w.plans),
     db: () => { const d = w.derived(); return index([...w.flow, ...d.skills, ...d.tasks]); },
-    events: (opts = {}) => plannerEvents(index(w.flow), w.plans, { me: 'Ana', now: NOW, ...opts }),
+    events: (opts = {}) => plannerEvents(index(w.flow), w.plans, { me: 'Ana', now: NOW, since: SINCE, ...opts }),
     apply: (out) => { w.flow.push(...out.done, ...out.rework); return out; },
   };
   return w;
@@ -283,7 +285,7 @@ test('planner: idempotent — applying the output and asking again returns nothi
 test('planner: the player’s Planner name defaults to the player’s name', () => {
   const p = plan({ resources: RES, tasks: [{ id: 't1', name: 'Hers', work: 1, percent: 100, doneAt: DONE_AT, assignments: [{ resourceId: 'r_ana', units: 1 }] }] });
   const flow = [...baseRecords(), { id: 'settings', type: 'settings', name: 'Ana', mission: '' }];
-  const out = plannerEvents(index(flow), [p], { now: NOW });
+  const out = plannerEvents(index(flow), [p], { now: NOW, since: SINCE });
   assert.equal(out.done.length, 1);
 });
 
@@ -368,4 +370,51 @@ test('planner: a timer-logged completion more than 24 h before doneAt is reopene
   assert.deepEqual(out.done, []);
   assert.equal(out.ask.length, 1);
   assert.equal(out.ask[0].done, timer.id);
+});
+
+// ─── from when (settings.plannerSince) ──────────────────────────────────────
+
+test('planner: with no since, nothing is logged — it needs the stamp', () => {
+  const w = world([finished()]);
+  for (const since of [undefined, null]) {
+    assert.deepEqual(plannerEvents(index(w.flow), w.plans, { me: 'Ana', now: NOW, since }), { done: [], rework: [], ask: [] }, `since = ${since}`);
+  }
+});
+
+test('planner: completions before since are history — not logged', () => {
+  const w = world([finished()]);
+  assert.deepEqual(w.events({ since: doneMs(DONE_AT) + 60000 }), { done: [], rework: [], ask: [] });
+  assert.equal(w.events({ since: doneMs(DONE_AT) }).done.length, 1, 'doneAt ≥ since is logged');
+});
+
+test('planner: a finish before since is not treated as a reopen of an earlier completion', () => {
+  const w = world([finished('2026-09-20T10:00')]);
+  w.flow.push(makeDone(w.db(), 'task_pl_plan_web_t1', { end: doneMs('2026-09-10T10:00'), minutes: 50 }));
+  assert.deepEqual(w.events({ since: T('2026-09-25T00:00:00') }), { done: [], rework: [], ask: [] });
+});
+
+test('planner: completions after since in a plan archived since are still logged', () => {
+  const p = plan({ archived: true, resources: RES, tasks: [{ id: 't1', name: 'Write copy', work: 1, percent: 100, doneAt: DONE_AT }] });
+  assert.deepEqual(ids(derive([p])), [], 'not on the list of tasks to do');
+  const out = world([p]).events();
+  assert.equal(out.done.length, 1);
+  assert.equal(out.done[0].id, `done_pl_plan_web_t1_${doneMs(DONE_AT)}`);
+  assert.equal(out.done[0].minutes, 60);
+});
+
+test('planner: a reopen in a plan archived since is still rework', () => {
+  const w = world([finished()]);
+  const first = w.apply(w.events()).done[0];
+  w.plans = [plan({ archived: true, resources: RES, timesheets: [{ id: 'ts1', taskId: 't1', date: '2026-10-04', hours: 1 }],
+    tasks: [{ id: 't1', name: 'Write copy', work: 1, percent: 100, doneAt: '2026-10-05T11:00' }] })];
+  const out = w.events();
+  assert.equal(out.rework.length, 1);
+  assert.equal(out.rework[0].done, first.id);
+  assert.equal(out.rework[0].minutes, 60);
+});
+
+test('planner: templates never count', () => {
+  const p = plan({ template: true, resources: RES, tasks: [{ id: 't1', name: 'Write copy', work: 1, percent: 100, doneAt: DONE_AT }] });
+  assert.deepEqual(world([p]).events(), { done: [], rework: [], ask: [] });
+  assert.deepEqual(world([{ ...p, body: JSON.stringify({ ...JSON.parse(p.body), archived: true }) }]).events(), { done: [], rework: [], ask: [] }, 'an archived template neither');
 });
