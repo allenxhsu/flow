@@ -9,6 +9,7 @@
     "build": null,
     "include": [
       "index.html",
+      "terminal.html",
       "src/**",
       "ui-kit/**",
       "sync-kit/js/**"

@@ -16,6 +16,13 @@
 // server URL + token — into a second local store, and never pushed to. Its
 // plans become derived tasks in db(), and what was finished or reopened there
 // is logged here by plannerEvents (src/planner.js).
+//
+// Writing to Planner (SPEC.md › Terminal › Writing to Planner): the one
+// exception. Flow's operations — `flow.op` records, write-once — are kept in
+// the Planner store beside the plans (so a task added here shows at once) and
+// pushed to Planner's workspace by pushOps, which sends only this device's
+// flow.op records. There is no SyncEngine over the Planner store and no other
+// push to it, so Flow can never write a plan (`document`) there.
 
 import {
   SyncEngine, HttpTransport, LocalStore, IndexedDbStore,
@@ -23,7 +30,8 @@ import {
   portalApp, portalSession, portalRemote, requestPersistentStorage, storageStatus, mergeRecord,
 } from '../sync-kit/js/index.js';
 import { index, stamp, tombstone, RECORD_TYPES, EVENT_TYPES } from './model.js';
-import { plannerTasks, plannerEvents, plannerHistory, plannerSinceStamp } from './planner.js';
+import { plannerTasks, plannerEvents, plannerHistory, plannerSinceStamp, expiredOps } from './planner.js';
+import { pushOps, opsToWrite, plannerUrlFrom, isOp } from './planops.js';
 
 export const WORKSPACE = 'flow';
 export const APP_ID = 'flow';
@@ -42,6 +50,8 @@ export const isEvent = (type) => EVENTS.has(type);
 export const PLANNER_APP = 'project';
 const PLANNER_KEY = 'flow.planner';
 const PLANNER_CURSOR = 'planner.cursor.pull';
+/** The ids of this device's ops Planner's workspace has taken. */
+const OPS_SENT = 'planner.ops.sent';
 
 let recordStore = null;
 let engine = null;
@@ -100,7 +110,7 @@ export const allRecords = () => [...byId.values()];
 export function db() {
   if (!cachedDb) {
     const base = index(allRecords());
-    const opts = { me: plannerName(base), skills: base.skills, stats: base.stats };
+    const opts = { me: plannerName(base), skills: base.skills, stats: base.stats, now: Date.now() };
     const d = plannerById.size ? plannerTasks(plannerRecords(), opts) : { tasks: [], skills: [] };
     // Plans archived since: only the tasks a stored completion points at, so its history keeps its title and skill.
     const h = plannerById.size ? plannerHistory(plannerRecords(), opts) : { tasks: [], skills: [] };
@@ -252,6 +262,11 @@ export async function initSync() {
   rebuild();
   if (syncConfigured()) void syncNow();
   else void pullPlanner();
+  // Planner is read (and Flow's ops sent) on its own clock too: the Terminal may have no Flow sync yet.
+  if (typeof window !== 'undefined') {
+    setInterval(() => { if (plannerConfigured() && !syncConfigured()) void pullPlanner(); }, INTERVAL_MS);
+    window.addEventListener('online', () => { void pullPlanner(); });
+  }
 }
 
 function rebuild() {
@@ -329,7 +344,9 @@ export async function syncNow() {
 export const plannerRecords = () => [...plannerById.values()];
 export const plannerSettingsNow = () => ({ ...plannerSettings });
 export const plannerInPortal = () => !!plannerPortal;
-export const plannerConfigured = () => !!(plannerPortal || plannerSettings.url);
+/** Paired with the Portal (a bare origin, as shell-kit's pairing gives): Planner's workspace is on it too. */
+const pairedPlannerUrl = () => (/^https?:\/\/[^/]+\/?$/.test(settings.url || '') ? plannerUrlFrom(settings.url) : '');
+export const plannerConfigured = () => !!(plannerPortal || plannerSettings.url || pairedPlannerUrl());
 /** The player's name in Planner: Settings, else the player's name. */
 export const plannerName = (base = db()) => base.settings.plannerName || base.settings.name || '';
 
@@ -341,6 +358,9 @@ export function plannerStatus() {
 function plannerTransport() {
   if (plannerPortal) return new HttpTransport({ baseUrl: plannerPortal.baseUrl, label: plannerPortal.workspace, onUnauthorized });
   if (plannerSettings.url) return new HttpTransport({ baseUrl: plannerSettings.url, token: plannerSettings.token || settings.token, label: PLANNER_APP });
+  // Paired with the Portal (the iPhone app): Planner's workspace on the same Portal, same device token.
+  const derived = pairedPlannerUrl();
+  if (derived) return new HttpTransport({ baseUrl: derived, token: settings.token, label: PLANNER_APP });
   return null;
 }
 
@@ -363,6 +383,8 @@ export async function pullPlanner() {
   plannerState = { ...plannerState, pulling: true };
   pulling = (async () => {
     try {
+      // Flow's ops go first, so what Planner applied comes back in the same read.
+      try { await pushPlannerOps(transport); } catch (err) { plannerState = { ...plannerState, lastError: err?.message || String(err) }; }
       const applied = [];
       for (let page = 0; page < 20; page++) {
         const since = (await plannerStore.meta(PLANNER_CURSOR)) ?? 0;
@@ -411,3 +433,53 @@ async function autoLog() {
   const fresh = [...out.done, ...out.rework].filter((r) => !byId.has(r.id));
   if (fresh.length) await add(fresh);
 }
+
+// ------------------------------------------------------------ writing to Planner
+
+/**
+ * Write operations for Planner (addTask, timesheet): write-once, stamped as
+ * this device, kept beside the plans so they show at once, and sent to
+ * Planner's workspace as soon as it can be reached. Offline they wait.
+ */
+export async function addOps(...ops) {
+  if (!plannerStore) throw new Error('Flow cannot keep Planner changes on this device.');
+  const list = opsToWrite(plannerById, ops.flat().filter(Boolean)).map((op) => {
+    const { updatedAt, origin, deletedAt, ...rest } = op;
+    return stamp(rest, { now: Math.max(Date.now(), op.at || 0), device: deviceId() });
+  });
+  if (!list.length) return [];
+  await plannerStore.put(list);
+  for (const r of list) plannerById.set(r.id, r);
+  changed('planner');
+  setTimeout(() => { void pullPlanner(); }, 300);
+  return list;
+}
+
+let pushingOps = null;
+/** Send this device's unsent ops, and only ops: pushOps never sends anything else. */
+async function pushPlannerOps(transport = plannerTransport()) {
+  if (!transport || !plannerStore) return 0;
+  if (pushingOps) return pushingOps;
+  pushingOps = (async () => {
+    const sent = new Set((await plannerStore.meta(OPS_SENT)) || []);
+    const ids = await pushOps(plannerRecords(), transport, { deviceId: deviceId(), sent });
+    if (ids.length) {
+      for (const id of ids) sent.add(id);
+      // Remember only what is still held: the list never grows past the ops themselves.
+      await plannerStore.setMeta(OPS_SENT, [...sent].filter((id) => plannerById.has(id)));
+      changed('planner');
+    }
+    return ids.length;
+  })();
+  try { return await pushingOps; } finally { pushingOps = null; }
+}
+
+/** How many of this device's ops are still waiting to reach Planner's workspace. */
+export async function opsWaiting() {
+  if (!plannerStore) return 0;
+  const sent = new Set((await plannerStore.meta(OPS_SENT)) || []);
+  return plannerRecords().filter((r) => isOp(r) && r.origin === deviceId() && !sent.has(r.id)).length;
+}
+
+/** addTask ops Planner will never apply now (older than 90 days, still not in the plan). */
+export const plannerExpired = (now = Date.now()) => expiredOps(plannerRecords(), { now });

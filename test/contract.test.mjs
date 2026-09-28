@@ -12,7 +12,7 @@ const FUNCTIONS = {
   isCritical: 1, actual: 1, taskStats: 2, levelFor: 2, masteryFactor: 1, underdogsOn: 2, chainAt: 3,
   priceDone: 3, makeDone: 2, balanceOf: 1, chargeFor: 2, makePurchase: 2, makeRework: 3, makeEnergy: 1,
   energyOn: 2, makeReview: 2, latestPerWeek: 1, isDoneFor: 3, dailyStreak: 2, weeklyStreak: 2,
-  pickNext: 2, reworkCandidate: 3, play: 1, replayDay: 2,
+  pickNext: 2, reworkCandidate: 3, play: 1, replayDay: 2, makeTired: 2,
 };
 
 const CONSTANTS = {
@@ -23,6 +23,7 @@ const CONSTANTS = {
   BATCH_MANA_SHARE: 0.5, REWORK_MULTIPLIERS: [1.5, 1.75, 2], REWORK_CRITICAL: 2, DEBT_MULTIPLIER: 2,
   PLAYER_STEP: 500, STAT_STEP: 300, SKILL_STEP: 100, ENERGY_MAX: 10, WEEK: 7, REWORK_ASK_DAYS: 14,
   ZONES: ['home', 'road', 'factory', 'town', 'elsewhere'], WALK_MIN: 5,
+  TIRED_CAPS: { bit: 6, very: 3, wiped: 1 },
 };
 
 const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish', 'world'];
@@ -294,4 +295,42 @@ test('contract (iOS): src/native.js — the bridge message names', async () => {
   });
   assert.deepEqual(N.TO_PAGE, { visit: 'flow.visit', health: 'flow.health', geofenceStatus: 'flow.geofence.status', open: 'open' });
   for (const f of ['createNative', 'snapshotOf', 'parseDeepLink', 'timerMessage', 'visitRecords']) assert.equal(typeof N[f], 'function', f);
+});
+
+// Terminal (SPEC.md › Terminal: the iPhone app › Writing to Planner): the ops
+// writer and the timer's records live in src/planops.js; the project list and
+// the pending tasks in src/planner.js; I'm tired in src/model.js. The
+// Terminal's page, src/sync.js and Now depend on them.
+test('contract (terminal): src/planops.js — the ops writer', async () => {
+  const O = await import('../src/planops.js');
+  assert.equal(O.OP_TYPE, 'flow.op');
+  const arity = { isOp: 1, addTaskOp: 1, timesheetOp: 1, opsToWrite: 2, pushOps: 2, stopTimer: 2, pauseTimer: 2, plannerUrlFrom: 1 };
+  for (const [name, n] of Object.entries(arity)) {
+    assert.equal(typeof O[name], 'function', name);
+    assert.equal(O[name].length, n, `${name}.length`);
+  }
+  const add = O.addTaskOp({ plan: 'p', name: 'X', me: 'Ana', now: T(`${D}T10:00:00`) });
+  for (const k of ['id', 'type', 'op', 'plan', 'at', 'me', 'task']) assert.ok(k in add, `addTask.${k}`);
+  assert.deepEqual(Object.keys(add.task).sort(), ['deadline', 'id', 'name', 'work']);
+  const ts = O.timesheetOp({ plan: 'p', task: 't', start: T(`${D}T10:00:00`), minutes: 30, me: 'Ana' });
+  for (const k of ['id', 'type', 'op', 'plan', 'at', 'me', 'task', 'date', 'start', 'hours', 'note']) assert.ok(k in ts, `timesheet.${k}`);
+});
+
+test('contract (terminal): src/planner.js — projectList, expiredOps; plannerTasks takes { now } for the 90-day rule', async () => {
+  const P = await import('../src/planner.js');
+  assert.equal(P.projectList.length, 3, 'projectList(db, planRecords, { me, now })');
+  assert.equal(P.expiredOps.length, 2, 'expiredOps(planRecords, { now })');
+  assert.equal(P.OPS_KEEP_DAYS, 90);
+  const body = JSON.stringify({ id: 'plan_a', name: 'Website relaunch', pinned: true, tasks: [{ id: 't1', name: 'Write copy', level: 1, duration: 1, work: 1, assignments: [] }], resources: [] });
+  const plans = [{ id: 'plan_a', type: 'document', format: 'project-planner', body, updatedAt: 1 }];
+  const [p] = P.projectList(M.index([]), plans, { me: 'Ana', now: T(`${D}T10:00:00`) });
+  assert.deepEqual(Object.keys(p).sort(), ['deadline', 'id', 'name', 'open', 'pinned', 'tasks', 'weekMinutes']);
+});
+
+test('contract (terminal): makeTired(db, { body, mind, level, at }) → an energy event with feeling "tired"', () => {
+  const g = game();
+  const r = M.makeTired(g.db(), { body: true, mind: false, level: 'bit', at: T(`${D}T10:00:00`) });
+  for (const k of ['id', 'type', 'day', 'at', 'stamina', 'mana', 'feeling', 'tired']) assert.ok(k in r, `tired.${k}`);
+  assert.equal(r.type, 'energy');
+  assert.deepEqual(r.tired, { body: true, mind: false, level: 'bit' });
 });

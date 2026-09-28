@@ -1,8 +1,14 @@
-# Flow for iPhone
+# Flow for iPhone — the Terminal
 
-The same web app as the Portal's, bundled and served offline inside
-[shell-kit](https://github.com/allenxhsu/shell-kit)'s iOS shell, plus what a
-page cannot do (SPEC.md › iOS app):
+The iPhone app is Flow's **Terminal** (SPEC.md › Terminal: the iPhone app):
+pick a Planner project, add tasks to it, time the work. It is `terminal.html`
+(`src/terminal.js`), bundled and served offline inside
+[shell-kit](https://github.com/allenxhsu/shell-kit)'s iOS shell — the build
+phase copies it in as the bundle's `index.html`, because shell-kit always
+opens `index.html`. The game, the replay and the rest of Flow stay on the
+desktop and web app (`index.html`). Tasks added and time logged here reach
+Planner as operations (`flow.op` records in Planner's `project` workspace)
+that Planner applies itself. Plus what a page cannot do (SPEC.md › iOS app):
 
 - **Lock Screen timer** — a Live Activity (Lock Screen and Dynamic Island)
   while the timer runs; **Finish** opens Log done with the timer's minutes.
@@ -33,6 +39,45 @@ ios/
   scripts/copy-web.sh      build phase: the web app → Flow.app/web
   scripts/make-icon.py     draws the app icon (Pillow)
 ```
+
+## Install it on your iPhone (one command)
+
+Like Heptabase's iPhone app: built on the Mac, installed on the connected
+iPhone. Once:
+
+1. Install Xcode (App Store), open it once, and sign in with your Apple ID in
+   **Xcode › Settings › Accounts**. Xcode makes the development certificate and
+   profiles itself from then on. `brew install xcodegen`.
+2. Put shell-kit and sync-kit beside this repository (see Building below).
+3. Optional: `cp ios/Local.xcconfig.example ios/Local.xcconfig` and fill in
+   `DEVELOPMENT_TEAM`, `BUNDLE_PREFIX` and `PORTAL_ORIGIN`. Without it the
+   script takes the team from your Apple Development certificate and uses
+   `local.<team>` as the bundle id prefix.
+4. On the iPhone: **Settings › Privacy & Security › Developer Mode** on
+   (it restarts). Connect it with a cable, unlock it, tap **Trust**.
+
+Then, from the repository:
+
+```sh
+npm run ios:install              # the one connected iPhone
+npm run ios:install -- <udid>    # when more than one is connected
+```
+
+It runs `xcodegen generate`, finds the iPhone with `xcrun devicectl list
+devices`, builds Debug for it with `-allowProvisioningUpdates`, installs it
+with `xcrun devicectl device install app` and opens it. The first launch may
+say the developer is not trusted: **Settings › General › VPN & Device
+Management ›** your Apple ID **› Trust**. If the build stops at CodeSign with
+`errSecInternalComponent`, the terminal is not yet allowed to use the signing
+key: click *Always Allow* on the keychain prompt, or once run
+`security set-key-partition-list -S apple-tool:,apple:,codesign: -s ~/Library/Keychains/login.keychain-db`.
+
+In the app, **Settings › Sign in to the Portal** pairs it (the same pairing
+as the Mac app); your Planner projects then appear. Set **Your name in
+Planner** if it differs from your Flow name. Everything works offline: tasks
+you add show at once marked "sending to Planner" and go out when you are back
+online. The Portal's pairing token must reach Planner's `project` workspace
+as well as `flow`.
 
 ## Building
 
@@ -96,9 +141,8 @@ No push notifications are needed: the Live Activity is updated by the app itself
 
 ## First run on the phone
 
-- Settings ▸ Sync ▸ **Sign in to the Portal** pairs the app like the Mac app.
-- Settings ▸ **Places on this iPhone**: stand somewhere, **Set to where I am
-  now**; allow location **Always** for arrive / leave while Flow is closed.
-- The morning rating asks Apple Health once; refuse and it simply shows no
-  suggestion.
+- Settings ▸ **Sign in to the Portal** pairs the app like the Mac app.
+- The Terminal has no Places screen and no morning rating, so arrive / leave
+  and the Health suggestion (below the Terminal, in the native shell) have
+  nowhere to be switched on yet; the Lock Screen timer and the widget work.
 - Long-press the home screen ▸ **+** ▸ Flow for the widget.

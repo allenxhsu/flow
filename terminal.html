@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" data-app="flow">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1b2340">
+<title>Flow Terminal</title>
+<!-- Flow's Terminal (SPEC.md › Terminal: the iPhone app): pick a project,
+     add tasks to it, time the work. The iPhone app opens this page; the
+     desktop and web app stay on index.html. -->
+<link rel="stylesheet" href="src/styles.css">
+<script type="module">
+  import { initTheme } from './ui-kit/js/theme.js';
+  initTheme({ app: 'flow' });
+</script>
+<script type="module" src="ui-kit/js/portal-bar.js"></script>
+</head>
+<body>
+  <template id="portal-bar-tpl"><sc-portal-bar app="flow"></sc-portal-bar></template>
+  <div class="ds ds--terminal" id="shell" data-view="terminal">
+    <div class="ds-screen" id="screen">
+      <header class="ds-top term-top" id="top"></header>
+      <main class="ds-main" id="view" tabindex="-1"><div class="ds-boot">Loading…</div></main>
+    </div>
+    <div class="ds-toasts" id="toasts" role="status" aria-live="polite"></div>
+  </div>
+  <script type="module" src="src/terminal.js"></script>
+</body>
+</html>

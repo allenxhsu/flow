@@ -17,7 +17,15 @@
 // Only the few rules Flow needs are reimplemented here (Planner's expected
 // hours, skillOf, energyOf); nothing is imported from Planner.
 
-import { DEFAULT_STATS, makeDone, makeRework, isDay, dayOf } from './model.js';
+import { DEFAULT_STATS, makeDone, makeRework, isDay, dayOf, isDoneFor, isoWeek } from './model.js';
+
+/** Flow's operations (SPEC.md › Writing to Planner): write-once records Planner applies to its plans. */
+export const OP_TYPE = 'flow.op';
+/** Planner keeps applied op ids this long and ignores older ops; Flow stops showing them as pending. */
+export const OPS_KEEP_DAYS = 90;
+const OPS_KEEP_MS = OPS_KEEP_DAYS * 86400000;
+/** A task added with no hours is estimated at this many minutes until Planner has it. */
+export const PENDING_ESTIMATE_MIN = 30;
 
 /** A Flow completion within this long of a Planner done time is the same finish. */
 export const PLANNER_COVER_MS = 24 * 3600000;
@@ -39,12 +47,14 @@ function doneAtMs(t) {
   return Number.isFinite(ms) ? ms : null;
 }
 
-/** The plans in a list of records, read; anything unreadable is skipped. */
+/** The plans in a list of records, read; anything unreadable is skipped. Flow's own ops come back beside them. */
 function readPlans(planRecords) {
   const workspaces = new Map();
   const plans = [];
+  const ops = [];
   for (const r of planRecords || []) {
     if (!r || r.deletedAt) continue;
+    if (r.type === OP_TYPE && typeof r.id === 'string') { ops.push(r); continue; }
     if (r.type === 'workspace' && typeof r.id === 'string') { workspaces.set(r.id, r); continue; }
     if (r.type !== 'document' || r.format !== 'project-planner') continue;
     let body = r.body;
@@ -54,7 +64,47 @@ function readPlans(planRecords) {
     if (!id) continue;
     plans.push({ id, body });
   }
-  return { plans, workspaces };
+  return { plans, workspaces, ops };
+}
+
+const opAt = (op) => (Number.isFinite(+op.at) ? +op.at : Number.isFinite(+op.updatedAt) ? +op.updatedAt : null);
+const appliedIn = (plan) => new Set((Array.isArray(plan.appliedOps) ? plan.appliedOps : []).map((a) => (typeof a === 'string' ? a : a?.id)).filter(Boolean));
+const expired = (op, now) => Number.isFinite(now) && opAt(op) !== null && opAt(op) < now - OPS_KEEP_MS;
+const holds = (plan, taskId) => plan.tasks.some((t) => t && String(t.id) === taskId);
+
+/**
+ * The addTask ops Planner has not applied to a plan Flow holds: not in the
+ * plan yet (by task id), not marked applied there, and written within the
+ * last 90 days. Each becomes a task of that plan until Planner has it.
+ */
+function pendingAdds(plans, ops, now) {
+  const byId = new Map(plans.map((p) => [p.id, p.body]));
+  const out = new Map();
+  for (const op of ops) {
+    if (op.op !== 'addTask' || !op.task || typeof op.task.id !== 'string' || !op.task.id) continue;
+    const plan = byId.get(op.plan);
+    if (!plan || holds(plan, op.task.id) || appliedIn(plan).has(op.id) || expired(op, now)) continue;
+    const list = out.get(op.plan) || [];
+    list.push(op);
+    out.set(op.plan, list);
+  }
+  for (const list of out.values()) list.sort((a, b) => (opAt(a) ?? 0) - (opAt(b) ?? 0) || a.id.localeCompare(b.id));
+  return out;
+}
+
+/**
+ * The addTask ops that stopped being pending unapplied: written more than 90
+ * days ago, for a plan Flow holds that still has no such task. Planner will
+ * never apply them; the Terminal says so once.
+ */
+export function expiredOps(planRecords, opts) {
+  const now = opts?.now;
+  const { plans, ops } = readPlans(planRecords);
+  const byId = new Map(plans.map((p) => [p.id, p.body]));
+  return ops.filter((op) => {
+    const plan = byId.get(op.plan);
+    return op.op === 'addTask' && op.task && plan && !holds(plan, op.task.id) && !appliedIn(plan).has(op.id) && expired(op, now);
+  });
 }
 
 /** Planner's expected work, in minutes: stated work, else duration × hours a day × assumed load. */
@@ -75,8 +125,9 @@ function estimateOf(plan, t) {
  * The player's tasks in the plans, with what each needs from its plan. The
  * shared work behind plannerTasks and plannerEvents.
  */
-function derive(planRecords, { me = '', skills = [], stats = [], history = false } = {}) {
-  const { plans, workspaces } = readPlans(planRecords);
+function derive(planRecords, { me = '', skills = [], stats = [], history = false, now = null } = {}) {
+  const { plans, workspaces, ops } = readPlans(planRecords);
+  const pending = history ? new Map() : pendingAdds(plans, ops, now);
   const who = nameKey(me);
   const liveSkills = (skills || []).filter((s) => s && !s.deletedAt && typeof s.name === 'string');
   const statList = stats && stats.length ? stats : DEFAULT_STATS;
@@ -100,7 +151,14 @@ function derive(planRecords, { me = '', skills = [], stats = [], history = false
     const cancelled = new Set((Array.isArray(plan.stages) ? plan.stages : []).filter((st) => st && st.cancelled).map((st) => st.id));
     const ws = workspaces.get(plan.workspaceId);
     const folder = (Array.isArray(ws?.folders) ? ws.folders : []).find((f) => f && f.id === plan.folderId);
-    const tasks = plan.tasks.filter((t) => t && typeof t === 'object' && text(String(t.id ?? '')));
+    // A task Flow added and Planner has not applied yet: derived from the op
+    // itself — same id, the op's hours else 30 minutes — at the end, level 1.
+    const adds = (pending.get(planId) || []).map((op) => ({
+      id: op.task.id, name: op.task.name, level: 1, duration: 1, deadline: op.task.deadline ?? null,
+      work: Number.isFinite(+op.task.work) && op.task.work !== null && +op.task.work > 0 ? +op.task.work : PENDING_ESTIMATE_MIN / 60,
+      assignments: [], pending: true,
+    }));
+    const tasks = [...plan.tasks, ...adds].filter((t) => t && typeof t === 'object' && text(String(t.id ?? '')));
     tasks.forEach((t, i) => {
       const level = Number(t.level) || 1;
       if (i < tasks.length - 1 && (Number(tasks[i + 1].level) || 1) > level) return; // a summary
@@ -119,9 +177,10 @@ function derive(planRecords, { me = '', skills = [], stats = [], history = false
         critical: false, forOthers: false, deadline: isDay(t.deadline) ? t.deadline : null, urgent: URGENT.has(t.urgency),
         batch: null, unit: '', place: null, archived: plan.archived === true,
         source: { app: 'project', plan: planId, task: taskId },
+        ...(t.pending ? { pending: true } : {}),
       };
       const sheets = (Array.isArray(plan.timesheets) ? plan.timesheets : []).filter((x) => x && x.taskId === taskId && isDay(x.date) && Number.isFinite(+x.hours) && +x.hours > 0);
-      out.push({ task, doneAt: doneAtMs(t), sheets });
+      out.push({ task, doneAt: doneAtMs(t), sheets, percent: Math.round(+t.percent) || 0 });
     });
   }
   return { entries: out, skills: [...madeSkills.values()] };
@@ -133,6 +192,7 @@ function derive(planRecords, { me = '', skills = [], stats = [], history = false
  * the Work stat) for each Planner skill Flow has no skill of that name for.
  */
 export function plannerTasks(planRecords, opts) {
+  // With `now`, pending addTask ops older than 90 days are dropped (Planner no longer applies them).
   const { entries, skills } = derive(planRecords, opts);
   return { tasks: entries.map((e) => e.task), skills };
 }
@@ -257,4 +317,42 @@ export function plannerEvents(db, planRecords, opts) {
     } else out.ask.push(ask);
   }
   return out;
+}
+
+// ─── the Terminal's project list ───────────────────────────────────────────
+
+/**
+ * SPEC.md › Terminal: Planner's plans — not archived, not templates — that
+ * have at least one task for the player (pending ones included), pinned
+ * first, then by name. Each carries its open tasks (not done in Flow, not at
+ * 100% in Planner), the earliest deadline among them, and the minutes logged
+ * this ISO week: the plan's timesheet hours on the player's tasks plus Flow's
+ * timesheet ops Planner has not applied yet.
+ *
+ * `db` is Flow's db (for its completions); the tasks come from the plans.
+ */
+export function projectList(db, planRecords, opts) {
+  const { me = '', now = Date.now(), skills, stats } = opts || {};
+  const day = dayOf(now);
+  const week = isoWeek(day);
+  const { plans, ops } = readPlans(planRecords);
+  const { entries } = derive(planRecords, { me, skills: skills ?? db.skills, stats: stats ?? db.stats, now });
+  const out = [];
+  for (const { id, body } of plans) {
+    if (body.template === true || body.archived === true) continue;
+    const mine = entries.filter((e) => e.task.source.plan === id);
+    if (!mine.length) continue;
+    const ids = new Set(mine.map((e) => e.task.source.task));
+    const open = mine.filter((e) => e.percent < 100 && !isDoneFor(db, e.task, day)).map((e) => e.task);
+    const deadline = open.map((t) => t.deadline).filter(Boolean).sort()[0] || null;
+    let hours = 0;
+    for (const e of mine) for (const x of e.sheets) if (isoWeek(x.date) === week) hours += +x.hours;
+    const applied = appliedIn(body);
+    for (const op of ops) {
+      if (op.op !== 'timesheet' || op.plan !== id || applied.has(op.id) || !ids.has(String(op.task)) || !isDay(op.date)) continue;
+      if (isoWeek(op.date) === week && Number.isFinite(+op.hours)) hours += +op.hours;
+    }
+    out.push({ id, name: text(body.name) || 'Untitled project', pinned: body.pinned === true, open: open.length, deadline, weekMinutes: Math.round(hours * 60), tasks: open });
+  }
+  return out.sort((a, b) => (b.pinned - a.pinned) || a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) || a.id.localeCompare(b.id));
 }

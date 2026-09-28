@@ -5,6 +5,7 @@ import { index, makeDone, makeEnergy, makeRework, makeMoment, reworkCandidate, s
 import { plannerRework } from '../planner.js';
 import { esc, fmtMin, fmtPts, readJson, writeJson, validTimer, elapsedMinutes, batchEnds, fmtClock } from '../util.js';
 import { plannerTag } from './tasks.js';
+import { tiredSheet, tiredFrom, tiredToast } from './tired.js';
 
 const TIMER_KEY = 'flow.timer';
 const MOMENT_KEY = 'flow.moment';
@@ -265,6 +266,7 @@ export function render(ctx) {
   return `<div class="view">
     ${ctx.g.energy.rated ? '' : energyPrompt(ctx)}
     ${hud(ctx.g)}
+    ${ctx.ui.tired ? tiredSheet() : `<div class="row"><button class="sc-button sc-button--ghost" data-action="tired" id="tired-button">I'm tired</button></div>`}
     ${banners(ctx.g)}
     ${plannerAsksSection(ctx)}
     ${timer ? timerCard(ctx, timer) : ''}
@@ -280,17 +282,24 @@ export function mounted(view) {
   for (const el of view.querySelectorAll('[data-since]')) el.textContent = fmtClock(Date.now() - Number(el.dataset.since));
 }
 
+/**
+ * The timer's question when a task was finished in the last 14 days: "Is
+ * this rework of …?". Resolves the completion's id (rework), null (a new
+ * run) or 'cancel'. Shared with the Terminal.
+ */
+export async function askRework(ctx, taskId) {
+  const cand = reworkCandidate(ctx.db, taskId, ctx.now);
+  if (!cand) return null;
+  const t = ctx.db.task.get(taskId);
+  const pick = await ctx.choose('Is this rework?', `<p>You finished <b>${esc(t?.title)}</b> on <b>${esc(cand.day)}</b>. Is this rework of that run?</p><p class="small sc-muted">Rework costs points and XP; a new run earns them.</p>`,
+    [{ id: 'cancel', label: 'Cancel', kind: 'ghost' }, { id: 'rework', label: `Rework of ${cand.day}`, kind: 'danger' }, { id: 'new', label: 'No, a new run', kind: 'primary' }]);
+  return pick === 'rework' ? cand.id : pick === 'new' ? null : 'cancel';
+}
+
 async function startTimer(ctx, taskId) {
   if (readTimer()) { ctx.toast('A timer is already running: stop it first.', 'warning'); return; }
-  const cand = reworkCandidate(ctx.db, taskId, ctx.now);
-  let reworkOf = null;
-  if (cand) {
-    const t = ctx.db.task.get(taskId);
-    const pick = await ctx.choose('Is this rework?', `<p>You finished <b>${esc(t?.title)}</b> on <b>${esc(cand.day)}</b>. Is this rework of that run?</p><p class="small sc-muted">Rework costs points and XP; a new run earns them.</p>`,
-      [{ id: 'cancel', label: 'Cancel', kind: 'ghost' }, { id: 'rework', label: `Rework of ${cand.day}`, kind: 'danger' }, { id: 'new', label: 'No, a new run', kind: 'primary' }]);
-    if (pick === 'cancel') return;
-    if (pick === 'rework') reworkOf = cand.id;
-  }
+  const reworkOf = await askRework(ctx, taskId);
+  if (reworkOf === 'cancel') return;
   writeJson(ls(), TIMER_KEY, { task: taskId, start: Date.now(), ...(reworkOf ? { reworkOf } : {}) });
   ctx.ui.log = null;
   ctx.render({ force: true });
@@ -363,9 +372,17 @@ export const actions = {
     ctx.render({ force: true });
   },
   'moment-cancel': (el, ctx) => { writeJson(ls(), MOMENT_KEY, null); ctx.render({ force: true }); },
+  tired: (el, ctx) => { ctx.ui.tired = true; ctx.render({ force: true }); },
+  'tired-cancel': (el, ctx) => { ctx.ui.tired = false; ctx.render({ force: true }); },
 };
 
 export const forms = {
+  tired: async (d, form, ctx) => {
+    const rec = tiredFrom(ctx.db, d, Date.now());
+    ctx.ui.tired = false;
+    await ctx.store.add(rec);
+    ctx.toast(tiredToast(rec), 'info');
+  },
   energy: async (d, form, ctx) => {
     await ctx.store.add(makeEnergy({ stamina: d.stamina, mana: d.mana }));
     ctx.toast(`Today: stamina ${d.stamina}, mana ${d.mana}.`, 'success');
