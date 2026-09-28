@@ -32,6 +32,8 @@
 //   flow place add --name "…" [--zone home|road|factory|town|elsewhere]
 //   flow kind add --title "…" [--icon …] [--place P] [--stamina N] [--mana N]   (energy per hour; negative restores)
 //   flow review --satisfaction N [--<stat> N …] [--win "…"] [--lesson "…"] [--next "…"]
+//             [--difficulty <tier>] [--skill-difficulty <skill>=<tier> …]   (from the next day)
+//   flow difficulty [--json]                 the tier now, per-skill overrides, what is unlocked and next
 //   flow log [--days 7]
 //   flow replay [--day YYYY-MM-DD]
 //   flow list [tasks|skills|stats|rewards|places|kinds]
@@ -66,12 +68,15 @@ const {
   index, play, pickNext, replayDay, makeTask, makeSkill, makePlace, makeReward, makeDone, makeRework, makePurchase,
   makeEnergy, makeMoment, makeReview, stamp, tombstone, newId, dayOf, addDays, isDay, taskStats, levelFor,
   RECORD_TYPES, DEFAULT_STATS, DEFAULT_PLACES, DEFAULT_KINDS, ZONES, BONUS_CAP, SKILL_STEP, WEEK,
+  DIFFICULTY, DEFAULT_DIFFICULTY, difficultyOn,
 } = M;
 
 // ─── plumbing ───────────────────────────────────────────────────────────────
 
 const BOOL = new Set(['json', 'critical', 'for-others', 'no-critical', 'no-for-others', 'once', 'repeatable', 'restamp', 'offline', 'clear', 'help',
   'consumable', 'no-consumable', 'active', 'new']);
+/** Flags that may be given more than once; they collect into an array. */
+const REPEAT = new Set(['skill-difficulty']);
 
 export function parseArgs(argv) {
   const pos = [];
@@ -89,7 +94,8 @@ export function parseArgs(argv) {
       if (next === undefined || next.startsWith('--')) value = true;
       else { value = next; i++; }
     }
-    opt[key] = value;
+    if (REPEAT.has(key)) (opt[key] ||= []).push(value);
+    else opt[key] = value;
   }
   return { pos, opt };
 }
@@ -170,6 +176,73 @@ const statLabel = (s) => s.name;
 function resolveStat(db, ref) {
   const q = String(ref ?? '').toLowerCase();
   return db.stats.find((s) => s.id === `stat_${q}` || slug(s.name) === slug(q)) || resolve(db.stats, ref, 'stat', statLabel);
+}
+
+// ─── difficulty ─────────────────────────────────────────────────────────────
+
+const tierById = (id) => DIFFICULTY.find((d) => d.id === id);
+/** "double" for 2×, otherwise "N×": what the part of a charge below zero costs. */
+const debtWord = (x) => (x === 2 ? 'double' : `${x}×`);
+
+/** A tier by id or name, any case. An unknown word goes on to the model, which names the tiers it knows. */
+function tierRef(ref, flag) {
+  if (ref === undefined || ref === true || String(ref).trim() === '') throw new Error(`${flag} needs a tier: ${DIFFICULTY.map((d) => d.id).join(', ')}`);
+  const q = String(ref).trim().toLowerCase();
+  return DIFFICULTY.find((d) => d.id === q || d.name.toLowerCase() === q)?.id ?? q;
+}
+
+/**
+ * The review's `difficulty` from --difficulty and any --skill-difficulty
+ * <skill>=<tier>, or null when neither is given (the setting carries on).
+ * Only per-skill flags: the global tier stays what it is about to be.
+ */
+export function difficultyArg(db, opt, at) {
+  const pairs = opt['skill-difficulty'] || [];
+  if (opt.difficulty === undefined && !pairs.length) return null;
+  const skills = {};
+  for (const pair of pairs) {
+    const m = typeof pair === 'string' ? /^([^=]+)=(.+)$/.exec(pair) : null;
+    if (!m || !m[1].trim()) throw new Error('--skill-difficulty is <skill>=<tier>, e.g. --skill-difficulty mail=steady');
+    skills[resolve(db.skills, m[1].trim(), 'skill').id] = tierRef(m[2], '--skill-difficulty');
+  }
+  const tier = opt.difficulty === undefined ? difficultyOn(db, addDays(dayOf(at), 1)).id : tierRef(opt.difficulty, '--difficulty');
+  return { tier, skills };
+}
+
+/** "Grind · Mail Steady · Running Relentless". */
+function settingText(db, { tier, skills = {} }, sep = ' ') {
+  const over = Object.entries(skills)
+    .map(([id, t]) => [db.skill.get(id)?.name || id, tierById(t)?.name || t])
+    .sort((a, b) => a[0].localeCompare(b[0]));
+  return [tierById(tier)?.name || tier, ...over.map(([n, t]) => `${n}${sep}${t}`)].join(' · ');
+}
+
+/** A review today that sets difficulty takes effect tomorrow: that setting, or null. */
+function pendingDifficulty(db, day) {
+  const today = db.reviews.filter((r) => r.day === day && r.difficulty).sort((a, b) => (a.at ?? 0) - (b.at ?? 0)).pop();
+  return today ? today.difficulty : null;
+}
+
+function difficultyText(db, g) {
+  const d = g.difficulty;
+  const out = [];
+  const over = Object.keys(d.skills).length;
+  out.push(`Now: ${d.name} (global)${over ? '' : ' · every skill plays at the global tier'}`);
+  if (over) out.push(`Per-skill: ${settingText(db, { tier: d.tier, skills: d.skills }, ': ').split(' · ').slice(1).join(' · ')}`);
+  const pending = pendingDifficulty(db, g.day);
+  if (pending) out.push(`From ${addDays(g.day, 1)}: ${settingText(db, pending)}`);
+  out.push(`Unlocked: ${d.unlocked.map((id) => tierById(id).name).join(', ')} (you are level ${g.player.level}; a skill's override needs that skill's level)`);
+  out.push(d.next ? `Next: ${d.next.name} at level ${d.next.unlock}` : 'Next: none — every tier is unlocked');
+  out.push('Difficulty changes only at the weekly review: flow review … --difficulty <tier> [--skill-difficulty <skill>=<tier> …]. It starts the next day.');
+  out.push('', `  ${'Tier'.padEnd(11)} ${'Unlocks'.padEnd(8)} ${'Points'.padEnd(7)} ${'Target'.padEnd(7)} ${'Rework'.padEnd(7)} ${'Debt'.padEnd(5)} ${'Energy'.padEnd(7)} Grace`);
+  for (const t of DIFFICULTY) {
+    const add = t.reworkAdd === 0 ? '0' : `${t.reworkAdd > 0 ? '+' : '−'}${Math.abs(t.reworkAdd)}`;
+    const mark = t.id === d.tier ? '▶' : ' ';
+    const lock = d.unlocked.includes(t.id) || t.id === d.tier ? '' : '  (locked)';
+    out.push(`${mark} ${t.name.padEnd(11)} ${`L${t.unlock}`.padEnd(8)} ${`×${t.points}`.padEnd(7)} ${pct(t.targetStep).padEnd(7)} ${add.padEnd(7)} ${`×${t.debt}`.padEnd(5)} ${`×${t.energy}`.padEnd(7)} ${t.grace}/7${lock}`);
+  }
+  out.push('', 'Harder tiers: harder targets, bigger rewards, less forgiveness, tighter energy. Points already earned never change.');
+  return out.join('\n');
 }
 
 // ─── the game on disk ───────────────────────────────────────────────────────
@@ -293,8 +366,9 @@ function statusText(game, g) {
   const { db } = game;
   const out = [];
   const name = g.settings.name || 'Player';
-  out.push(`# ${name} — level ${g.player.level}  (${g.player.xp} XP, ${g.player.toNext} to level ${g.player.level + 1}) · balance ${g.balance} pts${g.balance < 0 ? ' (in debt: charges below zero cost double)' : ''}`);
+  out.push(`# ${name} — level ${g.player.level}  (${g.player.xp} XP, ${g.player.toNext} to level ${g.player.level + 1}) · balance ${g.balance} pts${g.balance < 0 ? ` (in debt: charges below zero cost ${debtWord(tierById(g.difficulty.tier).debt)})` : ''}`);
   if (g.settings.mission) out.push(`Mission: ${g.settings.mission}`);
+  out.push(`Difficulty: ${settingText(db, g.difficulty)}`);
   out.push(`${g.day} (${g.week}) · today +${g.today.points} pts, ${g.today.done} task${g.today.done === 1 ? '' : 's'}, ${dur(g.today.minutes)}`);
   out.push(`Energy: ${energyLine(g.energy)}`);
   const windows = [];
@@ -598,7 +672,9 @@ const commands = {
     const p = rec.price;
     const out = [];
     const measure = task.measure === 'time' ? '' : task.measure === 'quality' ? `, ${rec.value}%` : `, ${rec.value}${task.unit ? ` ${task.unit}` : ''}`;
-    out.push(`✓ ${task.title} (${minutes} min${measure}): +${p.points} pts  — base ${p.base} (${p.estimate} min ${p.estimateFrom === 'history' ? 'flow estimate' : 'estimate'}${rec.quality < 1 ? ` × ${pct(rec.quality)} quality` : ''})${bonusText(p)}`);
+    const tier = tierById(p.difficulty);
+    const tierPart = tier && tier.id !== DEFAULT_DIFFICULTY ? ` × ${tier.points} (${tier.name})` : '';
+    out.push(`✓ ${task.title} (${minutes} min${measure}): +${p.points} pts  — base ${p.base} (${p.estimate} min ${p.estimateFrom === 'history' ? 'flow estimate' : 'estimate'}${rec.quality < 1 ? ` × ${pct(rec.quality)} quality` : ''})${bonusText(p)}${tierPart}`);
     const wins = [];
     if (p.bonuses.flow) wins.push(`in the zone — beat your target ${p.target}`);
     if (p.bonuses.pb) wins.push(`PERSONAL BEST — ${rec.value} beats ${p.best}`);
@@ -607,8 +683,9 @@ const commands = {
     if (rec.batchIndex > 0) out.push(`  ▶ Batch ×${rec.batchIndex + 1}: ${task.batch} — the next one within 10 min pays +${pct((rec.batchIndex + 1) * M.BONUS.batchStep)} and half the mana`);
     else if (rec.comboIndex > 0) out.push(`  ▶ Combo ×${rec.comboIndex + 1} — start the next task within 30 min to keep it`);
     else if (task.batch) out.push(`  ▶ Batch started: ${task.batch} — do another within 10 min for +15%`);
-    const hist = taskStats(db, task);
-    if (hist.target !== null) out.push(`  Next time: target ${hist.target}${task.measure === 'time' ? ' min' : task.measure === 'quality' ? '%' : task.unit ? ` ${task.unit}` : ''} (your last ${Math.min(hist.runs, M.HISTORY_RUNS)} runs, 5% better)`);
+    const step = difficultyOn(db, dayOf(game.now), task.skill).targetStep;
+    const hist = taskStats(db, task, Infinity, undefined, step);
+    if (hist.target !== null) out.push(`  Next time: target ${hist.target}${task.measure === 'time' ? ' min' : task.measure === 'quality' ? '%' : task.unit ? ` ${task.unit}` : ''} (your last ${Math.min(hist.runs, M.HISTORY_RUNS)} runs, ${pct(step)} better)`);
     else out.push(`  ${M.HISTORY_MIN_RUNS - hist.runs > 0 ? `${M.HISTORY_MIN_RUNS - hist.runs} more run${M.HISTORY_MIN_RUNS - hist.runs === 1 ? '' : 's'} until this task gets a flow target` : ''}`.trimEnd());
     const e = M.energyOn(db, rec.day);
     if (e.rated) out.push(`  Energy: stamina ${e.stamina} · mana ${e.mana}${p.energy.stamina || p.energy.mana ? ` (this cost ${p.energy.stamina} / ${p.energy.mana})` : ''}${e.empty.length ? `  ⚠ ${e.empty.join(' and ')} empty — rest or eat next` : ''}`);
@@ -638,7 +715,7 @@ const commands = {
     const nth = ['1st', '2nd', '3rd'][rec.repeat - 1] || `${rec.repeat}th`;
     const why = done.critical ? 'critical: 2×' : `${nth} rework of this run: ×${rec.multiplier}`;
     const out = [`↺ Rework on ${task?.title} (done ${done.day}, ${done.minutes} min, +${done.price?.points}): ${rec.minutes} min × ${rec.perMinute} pts/min × ${rec.multiplier} (${why}) = −${rec.penalty} XP`];
-    out.push(`  Charged ${rec.charged} pts${rec.charged > rec.penalty ? ` (${rec.charged - rec.penalty} extra: the part below zero costs double)` : ''} · balance ${balanceBefore} → ${balanceBefore - rec.charged}`);
+    out.push(`  Charged ${rec.charged} pts${rec.charged > rec.penalty ? ` (${rec.charged - rec.penalty} extra: the part below zero costs ${debtWord(tierById(rec.difficulty)?.debt ?? M.DEBT_MULTIPLIER)})` : ''} · balance ${balanceBefore} → ${balanceBefore - rec.charged}`);
     const real = M.actual(done, db.rework.filter((r) => r.done === done.id));
     out.push(`  That run really took ${real.minutes} min at ${pct(real.quality)} quality — targets and bests now count it that way.`);
     for (const l of levelUps(before, after)) out.push(`  ${l}`);
@@ -672,7 +749,7 @@ const commands = {
     const rec = makePurchase(db, reward, { at: game.when('at') });
     await game.write(rec);
     const after = balance - rec.charged;
-    const credit = rec.charged > rec.price ? ` (price ${rec.price}; ${rec.charged - rec.price} extra because part of it went below zero, where it costs double)` : '';
+    const credit = rec.charged > rec.price ? ` (price ${rec.price}; ${rec.charged - rec.price} extra because part of it went below zero, where it costs ${debtWord(tierById(rec.difficulty)?.debt ?? M.DEBT_MULTIPLIER)})` : '';
     return `🛒 ${reward.title}: −${rec.charged} pts${credit}. Balance ${balance} → ${after}.${after < 0 ? ' In debt — the next points you earn pay it off.' : ' Enjoy it.'}`;
   },
 
@@ -824,15 +901,27 @@ const commands = {
     for (const s of db.stats) {
       for (const key of [slug(s.name), s.id, s.id.replace(/^stat_/, '')]) if (opt[key] !== undefined) { ratings[s.id] = opt[key]; break; }
     }
-    const known = new Set(['satisfaction', 'win', 'lesson', 'next', 'at', 'day', 'offline']);
+    const known = new Set(['satisfaction', 'win', 'lesson', 'next', 'at', 'day', 'offline', 'difficulty', 'skill-difficulty']);
     const stray = Object.keys(opt).filter((k) => !known.has(k) && !db.stats.some((s) => [slug(s.name), s.id, s.id.replace(/^stat_/, '')].includes(k)));
     if (stray.length) throw new Error(`no stat called ${stray.map((k) => `--${k}`).join(', ')} (stats: ${db.stats.map((s) => slug(s.name)).join(', ')})`);
     if (opt.satisfaction === undefined) throw new Error('flow review --satisfaction 0-10 [--<stat> 0-10 …] --win … --lesson … --next …');
-    const rec = makeReview(db, { satisfaction: opt.satisfaction, ratings, win: str(opt.win), lesson: str(opt.lesson), next: str(opt.next), at: game.when('at') });
+    const at = game.when('at');
+    const difficulty = difficultyArg(db, opt, at);
+    const rec = makeReview(db, { satisfaction: opt.satisfaction, ratings, win: str(opt.win), lesson: str(opt.lesson), next: str(opt.next), difficulty, at });
     const db2 = await game.write(rec);
     const g = play(db2, game.now);
     const t = g.satisfaction.trend;
-    return `✎ Review ${rec.week}: satisfaction ${rec.satisfaction}/10${t === null ? '' : ` (${t >= 0 ? '+' : ''}${t.toFixed(1)} vs the weeks before)`}${Object.keys(rec.ratings).length ? ` · ${Object.entries(rec.ratings).map(([k, v]) => `${db.stat.get(k).name} ${v}`).join(', ')}` : ''}${rec.next ? `\n  Next week's one change: ${rec.next}` : ''}`;
+    return `✎ Review ${rec.week}: satisfaction ${rec.satisfaction}/10${t === null ? '' : ` (${t >= 0 ? '+' : ''}${t.toFixed(1)} vs the weeks before)`}${Object.keys(rec.ratings).length ? ` · ${Object.entries(rec.ratings).map(([k, v]) => `${db.stat.get(k).name} ${v}`).join(', ')}` : ''}${rec.next ? `\n  Next week's one change: ${rec.next}` : ''}${rec.difficulty ? `\n  Difficulty from ${addDays(rec.day, 1)}: ${settingText(db, rec.difficulty)}` : ''}`;
+  },
+
+  async difficulty(game) {
+    const db = await game.load();
+    const g = game.play();
+    if (game.opt.json) {
+      const pending = pendingDifficulty(db, g.day);
+      return JSON.stringify({ ...g.difficulty, level: g.player.level, pending: pending ? { day: addDays(g.day, 1), ...pending } : null, tiers: DIFFICULTY }, null, 2);
+    }
+    return difficultyText(db, g);
   },
 
   // ─── inventory (phase 1.5) ────────────────────────────────────────────────
@@ -1128,7 +1217,7 @@ async function config(opt, game) {
 
 const WRITES = new Set(['undo', 'init', 'energy', 'done', 'rework', 'moment', 'buy', 'reward', 'task', 'skill', 'stat', 'place', 'kind', 'review', 'import',
   'item', 'skip', 'purchase', 'wish', 'loadout']);
-const READS = new Set(['status', 'next', 'log', 'replay', 'list', 'export', 'have', 'inventory']);
+const READS = new Set(['status', 'next', 'log', 'replay', 'list', 'export', 'have', 'inventory', 'difficulty']);
 const ALIASES = { setup: 'init', ls: 'list', did: 'done', redo: 'rework', shop: 'buy', items: 'inventory', inv: 'inventory', owned: 'have', spend: 'purchase' };
 
 function help() {

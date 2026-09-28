@@ -89,3 +89,9 @@ test('timer storage helpers survive junk', () => {
   writeJson(storage, 'flow.timer', null);
   assert.equal(mem.has('flow.timer'), false);
 });
+
+test('purchasePreview takes the tier’s debt multiplier (SPEC › Difficulty: Debt ×)', () => {
+  assert.deepEqual(purchasePreview(40, 60, 1.5), { charged: 70, below: 20, after: -30, intoDebt: true, extra: 10 });
+  assert.deepEqual(purchasePreview(40, 60, 3), { charged: 100, below: 20, after: -60, intoDebt: true, extra: 40 });
+  assert.deepEqual(purchasePreview(100, 60, 3), { charged: 60, below: 0, after: 40, intoDebt: false, extra: 0 });
+});

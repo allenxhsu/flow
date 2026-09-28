@@ -52,7 +52,7 @@ function hud(g) {
     <div class="hud-cell"><div class="row-between"><span class="sc-label">Stamina</span><span class="num">${e.rated ? e.stamina : '–'}/10</span></div>${meter(e.stamina, 10, 'meter-stamina')}</div>
     <div class="hud-cell"><div class="row-between"><span class="sc-label">Mana</span><span class="num">${e.rated ? e.mana : '–'}/10</span></div>${meter(e.mana, 10, 'meter-mana')}</div>
     <div class="hud-cell"><div class="row-between"><span class="sc-label">Points</span><span class="big num" id="hud-balance">${fmtPts(g.balance)}</span></div><span class="small sc-muted">today ${fmtPts(g.today.points, { sign: true })} · ${g.today.done} done · ${fmtMin(g.today.minutes)}</span></div>
-    <div class="hud-cell"><div class="row-between"><span class="sc-label">Level</span><span class="big num" id="hud-level">${p.level}</span></div>${meter(p.into, p.span, 'meter-app')}<span class="small sc-faint num">${fmtPts(p.toNext)} XP to ${p.level + 1}</span></div>
+    <div class="hud-cell"><div class="row-between"><span class="row"><span class="sc-label">Level</span><span class="sc-badge tier-badge" id="hud-tier" title="Difficulty: ${esc(g.difficulty.name)}">${esc(g.difficulty.name)}</span></span><span class="big num" id="hud-level">${p.level}</span></div>${meter(p.into, p.span, 'meter-app')}<span class="small sc-faint num">${fmtPts(p.toNext)} XP to ${p.level + 1}</span></div>
   </section>`;
 }
 

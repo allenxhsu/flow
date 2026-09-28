@@ -1,13 +1,18 @@
 // Shop: treats and indulgences the player prices. Debt is allowed, and the
-// part of a charge below zero costs double — said before buying, not after.
+// part of a charge below zero costs more (double at Push; the difficulty tier
+// sets it) — said before buying, not after.
 
-import { makeReward, makePurchase } from '../model.js';
+import { makeReward, makePurchase, DIFFICULTY, DEBT_MULTIPLIER } from '../model.js';
 import { esc, fmtPts, purchasePreview } from '../util.js';
+
+/** The global tier's debt multiplier, and how to say it. */
+const debtOf = (g) => DIFFICULTY.find((d) => d.id === g.difficulty?.tier)?.debt ?? DEBT_MULTIPLIER;
+const debtWord = (x) => (x === 2 ? 'double' : `×${x}`);
 
 const when = (ms) => new Date(ms).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 function rewardItem(ctx, r) {
-  const p = purchasePreview(ctx.g.balance, r.price);
+  const p = purchasePreview(ctx.g.balance, r.price, debtOf(ctx.g));
   const gone = !r.repeatable && r.bought > 0;
   return `
   <div class="item" data-reward="${esc(r.id)}">
@@ -23,9 +28,10 @@ function rewardItem(ctx, r) {
 
 export function render(ctx) {
   const { g } = ctx;
+  const word = debtWord(debtOf(g));
   return `<div class="view">
     <section class="hud"><div class="hud-cell"><span class="sc-label">Balance</span><span class="big num" id="shop-balance">${fmtPts(g.balance)}</span>
-      ${g.balance < 0 ? '<span class="small sc-muted">In debt: every charge below zero costs double.</span>' : '<span class="small sc-faint">Below zero, charges cost double.</span>'}</div></section>
+      ${g.balance < 0 ? `<span class="small sc-muted">In debt: every charge below zero costs ${word}.</span>` : `<span class="small sc-faint">Below zero, charges cost ${word}.</span>`}</div></section>
     <form class="sc-panel sc-panel--lit pad stack" data-form="reward" id="reward-form">
       <h2>Add reward</h2>
       <div class="form-grid">
@@ -40,7 +46,7 @@ export function render(ctx) {
       ${g.rewards.length ? `<div class="grid">${g.rewards.map((r) => rewardItem(ctx, r)).join('')}</div>` : '<div class="muted-box">No rewards yet.</div>'}</div>
     <div class="stack"><h2>Purchases</h2>
       ${g.purchases.length ? `<div class="table-wrap"><table class="sc-table" id="purchases"><thead><tr><th>When</th><th>Reward</th><th>Price</th><th>Charged</th></tr></thead><tbody>
-        ${g.purchases.map((p) => `<tr><td class="num">${when(p.at)}</td><td>${esc(p.title)}</td><td class="num">${fmtPts(p.price)}</td><td class="num">${fmtPts(p.charged)}${p.charged > p.price ? ' <span class="sc-pill" style="--tint: var(--sc-danger)">debt ×2</span>' : ''}</td></tr>`).join('')}
+        ${g.purchases.map((p) => `<tr><td class="num">${when(p.at)}</td><td>${esc(p.title)}</td><td class="num">${fmtPts(p.price)}</td><td class="num">${fmtPts(p.charged)}${p.charged > p.price ? ' <span class="sc-pill" style="--tint: var(--sc-danger)">debt</span>' : ''}</td></tr>`).join('')}
       </tbody></table></div>` : '<div class="muted-box">Nothing bought yet.</div>'}</div>
   </div>`;
 }
@@ -48,10 +54,10 @@ export function render(ctx) {
 export const actions = {
   buy: async (el, ctx) => {
     const r = ctx.db.reward.get(el.dataset.reward);
-    const p = purchasePreview(ctx.g.balance, r.price);
+    const p = purchasePreview(ctx.g.balance, r.price, debtOf(ctx.g));
     const body = p.intoDebt
       ? `<div class="sc-alert sc-alert--danger"><strong>Into debt</strong> This takes your balance below zero.</div>
-         <p>${esc(r.title)} costs ${fmtPts(r.price)}. You have ${fmtPts(ctx.g.balance)}, so ${fmtPts(p.below)} of it is on credit and costs double: <b>you will be charged ${fmtPts(p.charged)}</b> (+${fmtPts(p.extra)}), leaving ${fmtPts(p.after)}.</p>`
+         <p>${esc(r.title)} costs ${fmtPts(r.price)}. You have ${fmtPts(ctx.g.balance)}, so ${fmtPts(p.below)} of it is on credit and costs ${debtWord(debtOf(ctx.g))}: <b>you will be charged ${fmtPts(p.charged)}</b> (+${fmtPts(p.extra)}), leaving ${fmtPts(p.after)}.</p>`
       : `<p>Buy <b>${esc(r.title)}</b> for ${fmtPts(r.price)}? That leaves ${fmtPts(p.after)}.</p>`;
     if (!(await ctx.confirm(p.intoDebt ? 'Buy on credit?' : 'Buy?', body, p.intoDebt ? `Buy for ${fmtPts(p.charged)}` : 'Buy', p.intoDebt ? 'danger' : 'primary'))) return;
     const rec = makePurchase(ctx.db, r.id, { at: Date.now() });

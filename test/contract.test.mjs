@@ -213,3 +213,16 @@ test('contract: satisfaction can be not due with no latest review', async () => 
   assert.equal(s.due, false);
   assert.equal(s.latest, null);
 });
+
+// Difficulty (SPEC.md › Difficulty › Contract): the seams the CLI, the app and
+// the replay read. Change this test first when the contract changes.
+test('contract: difficulty tiers, settings and snapshots', async () => {
+  const M = await import('../src/model.js');
+  for (const d of M.DIFFICULTY) for (const k of ['id', 'name', 'unlock', 'points', 'targetStep', 'reworkAdd', 'debt', 'energy', 'grace']) assert.ok(k in d, `DIFFICULTY.${k}`);
+  assert.equal(M.DEFAULT_DIFFICULTY, 'push');
+  assert.equal(typeof M.difficultyOn, 'function');
+  assert.equal(M.chargeFor.length, 2, 'chargeFor(balance, amount, debt = DEBT_MULTIPLIER)');
+  assert.equal(M.dailyStreak.length, 2, 'dailyStreak(days, day, grace = 1)');
+  const d = M.play([], new Date('2026-09-28T12:00:00').getTime()).difficulty;
+  assert.deepEqual(Object.keys(d).sort(), ['changesAt', 'name', 'next', 'skills', 'tier', 'unlocked']);
+});

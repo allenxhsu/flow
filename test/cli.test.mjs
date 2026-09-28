@@ -165,3 +165,89 @@ test('config keeps the token to itself', () => {
     p.done();
   }
 });
+
+// Difficulty (SPEC.md › Difficulty): shown by `flow difficulty`, set only by `flow review`.
+function playerAt() {
+  const home = mkdtempSync(join(tmpdir(), 'flow-cli-'));
+  const env = { ...process.env, FLOW_HOME: home, TZ: 'UTC' };
+  delete env.FLOW_OFFLINE;
+  const run = (now, ...args) => execFileSync('node', [CLI, ...args], { encoding: 'utf8', env: { ...env, FLOW_NOW: now }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const fails = (now, ...args) => {
+    try { run(now, ...args); } catch (err) { return err.stderr; }
+    assert.fail(`expected failure: ${args.join(' ')}`);
+  };
+  return { run, fails, done: () => rmSync(home, { recursive: true, force: true }) };
+}
+
+test('difficulty: shown by flow difficulty, set in the review, per skill, from the next day', () => {
+  const MON = '2026-09-28T18:00:00Z';
+  const TUE = '2026-09-29T18:00:00Z';
+  const p = playerAt();
+  const run = (...a) => p.run(MON, ...a);
+  const fails = (...a) => p.fails(MON, ...a);
+  try {
+    run('init', '--name', 'Allen');
+    run('skill', 'add', '--name', 'Running', '--stat', 'Body');
+    run('skill', 'add', '--name', 'Mail', '--stat', 'Work');
+    run('task', 'add', '--title', 'Long run', '--skill', 'running', '--estimate', '600');
+    run('task', 'add', '--title', 'Inbox', '--skill', 'mail', '--estimate', '20');
+    // 1800+ XP on Running: the player reaches level 3, Running level 6; Mail (under 100 XP) stays level 1.
+    for (const d of ['21', '22', '23']) run('done', 'long run', '--minutes', '600', '--at', `2026-09-${d}T20:00:00Z`);
+    run('done', 'inbox', '--minutes', '20', '--at', '2026-09-24T10:00:00Z');
+    run('done', 'inbox', '--minutes', '20', '--at', '2026-09-25T10:00:00Z');
+    // Push: the next target is 5% better than 20.
+    assert.match(run('done', 'inbox', '--minutes', '20', '--at', '2026-09-26T10:00:00Z'), /Next time: target 19 min \(your last 3 runs, 5% better\)/);
+
+    const text = run('difficulty');
+    assert.match(text, /Push/);
+    assert.match(text, /changes only at the weekly review/i);
+    assert.match(text, /Unlocked: Steady, Push, Grind/);
+    assert.match(text, /Next: Relentless at level 6/);
+    assert.match(text, /every skill plays at the global tier/i);
+    for (const name of ['Steady', 'Grind', 'Relentless', 'Legend']) assert.match(text, new RegExp(name));
+    assert.match(text, /Legend .*×2/);
+
+    const j = JSON.parse(run('difficulty', '--json'));
+    assert.equal(j.tier, 'push');
+    assert.equal(j.name, 'Push');
+    assert.deepEqual(j.skills, {});
+    assert.deepEqual(j.unlocked, ['steady', 'push', 'grind']);
+    assert.deepEqual(j.next, { id: 'relentless', name: 'Relentless', unlock: 6 });
+    assert.equal(j.changesAt, 'review');
+    assert.equal(j.tiers.length, 5);
+
+    // Errors print as one clean line, like every other error.
+    const locked = fails('review', '--satisfaction', '7', '--difficulty', 'legend');
+    assert.match(locked, /^flow: Legend unlocks at level 10; the player is level 3\n$/);
+    assert.match(fails('review', '--satisfaction', '7', '--difficulty', 'nightmare'), /^flow: no difficulty tier "nightmare"/);
+    assert.match(fails('review', '--satisfaction', '7', '--difficulty', 'push', '--skill-difficulty', 'mail=grind'), /^flow: Grind unlocks at level 3; Mail is level 1\n$/);
+    assert.match(fails('review', '--satisfaction', '7', '--skill-difficulty', 'nope=steady'), /^flow: no skill matches "nope"/);
+    assert.match(fails('review', '--satisfaction', '7', '--skill-difficulty', 'mail'), /^flow: --skill-difficulty is <skill>=<tier>/);
+    assert.match(fails('review', '--satisfaction', '7', '--skill-difficulty', 'mail=nightmare'), /^flow: no difficulty tier "nightmare"/);
+
+    // Names or ids, any case; the flag repeats, one per skill.
+    const review = run('review', '--satisfaction', '7', '--difficulty', 'Grind', '--skill-difficulty', 'mail=steady', '--skill-difficulty', 'Running=relentless');
+    assert.match(review, /Difficulty from 2026-09-29: Grind · Mail Steady · Running Relentless/);
+
+    // Same day: still Push, with the new setting waiting for tomorrow.
+    const pending = run('difficulty');
+    assert.match(pending, /Now: Push/);
+    assert.match(pending, /From 2026-09-29: Grind · Mail Steady · Running Relentless/);
+
+    const t = JSON.parse(p.run(TUE, 'difficulty', '--json'));
+    const ids = Object.fromEntries(JSON.parse(p.run(TUE, 'status', '--json')).skills.map((s) => [s.name, s.id]));
+    assert.equal(t.tier, 'grind');
+    assert.deepEqual(t.skills, { [ids.Mail]: 'steady', [ids.Running]: 'relentless' });
+    assert.match(p.run(TUE, 'difficulty'), /Mail: Steady/);
+
+    // The CLI's own "next time" target uses the skill's tier today: Steady aims 3% better.
+    const inbox = p.run(TUE, 'done', 'inbox', '--minutes', '20', '--at', '2026-09-29T10:00:00Z');
+    assert.match(inbox, /Steady/);
+    assert.match(inbox, /Next time: target 19\.4 min \(your last 4 runs, 3% better\)/);
+
+    assert.match(p.run(TUE, 'help'), /flow difficulty/);
+    assert.match(p.run(TUE, 'help'), /--skill-difficulty <skill>=<tier>/);
+  } finally {
+    p.done();
+  }
+});

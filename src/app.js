@@ -84,6 +84,7 @@ function renderHeader(ctx, def) {
   $('#hdr-balance').textContent = fmtPts(ctx.g.balance);
   $('#hdr-balance').closest('.sc-resource').title = `Points balance${ctx.g.balance < 0 ? ' (in debt)' : ''}`;
   $('#hdr-level').textContent = `LV ${ctx.g.player.level}`;
+  $('#hdr-level').title = `Player level · difficulty ${ctx.g.difficulty.name}`;
 }
 
 function go(view) {

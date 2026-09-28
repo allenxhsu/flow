@@ -47,7 +47,8 @@ wishes are matched by id, title or any unambiguous fragment; `flow list
 | Loadouts | `$F loadout add --name … --feet <item> …  [--check "Towel, Water"]`, `$F loadout equip <loadout>`, `$F loadout list` |
 | What next | `$F next` |
 | Oops | `$F undo [event-id\|last]` (ids are in `$F log`) |
-| The week | `$F log --days 7`, `$F review --satisfaction N --<stat> N … --win "…" --lesson "…" --next "…"` |
+| The week | `$F log --days 7`, `$F review --satisfaction N --<stat> N … --win "…" --lesson "…" --next "…" [--difficulty <tier>] [--skill-difficulty <skill>=<tier> …]` |
+| Difficulty | `$F difficulty [--json]` — the tier now, per-skill overrides, what is unlocked and what unlocks next. Set only through `review` |
 | The day | `$F replay [--day YYYY-MM-DD]` |
 | Setup | `$F init`, `$F stat add\|rename\|remove`, `$F skill add\|edit`, `$F task add\|edit\|archive\|restore`, `$F reward add\|edit\|archive`, `$F place add`, `$F kind add` |
 | Sync | `$F config --url https://<portal>/w/flow --token <device token>`, `$F sync` |
@@ -164,9 +165,13 @@ The Day Replay is only as good as the day's record. At the end of the day:
    them.
 2. Ask for 0–10 on overall life satisfaction, then each stat. Then: biggest
    win, what they learned, one change for next week.
-3. `$F review --satisfaction N --<stat> N … --win … --lesson … --next …`
-   (`list stats` shows each stat's flag).
-4. **Rebalance** — where the game earns its keep. Propose, let them choose,
+3. **Difficulty — offer it, never push it.** Run `$F difficulty` and offer
+   the choice in one or two lines before saving the review (see
+   [Difficulty](#difficulty) below). Most weeks the answer is "keep it".
+4. `$F review --satisfaction N --<stat> N … --win … --lesson … --next …`
+   (`list stats` shows each stat's flag), plus `--difficulty <tier>` and one
+   `--skill-difficulty <skill>=<tier>` per override if they chose a change.
+5. **Rebalance** — where the game earns its keep. Propose, let them choose,
    then make each change with the CLI:
    - **Rework patterns.** A task in "Struggling" with repeated rework: add a
      check step (a small `once` or batch task "Check part numbers before
@@ -237,6 +242,49 @@ equip. Items linked to a skill (`item edit <item> --skill Running`) earn a
 **gear bonus** that grows with use, never with buying: +1% per 10 of that
 skill's completions done while equipped in the active loadout, up to +10%,
 best item only, inside the 2.5× cap. New gear starts at +0%.
+
+## Difficulty
+
+Five tiers, easiest first. **Push** is the default and is the game exactly as
+`RULES.md` describes it. A harder tier means harder targets, bigger rewards,
+less forgiveness and tighter energy, all together:
+
+| Tier | Unlocks at level | Points × | Target step | Rework + | Debt × | Energy cost × | Grace days / 7 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Steady | 1 | 0.8 | 3% | −0.25 | 1.5 | 0.85 | 2 |
+| **Push** (default) | 1 | 1 | 5% | 0 | 2 | 1 | 1 |
+| Grind | 3 | 1.25 | 8% | +0.25 | 2 | 1.15 | 1 |
+| Relentless | 6 | 1.5 | 11% | +0.5 | 2.5 | 1.3 | 0 |
+| Legend | 10 | 2 | 15% | +0.75 | 3 | 1.5 | 0 |
+
+- There is a **global tier**, and any skill can override it (Legend on
+  Running, Steady on Mail). A task plays at its skill's tier.
+- **It changes only at the weekly review**, and takes effect the next day —
+  with a Sunday review, that is next week. Never offer to change it at a
+  check-in; if the player asks mid-week, say it is a review decision and note
+  it for Sunday. A review without the flags keeps the setting; a review with
+  them replaces the whole setting, so an override you leave out goes back to
+  the global tier — repeat every override they want to keep.
+- **Unlocks**: raising the global tier needs the player's level; raising a
+  skill's override needs that skill's level. Lowering is always allowed, and a
+  tier they already chose stays even if a level later drops. The CLI refuses a
+  locked or unknown tier with one line — pass that line on as it is.
+- Points already earned never change: every price keeps the tier it was paid at.
+
+**Offering it in the review.** After the ratings and before saving, look at
+`$F difficulty` and the week, and make one short, concrete offer with your
+recommendation, then let them choose:
+
+- A skill that hit its flow target most runs, with no rework and energy to
+  spare → offer the next tier up for that skill ("Running hit target 5 of 6
+  runs — try Grind on Running? Targets 8% better, points ×1.25").
+- A skill with rework, slipping dailies or empty energy → offer Steady on that
+  skill, framed as a tool, not a demotion ("Steady on Mail for a week: 3%
+  targets, two grace days").
+- Satisfaction falling while points rise → do not raise anything.
+- A newly unlocked tier (status or `difficulty` shows "Next" reached) → mention
+  it once, as news, not as a nudge.
+- Otherwise say what they are on and move on. Silence is a fine answer.
 
 ## Rules for you
 

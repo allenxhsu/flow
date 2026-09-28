@@ -1,7 +1,8 @@
 // Review: the weekly form (life satisfaction, each stat 0–10, a win, a lesson,
-// one change) and how satisfaction has moved. XP cannot buy this number.
+// one change, and the difficulty for next week) and how satisfaction has
+// moved. XP cannot buy this number. Difficulty is set only here.
 
-import { makeReview } from '../model.js';
+import { makeReview, DIFFICULTY, addDays } from '../model.js';
 import { esc, chartGeometry, nearestPoint } from '../util.js';
 
 function chart(reviews, width = 640) {
@@ -23,6 +24,75 @@ function chart(reviews, width = 640) {
   </figure>`;
 }
 
+// ─── difficulty ─────────────────────────────────────────────────────────────
+
+const TIER_ICON = { steady: '◆', push: '▲', grind: '⚒', relentless: '✹', legend: '♛' };
+const pc = (x) => `${Math.round(x * 100)}%`;
+const signed = (x) => (x === 0 ? '+0' : `${x > 0 ? '+' : '−'}${Math.abs(x)}`);
+const rank = (id) => DIFFICULTY.findIndex((d) => d.id === id);
+const tierOf = (id) => DIFFICULTY.find((d) => d.id === id) || DIFFICULTY[1];
+
+/** One line: harder targets · bigger rewards · less forgiveness. */
+export const tierSummary = (t) => `targets ${pc(t.targetStep)} better · points ×${t.points} · rework ${signed(t.reworkAdd)}`;
+
+/**
+ * The setting the form starts from: what will be in effect tomorrow, so a
+ * review already saved today shows its choice. Without the records, today's.
+ */
+function upcoming(ctx) {
+  const { g, db } = ctx;
+  const last = db ? [...db.reviews].filter((r) => r.difficulty && r.day <= g.day).sort((a, b) => a.day.localeCompare(b.day) || (a.at ?? 0) - (b.at ?? 0)).pop() : null;
+  const set = last?.difficulty || g.difficulty;
+  return { tier: set.tier, skills: { ...(set.skills || {}) } };
+}
+
+/** A tier can be chosen when the level has unlocked it, or it is no harder than the one in effect (lowering is free). */
+const allowed = (t, level, current) => t.unlock <= level || rank(t.id) <= rank(current);
+
+function guideText(g, chosenId, weekday) {
+  const t = tierOf(chosenId);
+  const rework = t.reworkAdd > 0 ? 'rework hurts more' : t.reworkAdd < 0 ? 'rework forgives a little' : 'rework as usual';
+  const next = g.difficulty.next ? `${g.difficulty.next.name} unlocks at player level ${g.difficulty.next.unlock}.` : 'Every tier is unlocked.';
+  return `${t.name} from ${weekday}: targets ${pc(t.targetStep)} sharper, points ×${t.points}, ${rework}. ${next}`;
+}
+
+function difficultySection(ctx) {
+  const { g } = ctx;
+  const set = upcoming(ctx);
+  const tomorrow = addDays(g.day, 1);
+  const weekday = new Date(`${tomorrow}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long' });
+  const level = g.player.level;
+  const cards = DIFFICULTY.map((t) => {
+    const open = allowed(t, level, set.tier);
+    const current = t.id === g.difficulty.tier;
+    const chosen = t.id === set.tier;
+    const cls = ['tier-card', 'sc-card', current && 'current', chosen && 'chosen', !open && 'locked'].filter(Boolean).join(' ');
+    const state = !open ? `<span class="tier-lock" aria-hidden="true"></span>Unlocks at level ${t.unlock}` : current ? 'Now' : chosen ? 'Chosen' : 'Open';
+    return `<label class="${cls}" data-tier="${t.id}" title="${esc(`${t.name}: ${tierSummary(t)}`)}">
+      <input type="radio" name="difficulty" value="${t.id}"${chosen ? ' checked' : ''}${open ? '' : ' disabled'}>
+      <span class="tier-icon" aria-hidden="true">${TIER_ICON[t.id] || '◇'}</span>
+      <span class="tier-name">${esc(t.name)}</span>
+      <span class="tier-points num">×${t.points}</span><span class="tier-points-label">points</span>
+      <span class="tier-summary">${esc(tierSummary(t))}</span>
+      <dl class="tier-stats num"><dt>Target</dt><dd>${pc(t.targetStep)}</dd><dt>Rework</dt><dd>${signed(t.reworkAdd)}</dd><dt>Debt</dt><dd>×${t.debt}</dd><dt>Energy</dt><dd>×${t.energy}</dd><dt>Grace</dt><dd>${t.grace}/7</dd></dl>
+      <span class="tier-state">${state}</span>
+    </label>`;
+  }).join('');
+  const rows = g.skills.map((k) => {
+    const mine = set.skills[k.id] || '';
+    const options = DIFFICULTY.filter((t) => allowed(t, k.level, mine || set.tier) || t.id === mine)
+      .map((t) => `<option value="${t.id}"${t.id === mine ? ' selected' : ''}>${esc(t.name)}</option>`).join('');
+    return `<label class="skill-tier" data-skill="${esc(k.id)}"><span class="skill-tier-name">${esc(k.name)}</span><span class="sc-badge skill-tier-level">LV ${k.level}</span><select class="sc-select" name="skill_${esc(k.id)}"><option value=""${mine ? '' : ' selected'}>Same as global</option>${options}</select></label>`;
+  }).join('');
+  return `<section class="difficulty stack" id="difficulty" aria-labelledby="difficulty-h">
+      <div class="row-between"><h3 id="difficulty-h">Difficulty · from ${esc(weekday)}</h3><span class="small sc-muted num">Player LV ${level}</span></div>
+      <div class="tier-row" role="radiogroup" aria-label="Global difficulty">${cards}</div>
+      <div class="per-skill stack"><h3>Per skill</h3>${rows || '<p class="small sc-faint" style="margin:0">Add skills to set a tier per skill.</p>'}</div>
+      <p class="tier-guide small" id="tier-guide" data-weekday="${esc(weekday)}" style="margin:0">${esc(guideText(g, set.tier, weekday))}</p>
+      <p class="small sc-faint" style="margin:0">Harder tiers: harder targets, bigger rewards, less forgiveness, tighter energy. It changes only here, from the day after the review; points already earned never change.</p>
+    </section>`;
+}
+
 export function render(ctx) {
   const { g } = ctx;
   const s = g.satisfaction;
@@ -39,6 +109,7 @@ export function render(ctx) {
         <label class="sc-field wide"><span>One change for next week</span><textarea class="sc-textarea" name="next" rows="2"></textarea></label>
       </div>
       <p class="small sc-faint" style="margin:0">Stat sliders you leave untouched are not rated.</p>
+      ${difficultySection(ctx)}
       <div class="row"><button class="sc-button sc-button--primary" type="submit">Save review</button></div>
     </form>
     <section class="sc-panel pad stack">
@@ -80,8 +151,19 @@ export function mounted(view, ctx) {
   svg.addEventListener('pointerleave', () => { tip.hidden = true; cross.setAttribute('visibility', 'hidden'); });
 }
 
-export function onInput(ev) {
+export function onInput(ev, ctx) {
   if (ev.target.dataset.unset) delete ev.target.dataset.unset;
+  if (ev.target.name === 'difficulty') {
+    const form = ev.target.form;
+    for (const card of form.querySelectorAll('.tier-card')) {
+      const chosen = card.dataset.tier === ev.target.value;
+      card.classList.toggle('chosen', chosen);
+      const state = card.querySelector('.tier-state');
+      if (state && !card.classList.contains('locked') && !card.classList.contains('current')) state.textContent = chosen ? 'Chosen' : 'Open';
+    }
+    const guide = form.querySelector('#tier-guide');
+    if (guide && ctx?.g) guide.textContent = guideText(ctx.g, ev.target.value, guide.dataset.weekday);
+  }
 }
 
 export const forms = {
@@ -91,7 +173,10 @@ export const forms = {
       const input = form.elements[`rate_${st.id}`];
       if (input && !input.dataset.unset) ratings[st.id] = d[`rate_${st.id}`];
     }
-    const rec = makeReview(ctx.db, { satisfaction: d.satisfaction, ratings, win: d.win.trim(), lesson: d.lesson.trim(), next: d.next.trim(), at: Date.now() });
+    const skills = {};
+    for (const k of ctx.g.skills) if (d[`skill_${k.id}`]) skills[k.id] = d[`skill_${k.id}`];
+    const difficulty = d.difficulty ? { tier: d.difficulty, skills } : null;
+    const rec = makeReview(ctx.db, { satisfaction: d.satisfaction, ratings, win: d.win.trim(), lesson: d.lesson.trim(), next: d.next.trim(), difficulty, at: ctx.now ?? Date.now() });
     await ctx.store.add(rec);
     ctx.toast(`Review for ${rec.week} saved.`, 'success');
   },

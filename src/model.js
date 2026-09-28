@@ -47,6 +47,21 @@ export const REWORK_MULTIPLIERS = [1.5, 1.75, 2];
 export const REWORK_CRITICAL = 2;
 /** The part of a charge that takes the balance below zero costs this much more. */
 export const DEBT_MULTIPLIER = 2;
+/**
+ * Difficulty tiers, easiest first. Push is the game as described everywhere
+ * else; the others scale points (after the bonus cap), the flow-target step,
+ * the rework multiplier, debt, positive energy costs and streak grace days.
+ * Set in a weekly review, globally and per skill; unlocked by level.
+ */
+export const DIFFICULTY = [
+  { id: 'steady', name: 'Steady', unlock: 1, points: 0.8, targetStep: 0.03, reworkAdd: -0.25, debt: 1.5, energy: 0.85, grace: 2 },
+  { id: 'push', name: 'Push', unlock: 1, points: 1, targetStep: 0.05, reworkAdd: 0, debt: 2, energy: 1, grace: 1 },
+  { id: 'grind', name: 'Grind', unlock: 3, points: 1.25, targetStep: 0.08, reworkAdd: 0.25, debt: 2, energy: 1.15, grace: 1 },
+  { id: 'relentless', name: 'Relentless', unlock: 6, points: 1.5, targetStep: 0.11, reworkAdd: 0.5, debt: 2.5, energy: 1.3, grace: 0 },
+  { id: 'legend', name: 'Legend', unlock: 10, points: 2, targetStep: 0.15, reworkAdd: 0.75, debt: 3, energy: 1.5, grace: 0 },
+];
+export const DEFAULT_DIFFICULTY = 'push';
+const tierOf = (id) => DIFFICULTY.find((d) => d.id === id) || DIFFICULTY.find((d) => d.id === DEFAULT_DIFFICULTY);
 /** XP from level L to L+1 costs step × L. */
 export const PLAYER_STEP = 500;
 export const STAT_STEP = 300;
@@ -295,7 +310,7 @@ export function actual(done, reworks = []) {
 }
 
 /** A task's recent average, best, target and history-based estimate, from completions before `before`. */
-export function taskStats(db, task, before = Infinity, rw = reworkByDone(db)) {
+export function taskStats(db, task, before = Infinity, rw = reworkByDone(db), step = Number.isFinite(before) ? difficultyOn(db, dayOf(before), task.skill).targetStep : TARGET_STEP) {
   // Only rework already logged by `before` counts: a price never sees the future.
   const known = (d) => (rw.get(d.id) || []).filter((r) => (r.at ?? 0) < before);
   const runs = db.done.filter((d) => d.task === task.id && (d.end ?? 0) < before).map((d) => ({ ...d, ...actual(d, known(d)) }));
@@ -309,11 +324,11 @@ export function taskStats(db, task, before = Infinity, rw = reworkByDone(db)) {
   let estimateFrom = 'you';
   if (recent.length >= HISTORY_MIN_RUNS) {
     const a = avg(recent.map((r) => r.value));
-    target = better === 'less' ? a * (1 - TARGET_STEP) : a * (1 + TARGET_STEP);
+    target = better === 'less' ? a * (1 - step) : a * (1 + step);
     target = task.measure === 'quality' ? Math.min(100, target) : target;
     target = Math.round(target * 10) / 10;
     // The estimate is the flow target in minutes, so a repeated task's price cannot be inflated.
-    estimate = Math.max(1, Math.round(avg(recent.map((r) => r.minutes)) * (1 - TARGET_STEP)));
+    estimate = Math.max(1, Math.round(avg(recent.map((r) => r.minutes)) * (1 - step)));
     estimateFrom = 'history';
   }
   return { runs: runs.length, best, target, estimate, estimateFrom, last: runs[runs.length - 1] || null };
@@ -419,11 +434,12 @@ export function chainAt(db, task, start) {
  */
 export function priceDone(db, task, { start, end, minutes, value, quality }) {
   const rw = reworkByDone(db);
-  const hist = taskStats(db, task, start, rw);
+  const day = dayOf(end);
+  const tier = difficultyOn(db, day, task.skill);
+  const hist = taskStats(db, task, start, rw, tier.targetStep);
   const better = betterOf(task);
   const beats = (a, b) => (better === 'less' ? a <= b : a >= b);
   const strictly = (a, b) => (better === 'less' ? a < b : a > b);
-  const day = dayOf(end);
   const stat = db.skill.get(task.skill)?.stat;
   const chain = chainAt(db, task, start);
   const bonuses = {
@@ -442,6 +458,7 @@ export function priceDone(db, task, { start, end, minutes, value, quality }) {
     if (listed <= 0) return listed; // restoring is never discounted
     let c = listed * masteryFactor(level);
     if (k === 'mana' && chain.batchIndex > 0) c *= BATCH_MANA_SHARE;
+    c *= tier.energy;
     return Math.round(c * 10) / 10;
   };
   return {
@@ -452,7 +469,8 @@ export function priceDone(db, task, { start, end, minutes, value, quality }) {
     base,
     bonuses,
     multiplier: Math.round(multiplier * 100) / 100,
-    points: Math.round(base * multiplier),
+    points: Math.round(base * multiplier * tier.points),
+    difficulty: tier.id,
     energy: { stamina: cost('stamina'), mana: cost('mana') },
     comboIndex: chain.comboIndex,
     batchIndex: chain.batchIndex,
@@ -501,10 +519,10 @@ export function balanceOf(db, before = Infinity) {
 }
 
 /** What a charge really costs at a balance: the part below zero costs double. */
-export function chargeFor(balance, amount) {
+export function chargeFor(balance, amount, debt = DEBT_MULTIPLIER) {
   if (amount <= 0) return amount;
   const covered = Math.max(0, Math.min(balance, amount));
-  return Math.round(covered + (amount - covered) * DEBT_MULTIPLIER);
+  return Math.round(covered + (amount - covered) * debt);
 }
 
 export function makePurchase(db, rewardRef, { at = Date.now() } = {}) {
@@ -513,7 +531,8 @@ export function makePurchase(db, rewardRef, { at = Date.now() } = {}) {
   if (!reward.repeatable && db.purchases.some((p) => p.reward === reward.id)) throw new Error(`${reward.title} is a one-off and already bought`);
   // The balance at the moment of buying, so a purchase logged later is charged as it would have been.
   const balance = balanceOf(db, at);
-  return { id: newId('purchase', at), type: 'purchase', reward: reward.id, day: dayOf(at), at, price: reward.price, charged: chargeFor(balance, reward.price) };
+  const tier = difficultyOn(db, dayOf(at));
+  return { id: newId('purchase', at), type: 'purchase', reward: reward.id, day: dayOf(at), at, price: reward.price, charged: chargeFor(balance, reward.price, tier.debt), difficulty: tier.id };
 }
 
 /**
@@ -527,12 +546,15 @@ export function makeRework(db, doneRef, { minutes, at = Date.now(), note = '' })
   minutes = Number(minutes);
   if (!(minutes > 0)) throw new Error('rework minutes must be more than 0');
   const repeat = db.rework.filter((r) => r.done === done.id).length + 1;
-  const multiplier = done.critical ? REWORK_CRITICAL : REWORK_MULTIPLIERS[Math.min(repeat, REWORK_MULTIPLIERS.length) - 1];
+  // Rework plays by the tier its completion was priced at.
+  const tier = tierOf(done.price?.difficulty);
+  const listed = done.critical ? REWORK_CRITICAL : REWORK_MULTIPLIERS[Math.min(repeat, REWORK_MULTIPLIERS.length) - 1];
+  const multiplier = Math.round((listed + tier.reworkAdd) * 100) / 100;
   const perMinute = (done.price?.points || 0) / done.minutes;
   const penalty = Math.round(minutes * perMinute * multiplier);
   return {
     id: newId('rework', at), type: 'rework', done: done.id, task: done.task, day: dayOf(at), at, minutes, repeat,
-    multiplier, perMinute: Math.round(perMinute * 100) / 100, penalty, charged: chargeFor(balanceOf(db, at), penalty), note,
+    multiplier, perMinute: Math.round(perMinute * 100) / 100, penalty, charged: chargeFor(balanceOf(db, at), penalty, tier.debt), difficulty: tier.id, note,
   };
 }
 
@@ -817,7 +839,7 @@ export function energyOn(db, day) {
 
 // ─── reviews ────────────────────────────────────────────────────────────────
 
-export function makeReview(db, { satisfaction, ratings = {}, win = '', lesson = '', next = '', at = Date.now() }) {
+export function makeReview(db, { satisfaction, ratings = {}, win = '', lesson = '', next = '', difficulty = null, at = Date.now() }) {
   const score = (v, what) => {
     const n = Number(v);
     if (!(n >= 0 && n <= 10)) throw new Error(`${what} is 0–10, not "${v}"`);
@@ -829,7 +851,55 @@ export function makeReview(db, { satisfaction, ratings = {}, win = '', lesson = 
     if (v !== '' && v !== undefined && v !== null) clean[k] = score(v, db.stat.get(k).name);
   }
   const day = dayOf(at);
-  return { id: newId('review', at), type: 'review', week: isoWeek(day), day, at, satisfaction: score(satisfaction, 'satisfaction'), ratings: clean, win, lesson, next };
+  const rec = { id: newId('review', at), type: 'review', week: isoWeek(day), day, at, satisfaction: score(satisfaction, 'satisfaction'), ratings: clean, win, lesson, next };
+  if (difficulty) rec.difficulty = checkDifficulty(db, difficulty, at);
+  return rec;
+}
+
+/**
+ * The difficulty a review asks for, checked at the review's time: known tiers
+ * and skills, and a raise only as far as the level allows (the player's level
+ * for the global tier, the skill's own for an override). Lowering is free.
+ */
+function checkDifficulty(db, { tier = DEFAULT_DIFFICULTY, skills = {} } = {}, at) {
+  const known = (id) => {
+    const i = DIFFICULTY.findIndex((d) => d.id === id);
+    if (i < 0) throw new Error(`no difficulty tier "${id}" (${DIFFICULTY.map((d) => d.id).join(', ')})`);
+    return i;
+  };
+  const xp = skillXp(db, at);
+  const tomorrow = addDays(dayOf(at), 1);
+  const allow = (id, level, current, what) => {
+    const i = known(id);
+    if (i > DIFFICULTY.findIndex((d) => d.id === current.id) && DIFFICULTY[i].unlock > level) {
+      throw new Error(`${DIFFICULTY[i].name} unlocks at level ${DIFFICULTY[i].unlock}; ${what} is level ${level}`);
+    }
+  };
+  const playerLevel = levelFor([...xp.values()].reduce((a, b) => a + b, 0), PLAYER_STEP).level;
+  allow(tier, playerLevel, difficultyOn(db, tomorrow), 'the player');
+  const clean = {};
+  for (const [skill, id] of Object.entries(skills || {})) {
+    if (!db.skill.has(skill)) throw new Error(`no skill "${skill}"`);
+    if (!id) continue;
+    allow(id, levelFor(xp.get(skill) || 0, SKILL_STEP).level, difficultyOn(db, tomorrow, skill), db.skill.get(skill).name);
+    clean[skill] = id;
+  }
+  return { tier, skills: clean };
+}
+
+/** The difficulty setting in effect on a day: from the latest review before it that set one. */
+function difficultySetting(db, day) {
+  let found = null;
+  for (const r of [...db.reviews].sort((a, b) => a.day.localeCompare(b.day) || (a.at ?? 0) - (b.at ?? 0))) {
+    if (r.day < day && r.difficulty) found = r.difficulty;
+  }
+  return found || { tier: DEFAULT_DIFFICULTY, skills: {} };
+}
+
+/** The tier a skill (or, without one, the whole game) plays at on a day. */
+export function difficultyOn(db, day, skillId = null) {
+  const s = difficultySetting(db, day);
+  return tierOf((skillId && s.skills?.[skillId]) || s.tier);
 }
 
 /** The last review of each ISO week, oldest week first: redoing a review replaces it. */
@@ -853,16 +923,16 @@ function samePeriod(cadence, a, b) {
 
 export const isDoneFor = (db, task, day) => db.done.some((d) => d.task === task.id && samePeriod(task.cadence, d.day, day));
 
-/** Days in a row, forgiving one missed day per week; today not yet done never breaks it. */
-export function dailyStreak(days, day) {
+/** Days in a row, forgiving `grace` missed days in any week; today not yet done never breaks it. */
+export function dailyStreak(days, day, grace = 1) {
   if (!days.size) return { streak: 0, atRisk: false };
   const first = [...days].sort()[0];
   let cursor = days.has(day) ? day : addDays(day, -1);
   let streak = 0;
-  let grace = null;
+  const missed = [];
   while (cursor >= first) {
     if (days.has(cursor)) streak++;
-    else if (grace === null || daysBetween(cursor, grace) >= WEEK) grace = cursor;
+    else if (missed.filter((m) => daysBetween(cursor, m) < WEEK).length < grace) missed.push(cursor);
     else break;
     cursor = addDays(cursor, -1);
   }
@@ -1000,10 +1070,11 @@ export function play(records, now = Date.now()) {
   }));
   const totalXp = [...xp.values()].reduce((a, b) => a + b, 0);
 
+  const tier = difficultyOn(db, day);
   const tasks = db.tasks.map((t) => {
     const mine = db.done.filter((d) => d.task === t.id);
-    const hist = taskStats(db, t, Infinity, rw);
-    const streak = t.cadence === 'daily' ? dailyStreak(new Set(mine.map((d) => d.day)), day)
+    const hist = taskStats(db, t, Infinity, rw, difficultyOn(db, day, t.skill).targetStep);
+    const streak = t.cadence === 'daily' ? dailyStreak(new Set(mine.map((d) => d.day)), day, tier.grace)
       : t.cadence === 'weekly' ? weeklyStreak(new Set(mine.map((d) => isoWeek(d.day))), day)
       : { streak: 0, atRisk: false };
     return {
@@ -1035,6 +1106,14 @@ export function play(records, now = Date.now()) {
   const trend = latest && before.length ? latest.satisfaction - before.reduce((n, r) => n + r.satisfaction, 0) / before.length : null;
 
   const player = levelFor(totalXp, PLAYER_STEP);
+  const setting = difficultySetting(db, day);
+  const locked = DIFFICULTY.find((d) => d.unlock > player.level);
+  const difficulty = {
+    tier: tier.id, name: tier.name, skills: { ...(setting.skills || {}) },
+    unlocked: DIFFICULTY.filter((d) => d.unlock <= player.level).map((d) => d.id),
+    next: locked ? { id: locked.id, name: locked.name, unlock: locked.unlock } : null,
+    changesAt: 'review',
+  };
   const facts = {
     done: db.done.length,
     flow: db.done.filter((d) => d.price?.bonuses?.flow).length,
@@ -1051,7 +1130,7 @@ export function play(records, now = Date.now()) {
   return {
     now, day, week: isoWeek(day),
     settings: db.settings,
-    player, balance, energy, stats, skills, tasks,
+    player, difficulty, balance, energy, stats, skills, tasks,
     rewards: db.rewards.filter((r) => !r.archived).map((r) => ({ ...r, affordable: balance >= r.price, bought: db.purchases.filter((p) => p.reward === r.id).length })),
     next, combo, batch,
     today: { points: doneToday.reduce((n, d) => n + (d.price?.points || 0), 0), done: doneToday.length, minutes: doneToday.reduce((n, d) => n + d.minutes, 0) },
