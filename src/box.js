@@ -1,15 +1,22 @@
-// Toasts and confirmations as the game's framed text box with a speaker tab.
-// Toasts stack above the tab row and leave by themselves; a confirmation is a
-// modal <dialog> (focus stays inside it, Escape cancels) whose buttons carry
-// data-dialog-button="<id>" and resolve open() with that id.
+// Toasts and confirmations, per look (SPEC.md › Two looks). In the HUD they
+// are ui-kit's <sc-toast> and <sc-dialog>. In Game mode they are the game's
+// framed text box with a speaker tab: toasts stack above the tab row and
+// leave by themselves; a confirmation is a modal <dialog> (focus stays inside
+// it, Escape cancels). Either way the buttons carry data-dialog-button="<id>"
+// and open() resolves with that id.
 
+import { ScToast } from '../ui-kit/js/toast.js';
+import { ScDialog } from '../ui-kit/js/dialog.js';
 import { textBox } from './ds.js';
 import { esc } from './util.js';
+
+const hud = () => document.documentElement.dataset.mode !== 'game';
 
 const SPEAKER = { success: 'Nice!', info: 'Flow', warning: 'Heads up', danger: 'Oops' };
 
 /** Show a short message; danger stays longer. Click to dismiss. */
 export function toast(text, tone = 'info') {
+  if (hud()) { ScToast.show(text, { tone, duration: tone === 'danger' ? 6000 : 2800 }); return; }
   const host = document.getElementById('toasts');
   if (!host) return;
   const wrap = document.createElement('div');
@@ -27,6 +34,7 @@ export function toast(text, tone = 'info') {
  * kind primary | danger | ghost. Resolves the id pressed, or 'cancel'.
  */
 export function open({ heading, body = '', buttons = [] }) {
+  if (hud()) return ScDialog.open({ heading, body, buttons });
   return new Promise((resolve) => {
     const dlg = document.createElement('dialog');
     dlg.className = 'ds-dialog';

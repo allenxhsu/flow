@@ -3,6 +3,7 @@
 import { makePlace, newId, placeRemoval, ZONES } from '../model.js';
 import { esc, materialize } from '../util.js';
 import { validateWorld, worldRecord, worldFor } from '../game/world.js';
+import { modeSwitch } from '../mode.js';
 
 /** Starting colours for the hero sprite — data for the replay, not page styling. */
 export const HERO_DEFAULTS = { hair: '#4a3222', skin: '#e0b48c', shirt: '#2f7fd0', trousers: '#34405a' };
@@ -132,6 +133,17 @@ function worldSection(ctx) {
   </section>`;
 }
 
+/** The look: Game mode (the handheld) or the HUD, per device; the HUD's palette in the HUD. */
+function appearanceSection(ctx) {
+  const mode = ctx.mode === 'game' ? 'game' : 'hud';
+  return `<section class="sc-panel pad stack" id="appearance">
+    <h2>Appearance</h2>
+    <div class="row">${modeSwitch(mode, { id: 'mode-switch-settings' })}</div>
+    <p class="small sc-muted" style="margin:0">${mode === 'game' ? 'Game mode: every screen in the handheld look. Turn it off for the HUD.' : 'Game mode turns on the handheld look for every screen. Only this device changes; your records do not.'}</p>
+    ${mode === 'hud' ? '<sc-theme-picker></sc-theme-picker>' : ''}
+  </section>`;
+}
+
 export function render(ctx) {
   const set = ctx.db.settings;
   const hero = { ...HERO_DEFAULTS, ...(set.hero || {}) };
@@ -164,6 +176,7 @@ export function render(ctx) {
         <label class="sc-button" style="cursor:pointer">Import…<input type="file" accept=".json,application/json" data-import hidden></label></div>
       <div class="small sc-faint">This device <span class="sc-mono">${esc(ctx.store.deviceId())}</span> · store ${esc(ctx.store.storeKind())} · ${ctx.store.allRecords().length} records · storage ${esc(ctx.store.persistence())}</div>
     </section>
+    ${appearanceSection(ctx)}
   </div>`;
 }
 

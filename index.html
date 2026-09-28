@@ -1,33 +1,48 @@
 <!doctype html>
-<html lang="en" data-app="flow">
+<html lang="en" data-app="flow" data-mode="hud">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1b2340">
 <title>Flow</title>
-<!-- Flow's own look (the handheld lower screen). ui-kit is loaded inside it as
-     a lower cascade layer, only for the Portal's shared top bar. -->
+<!-- Two looks (SPEC.md › Two looks): the HUD by default, the handheld in Game
+     mode. The look is read from flow.mode before first paint; storage may be
+     unavailable, and then it is the HUD. src/app.js swaps the shell. -->
+<script>try { if (localStorage.getItem('flow.mode') === 'game') document.documentElement.dataset.mode = 'game'; } catch (e) { /* no storage: the HUD */ }</script>
 <link rel="stylesheet" href="src/styles.css">
 <script type="module">
   import { initTheme, detectMacDesktop } from './ui-kit/js/theme.js';
   initTheme({ app: 'flow', macInset: detectMacDesktop() });
 </script>
+<script type="module" src="ui-kit/js/theme-picker.js"></script>
 <script type="module" src="ui-kit/js/sync-status.js"></script>
+<script type="module" src="ui-kit/js/toast.js"></script>
+<script type="module" src="ui-kit/js/dialog.js"></script>
 <script type="module" src="ui-kit/js/portal-bar.js"></script>
 </head>
 <body>
   <!-- Inside the Portal only (src/app.js stamps it in): anywhere else there is no /auth/me to ask. -->
   <template id="portal-bar-tpl"><sc-portal-bar app="flow"></sc-portal-bar></template>
-  <div class="ds" id="shell">
-    <div class="ds-screen" id="screen">
-      <header class="ds-top">
-        <h1 class="visually-hidden" id="view-title">Now</h1>
-        <div id="strip"></div>
-      </header>
-      <nav class="ds-tabs" id="nav" aria-label="Screens"></nav>
-      <main class="ds-main" id="view" tabindex="-1"><div class="ds-boot">Loading…</div></main>
-    </div>
-    <div class="ds-toasts" id="toasts" role="status" aria-live="polite"></div>
+  <!-- The HUD's shell, as src/chrome.js shellHtml('hud') draws it; Game mode's replaces it. -->
+  <div class="sc-shell flow-shell" id="shell" data-shell="hud">
+    <aside class="sc-sidebar" id="sidebar">
+      <div class="sc-brand">
+        <span class="sc-brand-mark">FL</span>
+        <div>
+          <div class="sc-brand-name">Flow</div>
+          <span class="sc-brand-sub">FASTER · BETTER</span>
+        </div>
+      </div>
+      <nav class="sc-nav" id="nav" aria-label="Screens"></nav>
+      <span class="sc-spacer"></span>
+      <footer class="sc-sidebar-foot">
+        <sc-sync-status style="flex: 1"></sc-sync-status>
+      </footer>
+    </aside>
+    <main class="sc-main">
+      <header class="sc-header" id="header"><h1 class="sc-header-title" id="view-title">Now</h1></header>
+      <div class="sc-content" id="view" tabindex="-1"><div class="sc-boot sc-muted">Loading…</div></div>
+    </main>
   </div>
   <script type="module" src="src/app.js"></script>
 </body>

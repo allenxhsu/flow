@@ -170,17 +170,20 @@ function derive(planRecords, { me = '', skills = [], stats = [], history = false
       const cost = Math.min(ENERGY_CAP, Math.round((estimate / 60) * ENERGY_PER_HOUR * 2) / 2);
       const skillName = [t.skill, plan.skill, folder?.name, ws?.name, project].map(text).find(Boolean) || 'General';
       const taskId = String(t.id);
+      const finished = doneAtMs(t);
       const task = {
         id: `task_pl_${planId}_${taskId}`, type: 'task', title: text(t.name) || 'Untitled task', project,
         skill: skillFor(skillName), measure: 'time', cadence: 'once', estimate,
         stamina: physical ? cost : 0, mana: physical ? 0 : cost,
         critical: false, forOthers: false, deadline: isDay(t.deadline) ? t.deadline : null, urgent: URGENT.has(t.urgency),
-        batch: null, unit: '', place: null, archived: plan.archived === true,
+        // Done in Planner is done in Flow: never offered as open, logged or not.
+        batch: null, unit: '', place: null, archived: plan.archived === true || finished !== null,
         source: { app: 'project', plan: planId, task: taskId },
+        ...(finished !== null ? { plannerDone: new Date(finished).toISOString() } : {}),
         ...(t.pending ? { pending: true } : {}),
       };
       const sheets = (Array.isArray(plan.timesheets) ? plan.timesheets : []).filter((x) => x && x.taskId === taskId && isDay(x.date) && Number.isFinite(+x.hours) && +x.hours > 0);
-      out.push({ task, doneAt: doneAtMs(t), sheets, percent: Math.round(+t.percent) || 0 });
+      out.push({ task, doneAt: finished, sheets, percent: Math.round(+t.percent) || 0, planArchived: plan.archived === true });
     });
   }
   return { entries: out, skills: [...madeSkills.values()] };
@@ -204,7 +207,7 @@ export function plannerTasks(planRecords, opts) {
  */
 export function plannerHistory(planRecords, opts) {
   const { entries, skills } = derive(planRecords, { ...opts, history: true });
-  const tasks = entries.map((e) => e.task).filter((t) => t.archived);
+  const tasks = entries.filter((e) => e.planArchived).map((e) => e.task);
   const used = new Set(tasks.map((t) => t.skill));
   return { tasks, skills: skills.filter((k) => used.has(k.id)) };
 }
@@ -287,10 +290,12 @@ export function plannerEvents(db, planRecords, opts) {
   const out = { done: [], rework: [], ask: [] };
   // Planner history before Flow first read it is not logged; without the stamp, nothing is.
   if (since === null || since === undefined || !Number.isFinite(+since)) return out;
+  // The cutoff is the start of the day Flow first read Planner, so that day's earlier work counts.
+  const from = new Date(+since); from.setHours(0, 0, 0, 0);
   const name = me ?? (db.settings?.plannerName || db.settings?.name || '');
   const { entries, skills } = derive(planRecords, { me: name, skills: db.skills, stats: db.stats, history: true });
   let work = withDefinitions(db, entries.map((e) => e.task), skills);
-  const finished = entries.filter((e) => e.doneAt !== null && e.doneAt >= +since && e.doneAt <= now).sort((a, b) => a.doneAt - b.doneAt || a.task.id.localeCompare(b.task.id));
+  const finished = entries.filter((e) => e.doneAt !== null && e.doneAt >= +from && e.doneAt <= now).sort((a, b) => a.doneAt - b.doneAt || a.task.id.localeCompare(b.task.id));
   for (const { task, doneAt: ms, sheets } of finished) {
     const iso = new Date(ms).toISOString();
     const { plan, task: taskId } = task.source;

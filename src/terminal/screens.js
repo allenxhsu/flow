@@ -1,10 +1,13 @@
 // The Terminal's screens (SPEC.md › Terminal: the iPhone app), as HTML
 // strings from the state src/terminal.js builds, so they render under Node:
 // Projects → a project's tasks → the timer, the status strip with I'm tired,
-// and the sheets (Add task, Stop & log, I'm tired, Settings). The handheld
-// look of the app's screens; nothing else from the game.
+// and the sheets (Add task, Stop & log, I'm tired, Settings). The app's look
+// (SPEC.md › Two looks): the HUD by default, the handheld in Game mode
+// (`ctx.mode`); nothing else from the game.
 
 import { statusStrip } from '../ds.js';
+import { hudStatus } from '../chrome.js';
+import { modeSwitch } from '../mode.js';
 import { esc, fmtMin } from '../util.js';
 import { tiredSheet } from '../views/tired.js';
 
@@ -23,10 +26,10 @@ function due(day, today) {
 }
 const time = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-/** The top: the status strip (hearts, magic bar, gem, level), I'm tired and Settings. */
+/** The top: stamina, mana, points and level (the HUD's meters, or Game mode's strip), I'm tired and Settings. */
 export function top(ctx) {
   const waiting = ctx.waiting ? `<span class="term-wait" id="ops-waiting">${ctx.waiting} waiting for Planner</span>` : '';
-  return `${statusStrip(ctx.g)}
+  return `${ctx.mode === 'game' ? statusStrip(ctx.g) : hudStatus(ctx.g)}
   <div class="term-bar">
     <button class="sc-button term-tired" data-action="tired" id="tired-button">I'm tired</button>
     ${waiting}
@@ -164,6 +167,11 @@ export function settingsSheet(ctx) {
     ? `<div class="term-actions">${s.paired ? '<button class="sc-button" data-action="sign-out">Sign out</button>' : '<button class="sc-button sc-button--primary" data-action="pair">Sign in to the Portal</button>'}</div>`
     : ''}
       <p class="small sc-faint">${esc(s.planner || '')}</p>
+    </div>
+    <div class="sc-panel pad stack" id="appearance">
+      <h2>Appearance</h2>
+      <div class="row">${modeSwitch(ctx.mode === 'game' ? 'game' : 'hud')}</div>
+      <p class="small sc-faint">Game mode turns on the handheld look on this device.</p>
     </div>
     <form class="sc-panel pad stack" data-form="settings" id="settings-form">
       <h2>Planner</h2>

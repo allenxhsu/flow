@@ -381,10 +381,25 @@ test('planner: with no since, nothing is logged — it needs the stamp', () => {
   }
 });
 
-test('planner: completions before since are history — not logged', () => {
+test('planner: completions before the day of since are history — not logged', () => {
   const w = world([finished()]);
-  assert.deepEqual(w.events({ since: doneMs(DONE_AT) + 60000 }), { done: [], rework: [], ask: [] });
+  assert.deepEqual(w.events({ since: T('2026-10-03T08:00:00') }), { done: [], rework: [], ask: [] }, 'the day before the first read is history');
   assert.equal(w.events({ since: doneMs(DONE_AT) }).done.length, 1, 'doneAt ≥ since is logged');
+});
+
+test('planner: work finished earlier on the day Flow first reads Planner still counts', () => {
+  // SPEC › From when: the cutoff is the start of the day plannerSince falls on.
+  const w = world([finished()]); // done 2026-10-02 15:30
+  assert.equal(w.events({ since: T('2026-10-02T22:48:00') }).done.length, 1);
+});
+
+// SPEC › Done in Planner is done in Flow: never offered as open again.
+test('planner: a task done in Planner is not an open Flow task, even when Flow never logged it', () => {
+  const w = world([finished('2026-08-01T10:00')]); // before any since: history, not logged
+  const [t] = plannerTasks(w.plans, { me: 'Ana', skills: [], stats: DEFAULT_STATS }).tasks;
+  assert.ok(t, 'still derived, so history can point at it');
+  assert.equal(t.archived, true, 'not open');
+  assert.equal(typeof t.plannerDone, 'string', 'says when Planner finished it');
 });
 
 test('planner: a finish before since is not treated as a reopen of an earlier completion', () => {

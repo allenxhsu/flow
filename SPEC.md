@@ -136,8 +136,8 @@ second in the same week replaces the first.
 
 - A toolkit app: id **`flow`**, served by the Portal (Sign in with Google,
   PWA), synced by sync-kit in workspace `flow`, a Mac app via shell-kit later.
-  Its screens have their own handheld look (see "The app's screens match the
-  game"); ui-kit supplies only the Portal's shared top bar. No build step; vendored `ui-kit/` and `sync-kit/`
+  Its screens use ui-kit's sci-fi HUD, and the handheld look in Game mode
+  (see "Two looks"). No build step; vendored `ui-kit/` and `sync-kit/`
   (each repo's `scripts/copy-into.mjs`, with `--check`).
 - Records: definitions (settings, stat, skill, task, reward, place, kind) are
   last-write-wins; events (done, rework, purchase, energy, review, moment) are
@@ -609,6 +609,11 @@ plan. Flow's own tasks (dailies, habits, chores) stay alongside.
   the player**: no assignment at all (a plan of one's own work is "me"), or an
   assignment to a resource whose name matches the player's Planner name
   (Settings, defaulting to the player's name; case- and space-insensitive).
+- **Done in Planner is done in Flow** (decided 2026-09-28): a Planner task
+  with a done time (100%) is never offered as open in Flow — not on Now, not
+  in Tasks' open list, not in Play or the Terminal — whether or not Flow logged
+  it (history before the cutoff below is not logged, but it is still done).
+  Reopened in Planner, it is open again.
 - **Shape:** each becomes a derived Flow task — never stored — with id
   `task_pl_<planId>_<taskId>`, title the task's name, project name shown,
   measure `time`, cadence `once`, `source: { app: 'project', plan, task }`:
@@ -648,8 +653,11 @@ plan. Flow's own tasks (dailies, habits, chores) stay alongside.
   `flow planner import <store-export.json>` from Planner's Settings ▸ export.
 - **From when:** Planner history before Flow first reads it is not logged.
   The first successful read stamps `settings.plannerSince` (ms, written once,
-  never moved later). Only Planner completions with doneAt ≥ plannerSince are
-  logged or treated as reopens; earlier ones are history. Completions and
+  never moved later). The cutoff is the **start of that day** (local
+  midnight of the day plannerSince falls on, decided 2026-09-28 after the
+  player connected late in a day and that day's work went unlogged): only
+  Planner completions with doneAt on or after it are logged or treated as
+  reopens; earlier ones are history. Completions and
   reopens are still logged for tasks of a plan that has since been archived
   (the list of tasks to do excludes archived plans, the history does not);
   templates never count.

@@ -18,6 +18,8 @@ const require = createRequire(process.env.PLAYWRIGHT_ROOT || '/opt/node22/lib/no
 const { chromium, devices } = require('playwright');
 
 const APP = process.env.APP_URL || 'http://127.0.0.1:8201/';
+// The look to drive (SPEC.md › Two looks): MODE=hud (default) or MODE=game.
+const MODE = process.env.MODE === 'game' ? 'game' : 'hud';
 const SHOTS = process.env.SHOTS || null;
 const MOCK_PORT = Number(process.env.MOCK_PORT || 8093);
 const failures = [];
@@ -81,6 +83,7 @@ const PLANNER = `http://127.0.0.1:${MOCK_PORT}/w/project`;
 // ─── the page ───────────────────────────────────────────────────────────────
 const browser = await chromium.launch();
 const context = await browser.newContext({ ...devices['iPhone 13'] });
+await context.addInitScript((m) => { try { localStorage.setItem('flow.mode', m); } catch { /* none */ } }, MODE);
 await context.addInitScript((url) => { if (!localStorage.getItem('flow.planner')) localStorage.setItem('flow.planner', JSON.stringify({ url, token: '' })); }, PLANNER);
 const page = await context.newPage();
 const errors = [];
@@ -92,7 +95,7 @@ const shot = async (name) => {
   fs.mkdirSync(SHOTS, { recursive: true });
   await page.screenshot({ path: `${SHOTS}/terminal-${name}.png` });
 };
-const clearToasts = () => page.evaluate(() => document.querySelectorAll('.ds-toast').forEach((t) => t.remove()));
+const clearToasts = () => page.evaluate(() => document.querySelectorAll('.ds-toast, .sc-toast-item').forEach((t) => t.remove()));
 const overflow = () => page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1 || document.querySelector('#view').scrollWidth > document.querySelector('#view').clientWidth + 1);
 const opsOf = (kind) => pushed.filter((r) => r.type === 'flow.op' && r.op === kind);
 const readNow = async () => { await page.evaluate(() => window.dispatchEvent(new Event('focus'))); await page.waitForTimeout(700); };
@@ -186,7 +189,7 @@ await page.waitForTimeout(1200);
 const stopSheet = opsOf('timesheet').find((r) => r.task === 't1');
 check(stopSheet && stopSheet.hours === 0.5, 'Stop sent a 0.5 h timesheet on the Planner task');
 check(!(await page.textContent('#view')).includes('Write the launch copy'), 'the finished task leaves the open list');
-const gem = await page.textContent('#strip-gem');
+const gem = await page.textContent('#strip-gem, #hdr-balance');
 check(Number(gem.replace(/[^\d-]/g, '')) > 0, `points earned (${gem})`);
 await clearToasts();
 await shot('after-stop');
@@ -199,7 +202,7 @@ await page.click('#tired-form .choice:has(input[value="very"])');
 await shot('tired');
 await page.click('#tired-form [type=submit]');
 await page.waitForSelector('#tired-form', { state: 'detached' });
-const mana = await page.$eval('.magic', (el) => el.getAttribute('aria-valuenow'));
+const mana = await page.$eval('#top [role=meter][aria-label="Mana"]', (el) => el.getAttribute('aria-valuenow'));
 check(Number(mana) <= 3, `mana dropped to ≤ 3 (${mana})`);
 await clearToasts();
 await shot('tired-after');
