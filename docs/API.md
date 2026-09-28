@@ -35,6 +35,8 @@ export const GEAR_STEP_USES = 10;
 export const GEAR_STEP = 0.01;
 export const GEAR_MAX = 0.10;
 export const SLOTS = ['head', 'body', 'legs', 'feet', 'hands', 'bag', 'tech', 'vehicle'];
+export const FILE_MAX_BYTES = 2 * 1024 * 1024;
+export const PHOTO_MAX_PX = 1024;
 export const RECORD_TYPES = [...DEFINITIONS, ...EVENTS];
 export const dayOf = (ms)
 export const addDays = (day, n)
@@ -47,7 +49,12 @@ export function tombstone(record, { now = Date.now(), device = 'local' } = {})
 export function index(records) 
 export const betterOf = (task)
 export function makeSkill(db, { name, stat, place = null, now = Date.now() }) 
-export function makePlace(db, { name, zone = 'elsewhere', now = Date.now() }) 
+export function makePlace(db, { name, zone, parent = null, now = Date.now() }) 
+export function placePath(db, placeId) 
+export function placesWithin(db, placeId) 
+export function placeTree(db) 
+export function movePlace(db, placeId, parent) 
+export function placeRemoval(db, placeId) 
 export const placeOfTask = (db, task)
 export function makeMoment(db, kindRef, { start, end = Date.now(), place, who = '', note = '' } = {}) 
 export function makeTask(db, fields, { now = Date.now() } = {}) 
@@ -65,7 +72,7 @@ export function balanceOf(db, before = Infinity)
 export function chargeFor(balance, amount, debt = DEBT_MULTIPLIER) 
 export function makePurchase(db, rewardRef, { at = Date.now() } = {}) 
 export function makeRework(db, doneRef, { minutes, at = Date.now(), note = '' }) 
-export function makeItem(db, { name, category = '', aliases = [], place = null, qty = 1, price = 0, consumable = false, lowStock = 0, usual = lowStock + 1, skills = [], slot = null, photo = null, color = null, id = null, now = Date.now() }) 
+export function makeItem(db, { name, category = '', aliases = [], place = null, qty = 1, price = 0, consumable = false, lowStock = 0, usual = lowStock + 1, skills = [], slot = null, photo = null, color = null, brand = '', model = '', serial = '', bought = null, warranty = null, notes = '', photos = [], receipts = [], id = null, now = Date.now() }) 
 export function findItems(db, query) 
 export function makeSkip(db, { query, price, item = null, at = Date.now() }) 
 export function makeSpend(db, { name, price, item = null, qty = 1, at = Date.now() }) 
@@ -76,6 +83,11 @@ export function makeLoadout(db, { name, slots = {}, active = false, checklist = 
 export function activeLoadout(db) 
 export function gearBonus(db, task, at) 
 export function inventory(records, now = Date.now()) 
+export function makeFile(db, { item, kind, name = '', mime = '', data, at = Date.now() }) 
+export function filesOf(db, item) 
+export function searchItems(db, query, placeId = null) 
+export function inventoryCSV(db, items) 
+export function labelSheet(db, placeId) 
 export function makeEnergy({ stamina, mana, at = Date.now() }) 
 export function energyOn(db, day) 
 export function makeReview(db, { satisfaction, ratings = {}, win = '', lesson = '', next = '', difficulty = null, at = Date.now() }) 

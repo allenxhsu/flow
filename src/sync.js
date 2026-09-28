@@ -2,9 +2,10 @@
 // carries them between devices. The only module that imports from sync-kit.
 //
 // Workspace "flow". Definitions (settings, stat, skill, task, reward, place,
-// kind) are edited in place and last-write-wins; events (done, rework,
-// purchase, energy, review, moment) are written once and never edited, so two
-// devices can never overwrite each other's history. See src/model.js.
+// kind, item, loadout, wish) are edited in place and last-write-wins; events
+// (done, rework, purchase, energy, review, moment, skip, spend, file) are
+// written once and never edited, so two devices can never overwrite each
+// other's history. See src/model.js.
 //
 // Modelled on project-planner's src/state/sync.js: IndexedDB where there is
 // one (localStorage otherwise), the Portal's own origin and session cookie
@@ -26,7 +27,7 @@ const INTERVAL_MS = 30_000;
 /** How long after a write it goes to the server. */
 const AFTER_WRITE_MS = 1_500;
 export const STORE_EXPORT_FORMAT = 'flow.store';
-const EVENTS = new Set(['done', 'rework', 'purchase', 'energy', 'review', 'moment']);
+const EVENTS = new Set(['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'file']);
 
 let recordStore = null;
 let engine = null;
