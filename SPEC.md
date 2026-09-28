@@ -228,6 +228,119 @@ and `price.bonuses.gear`; `balanceOf` adds skip points; constants
 `SKIP_POINTS_PER_DOLLAR = 1`, `SKIP_DAILY_CAP = 100`, `GEAR_STEP_USES = 10`,
 `GEAR_STEP = 0.01`, `GEAR_MAX = 0.10`, `SLOTS`.
 
+## House inventory (decided 2026-09-28)
+
+The Bag doubles as the **house inventory**: where everything in the house is,
+down to the shelf and the box. It uses the same `item` and `place` records as
+the rest of the inventory, in workspace `flow`, so an item filed in a box
+here is the item "I have it" finds, the shopping list matches and a loadout
+equips. There is no second copy and no import.
+
+- **Places nest.** A place can sit inside another: Garage › Shelf B › Box 3.
+  `place.parent` is a place id or null (top level). A place made inside
+  another takes its zone unless given one. A place can never be put inside
+  itself or anything inside it. The replay, tasks, skills and moments keep
+  using places exactly as before; nesting only changes how the Bag shows them.
+- **Deleting a place never deletes what is in it.** Its items and the places
+  inside it move up to its parent — to *Unfiled* (no place) when it was at
+  the top level — and so do tasks and skills that were set there. Moments
+  keep the place they happened at.
+- **Items carry the house-inventory details** besides the phase 1.5 fields:
+  `brand`, `model`, `serial`, `bought` (the purchase day), `warranty` (the
+  day it runs out), `notes`, and lists of photos and receipts. `price` stays
+  the price of one.
+- **Photos and receipts are `file` records**, because sync-kit has no asset
+  store yet: an event, written once, holding the file itself as base64 with
+  its name and type. The item lists them in order (`photos`, `receipts`: file
+  ids). Photos are resized in the page to at most **1024 px** on the long side
+  (JPEG) before they are written; any file is at most **2 MB**. Taking one off
+  an item removes its id from the list; the file record stays, as every event
+  does. (When sync-kit gains assets, file records move there.)
+- **Finding things.** A search box finds items when every word of the query
+  appears in the item's name, aliases, category, brand, model, serial, notes
+  or the names of the places it is in — so "garage drill" finds the drill in
+  the garage, and a box's name finds what is in it. Each result shows its full
+  place path. This is separate from "I have it" matching, which stays as it is.
+- **Browse by place:** the Bag's stash shows a stash per place in tree order,
+  each titled with its path (Bookcase 1 › Shelf 2), and above it the place tree
+  with a count per place (everything inside it, at any depth). Selecting a
+  place shows only the stashes inside it; the search box narrows them to the
+  items that match. Places are added, renamed, moved and deleted there too.
+- **Box labels:** a printable sheet per place listing what is in it — its own
+  items first, then each place inside it under its path — to tape on the box.
+- **CSV:** every listed item as a row, sorted by place path then name:
+  Name, Place, Quantity, Category, Brand, Model, Serial, Bought, Price,
+  Warranty, Photos (count), Receipts (count), Notes. A cell starting with
+  `= + - @` is written as text (a leading `'`), so a spreadsheet never runs it.
+
+### Contract
+
+```js
+makePlace(db, { name, zone, parent = null })   // zone defaults to the parent's, else 'elsewhere'; a missing parent throws
+placePath(db, placeId)        // → [place, …] top level first, the place last; [] for none or an unknown id
+placesWithin(db, placeId)     // → Set of place ids: the place and every place inside it, at any depth
+placeTree(db)                 // → [{ place, depth }] depth first, siblings by name; a place whose parent is gone is top level
+movePlace(db, placeId, parent)   // → the place record with its new parent (null = top level); into itself throws
+placeRemoval(db, placeId)     // → the item, place, task and skill records to write with the place's tombstone
+makeItem(db, { …, brand = '', model = '', serial = '', bought = null, warranty = null, notes = '',
+  photos = [], receipts = [] })  // bought/warranty 'YYYY-MM-DD' or null; a bad day throws
+makeFile(db, { item, kind, name, mime, data, at })   // kind 'photo' | 'receipt'; → { id: 'file_…', type: 'file',
+                              //   item, kind, name, mime, data, size (bytes), day, at }; over FILE_MAX_BYTES throws
+filesOf(db, item)             // → { photos: [file], receipts: [file] } in the item's order; ids not (yet) synced are skipped
+searchItems(db, query, placeId = null)   // → [{ item, path }]: every word matches; only inside placeId (any depth) when given;
+                              //   sorted by path names then item name; an empty query lists them all
+inventoryCSV(db, items)       // → the CSV text above, CRLF line ends, header first
+labelSheet(db, placeId)       // → { place, path, lines: [{ heading } | { item, name, qty }] }
+```
+
+`FILE_MAX_BYTES = 2 * 1024 * 1024`, `PHOTO_MAX_PX = 1024`. `file` is an event
+(the last in `RECORD_TYPES`); `index()` gains `files` and `file` (a Map).
+`inventory()`'s stashes gain `path` (place names, top level first).
+
+## Reshelving (decided 2026-09-28)
+
+A **reshelve plan** is a list of moves that puts a collection in a new order —
+the player's bookcases re-sorted by Dewey call number, for one. The plan is
+made outside the app (Claude, working from the inventory) and imported; the
+Bag walks the player through it and keeps the inventory true as they go.
+
+- **A plan is a `reshelve` record** (a definition): a name, and moves in their
+  final order, each `{ item, from, to, n, call }` — the item, the place it was
+  in when the plan was made, the place it goes, its position in the new order
+  (1 = first on the first shelf) and an optional label such as a call number.
+- **Two passes, both ticked off:** *Pull* — empty one shelf at a time, each book
+  showing where it goes; *Shelve* — put each new shelf's books up in order,
+  left to right. Ticking a book as pulled only marks it. Ticking it as
+  **shelved moves the item to its new place** — the inventory then says where
+  it really is — and marks it. Unticking a shelved book marks it only; it does
+  not move the item back.
+- **A book already on its new shelf** counts as shelved from the start.
+- **Progress:** pulled and shelved counts out of the total. When every move is
+  shelved the plan offers to finish; a finished plan (`done: true`) leaves the
+  Bag. One plan shows at a time: the latest written that is not done.
+- Moves that name an item or place that no longer exists are skipped, never
+  thrown: an item removed during a reshelve drops out of the plan.
+
+### Contract
+
+```js
+makeReshelve(db, { name, moves, now })   // moves: [{ item, to, from?, call? }] in final order
+                              // → { id: 'reshelve_…', type: 'reshelve', name, moves: [{ item, from, to, n, call }],
+                              //     pulled: [], shelved: [], done: false }; from defaults to the item's place;
+                              //     an unknown item or place throws; n counts from 1
+activeReshelve(db)            // → the latest-written plan that is not done, or null
+reshelveView(db, plan)        // → { total, pulled, shelved, shelves: [{ place, path, moves }], sources: [{ place, path, moves }] }
+                              //   each move gains item (the record), isPulled, isShelved (listed, or already at its
+                              //   new place); shelves in the order of their first move, moves by n; sources by the
+                              //   order of `from` in placeTree, moves by n; moves whose item or place is gone are left out
+markPulled(plan, itemId, on = true)      // → the plan with the item added to (or taken out of) pulled
+shelveMove(db, plan, itemId, on = true)  // → { plan, item }: on → the item record at its new place and the plan with it
+                              //   in shelved; off → the plan without it and item null
+```
+
+`reshelve` is a definition, the last in the definitions of `RECORD_TYPES`;
+`index()` gains `reshelves` (latest write per id).
+
 ## Art direction (decided after concept rounds)
 
 **Isometric pixel art in the spirit of 16-bit adventure games** — the original
