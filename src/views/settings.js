@@ -100,7 +100,6 @@ export function render(ctx) {
         <label class="sc-button" style="cursor:pointer">Import…<input type="file" accept=".json,application/json" data-import hidden></label></div>
       <div class="small sc-faint">This device <span class="sc-mono">${esc(ctx.store.deviceId())}</span> · store ${esc(ctx.store.storeKind())} · ${ctx.store.allRecords().length} records · storage ${esc(ctx.store.persistence())}</div>
     </section>
-    <section class="sc-panel pad stack"><h2>Appearance</h2><sc-theme-picker></sc-theme-picker></section>
   </div>`;
 }
 

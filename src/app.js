@@ -2,43 +2,22 @@
 // routes every click and form submit through two delegated listeners —
 // `data-action` on a button, `data-form` on a form — to the view that owns it.
 
-import { ScToast } from '../ui-kit/js/toast.js';
-import { ScDialog } from '../ui-kit/js/dialog.js';
 import { portalApp } from '../sync-kit/js/portal.js';
 import { play } from './model.js';
 import * as store from './sync.js';
-import { esc, fmtPts, fmtClock } from './util.js';
-import * as now from './views/now.js';
-import * as tasks from './views/tasks.js';
-import * as skills from './views/skills.js';
-import * as shop from './views/shop.js';
-import * as review from './views/review.js';
-import * as replay from './views/replay.js';
-import * as settings from './views/settings.js';
-import * as rules from './views/rules.js';
-
-const VIEWS = [
-  { id: 'now', label: 'Now', glyph: '▶', mod: now },
-  { id: 'tasks', label: 'Tasks', glyph: '☰', mod: tasks },
-  { id: 'skills', label: 'Skills', glyph: '✦', mod: skills },
-  { id: 'shop', label: 'Shop', glyph: '◆', mod: shop },
-  { id: 'review', label: 'Review', glyph: '◷', mod: review },
-  { id: 'replay', label: 'Replay', glyph: '▦', mod: replay },
-  { id: 'settings', label: 'Settings', glyph: '⚙', mod: settings },
-  { id: 'rules', label: 'Rules', glyph: '§', mod: rules },
-];
+import { esc, fmtClock } from './util.js';
+import { statusStrip, pixelIcon } from './ds.js';
+import * as box from './box.js';
+import { VIEWS } from './views/index.js';
 const VIEW_KEY = 'flow.view';
 
 const $ = (sel) => document.querySelector(sel);
 const ui = { view: 'now' };
 try { const v = localStorage.getItem(VIEW_KEY); if (VIEWS.some((x) => x.id === v)) ui.view = v; } catch { /* no storage */ }
 
-const toast = (text, tone = 'info') => ScToast.show(text, { tone, duration: tone === 'danger' ? 6000 : 2500 });
-async function confirm(heading, body, yes = 'OK', kind = 'primary') {
-  const id = await ScDialog.open({ heading, body, buttons: [{ id: 'cancel', label: 'Cancel', kind: 'ghost' }, { id: 'ok', label: yes, kind }] });
-  return id === 'ok';
-}
-async function choose(heading, body, buttons) { return ScDialog.open({ heading, body, buttons }); }
+const toast = (text, tone = 'info') => box.toast(text, tone);
+const confirm = (heading, body, yes = 'OK', kind = 'primary') => box.confirm(heading, body, yes, kind);
+const choose = (heading, body, buttons) => box.open({ heading, body, buttons });
 
 function context() {
   const db = store.db();
@@ -71,27 +50,31 @@ function render({ force = false } = {}) {
   def.mod.mounted?.(view, ctx);
 }
 
+/** The tab row: real buttons with original pixel icons; the current one is aria-current. */
 function renderNav() {
-  $('#nav').innerHTML = VIEWS.map((v) => `
-    <button class="sc-nav-item ${v.id === ui.view ? 'is-active' : ''}" data-go="${v.id}">
-      <span class="sc-nav-icon" style="--tint: var(--sc-app)">${v.glyph}</span>
-      <span class="sc-nav-label">${v.label}</span>
+  const nav = $('#nav');
+  const same = nav.dataset.current === ui.view;
+  if (!same || !nav.children.length) {
+    nav.innerHTML = VIEWS.map((v) => `
+    <button type="button" class="ds-tab" data-go="${v.id}" data-view="${v.id}"${v.id === ui.view ? ' aria-current="page"' : ''}>
+      ${pixelIcon(v.id)}<span class="ds-tab-label">${v.label}</span>
     </button>`).join('');
+    nav.dataset.current = ui.view;
+    nav.querySelector('[aria-current]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }
 }
 
 function renderHeader(ctx, def) {
   $('#view-title').textContent = def.label;
-  $('#hdr-balance').textContent = fmtPts(ctx.g.balance);
-  $('#hdr-balance').closest('.sc-resource').title = `Points balance${ctx.g.balance < 0 ? ' (in debt)' : ''}`;
-  $('#hdr-level').textContent = `LV ${ctx.g.player.level}`;
-  $('#hdr-level').title = `Player level · difficulty ${ctx.g.difficulty.name}`;
+  $('#strip').innerHTML = statusStrip(ctx.g);
+  $('#shell').dataset.view = def.id;
+  document.title = `${def.label} · Flow`;
 }
 
 function go(view) {
   if (!VIEWS.some((v) => v.id === view)) return;
   ui.view = view;
   try { localStorage.setItem(VIEW_KEY, view); } catch { /* no storage */ }
-  document.body.classList.remove('is-nav-open');
   render({ force: true });
   $('#view').scrollTop = 0;
 }
@@ -104,8 +87,6 @@ function actionsOf() {
 document.addEventListener('click', (ev) => {
   const nav = ev.target.closest('[data-go]');
   if (nav) { ev.preventDefault(); go(nav.dataset.go); return; }
-  if (ev.target.closest('[data-toggle-nav]')) { document.body.classList.toggle('is-nav-open'); return; }
-  if (ev.target.matches('.nav-scrim')) { document.body.classList.remove('is-nav-open'); return; }
   const el = ev.target.closest('[data-action]');
   if (!el || !$('#view').contains(el)) return;
   const fn = actionsOf()[el.dataset.action];
@@ -165,5 +146,5 @@ async function boot() {
 
 boot().catch((err) => {
   console.error(err);
-  $('#view').innerHTML = `<div class="sc-alert sc-alert--danger"><strong>Flow could not start</strong> ${esc(err.message)}</div>`;
+  $('#view').innerHTML = `<div class="view"><div class="sc-alert sc-alert--danger"><strong>Flow could not start</strong> ${esc(err.message)}</div></div>`;
 });

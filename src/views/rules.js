@@ -1,7 +1,7 @@
 // Rules: how the scoring works, in words. The numbers come from src/model.js,
 // so this page cannot drift from what the game actually does.
 
-import { BONUS, BONUS_CAP, COMBO_GAP_MIN, BATCH_GAP_MIN, BATCH_RELEASE, DEADLINE_SOON_DAYS, HISTORY_RUNS, HISTORY_MIN_RUNS, TARGET_STEP, MASTERY_STEP, MASTERY_FLOOR, BATCH_MANA_SHARE, REWORK_MULTIPLIERS, REWORK_CRITICAL, DEBT_MULTIPLIER, PLAYER_STEP, STAT_STEP, SKILL_STEP, REWORK_ASK_DAYS, DIFFICULTY, DEFAULT_DIFFICULTY } from '../model.js';
+import { BONUS, BONUS_CAP, COMBO_GAP_MIN, BATCH_GAP_MIN, BATCH_RELEASE, DEADLINE_SOON_DAYS, HISTORY_RUNS, HISTORY_MIN_RUNS, TARGET_STEP, MASTERY_STEP, MASTERY_FLOOR, BATCH_MANA_SHARE, REWORK_MULTIPLIERS, REWORK_CRITICAL, DEBT_MULTIPLIER, PLAYER_STEP, STAT_STEP, SKILL_STEP, REWORK_ASK_DAYS, DIFFICULTY, DEFAULT_DIFFICULTY, SKIP_POINTS_PER_DOLLAR, SKIP_DAILY_CAP, GEAR_STEP, GEAR_STEP_USES, GEAR_MAX } from '../model.js';
 import { esc } from '../util.js';
 
 const pc = (x) => `${Math.round(x * 100)}%`;
@@ -79,6 +79,12 @@ export function render(ctx) {
 
     <h3>Moments and places</h3>
     <p>Moments are life that is not a task — a drive, a chat, laundry, a meal, rest: energy by the hour, never points. Places belong to zones (home, road, factory, town, elsewhere); a task's place defaults from its skill.</p>
+    <h3>The bag</h3>
+    <ul>
+      <li>Use what you own before buying more. <b>Skipping a purchase</b> ("I have it") pays ${SKIP_POINTS_PER_DOLLAR} point per dollar avoided, up to ${SKIP_DAILY_CAP} points a day across all skips — points and money saved, never XP.</li>
+      <li><b>Buying anyway</b> has no penalty: it records the money spent and adds or restocks the item. Saved vs spent is shown per month.</li>
+      <li><b>Gear bonus</b> grows with use, never with buying: an item linked to a skill earns +${pc(GEAR_STEP)} for every ${GEAR_STEP_USES} of that skill's completions done while it was in the equipped loadout, up to +${pc(GEAR_MAX)}. Only the best such item counts, inside the ${BONUS_CAP}× cap.</li>
+    </ul>
     ${difficulty(ctx?.g)}
   </article></div>`;
 }
