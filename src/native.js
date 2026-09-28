@@ -187,7 +187,7 @@ export function createNative({ host = realHost, store, onChange = () => {}, onOp
     listGeofences() { post({ type: TO_APP.geofenceList }); },
     requestHealth() { post({ type: TO_APP.healthRequest }); },
     /** shell-kit's Portal pairing: sign in (the shell calls remote back) and sign out. */
-    pair() { post({ type: 'portal.pair' }); },
+    pair(origin = '') { post(origin ? { type: 'portal.pair', origin } : { type: 'portal.pair' }); },
     signOut() { post({ type: 'portal.signOut' }); },
     event,
   };

@@ -208,7 +208,12 @@ export const actions = {
     const p = ctx.db.place.get(el.dataset.id);
     if (p && ctx.native) ctx.native.clearGeofence(p);
   },
-  'portal-pair': (el, ctx) => ctx.native?.pair(),
+  'portal-pair': (el, ctx) => {
+    // The Portal the Sync form names, if any; else the shell's own default.
+    let origin = '';
+    try { origin = new URL(globalThis.document?.querySelector('#sync [name=url]')?.value || ctx.store.getSettings().url).origin; } catch { /* none typed */ }
+    ctx.native?.pair(origin === 'null' ? '' : origin);
+  },
   'portal-sign-out': (el, ctx) => ctx.native?.signOut(),
   'remove-kind': async (el, ctx) => {
     await saveList(ctx, 'kind', { id: el.dataset.id, archived: true });
