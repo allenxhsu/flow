@@ -10,3 +10,8 @@ test('the store treats every model event as write-once, skip and spend included'
   for (const type of EVENT_TYPES) assert.equal(isEvent(type), true, type);
   for (const type of ['task', 'settings', 'item']) assert.equal(isEvent(type), false, type);
 });
+
+test('a correction is an event: written once, and the one record a delete may put back', () => {
+  assert.ok(EVENT_TYPES.includes('correction'));
+  assert.equal(isEvent('correction'), true);
+});

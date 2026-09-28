@@ -21,11 +21,44 @@ import { DEFAULT_STATS, makeDone, makeRework, isDay, dayOf, isDoneFor, isoWeek }
 
 /** Flow's operations (SPEC.md › Writing to Planner): write-once records Planner applies to its plans. */
 export const OP_TYPE = 'flow.op';
+/** The day Planner publishes: what its calendar laid on a date, in order (Planner's model/dayplan.js). */
+export const AGENDA_TYPE = 'agenda';
 /** Planner keeps applied op ids this long and ignores older ops; Flow stops showing them as pending. */
 export const OPS_KEEP_DAYS = 90;
 const OPS_KEEP_MS = OPS_KEEP_DAYS * 86400000;
 /** A task added with no hours is estimated at this many minutes until Planner has it. */
 export const PENDING_ESTIMATE_MIN = 30;
+
+/**
+ * Catching up, not working — the same rule Planner files a completion under
+ * (its model/dayplan.js), reimplemented here as `planner.js` reimplements
+ * every Planner rule Flow needs, because the two apps share no code.
+ *
+ * Ticking off a year of finished work in one sitting is housekeeping. Planner
+ * stopped listing those under "Completed today"; Flow must also stop paying
+ * for them, or a morning of box-ticking arrives as ninety completions, three
+ * thousand points and two levels.
+ */
+export const CAUGHT_UP_DAYS = 183;
+/** A run of this many Planner finishes inside this long is a burst. */
+export const BURST_COUNT = 5;
+export const BURST_MS = 10 * 60000;
+
+/** The ids of the finishes that were catching up: long overdue, or in a burst. */
+export function caughtUpFinishes(finished, { days = CAUGHT_UP_DAYS, count = BURST_COUNT, within = BURST_MS } = {}) {
+  const hit = new Set();
+  for (const e of finished || []) {
+    const due = e?.task?.deadline;
+    if (isDay(due) && Number.isFinite(e.doneAt) && e.doneAt - Date.parse(`${due}T00:00:00`) > days * 86400000) hit.add(e.task.id);
+  }
+  const timed = (finished || []).filter((e) => Number.isFinite(e?.doneAt)).sort((a, b) => a.doneAt - b.doneAt);
+  for (let i = 0; i < timed.length; i++) {
+    let j = i;
+    while (j + 1 < timed.length && timed[j + 1].doneAt - timed[i].doneAt <= within) j++;
+    if (j - i + 1 >= count) for (let k = i; k <= j; k++) hit.add(timed[k].task.id);
+  }
+  return hit;
+}
 
 /** A Flow completion within this long of a Planner done time is the same finish. */
 export const PLANNER_COVER_MS = 24 * 3600000;
@@ -52,10 +85,14 @@ function readPlans(planRecords) {
   const workspaces = new Map();
   const plans = [];
   const ops = [];
+  const days = new Map();
   for (const r of planRecords || []) {
     if (!r || r.deletedAt) continue;
     if (r.type === OP_TYPE && typeof r.id === 'string') { ops.push(r); continue; }
     if (r.type === 'workspace' && typeof r.id === 'string') { workspaces.set(r.id, r); continue; }
+    // The day Planner laid out, published as a record (Planner's
+    // model/dayplan.js). Flow shows that list rather than forming its own.
+    if (r.type === AGENDA_TYPE && isDay(r.day)) { days.set(r.day, r); continue; }
     if (r.type !== 'document' || r.format !== 'project-planner') continue;
     let body = r.body;
     try { if (typeof body === 'string') body = JSON.parse(body); } catch { continue; }
@@ -64,7 +101,7 @@ function readPlans(planRecords) {
     if (!id) continue;
     plans.push({ id, body });
   }
-  return { plans, workspaces, ops };
+  return { plans, workspaces, ops, days };
 }
 
 const opAt = (op) => (Number.isFinite(+op.at) ? +op.at : Number.isFinite(+op.updatedAt) ? +op.updatedAt : null);
@@ -201,6 +238,34 @@ export function plannerTasks(planRecords, opts) {
 }
 
 /**
+ * The tasks Planner laid on `day`, as Flow definitions, in Planner's order.
+ *
+ * This is the whole point of the agenda record: Flow's list is Planner's
+ * Today, the same tasks in the same order, rather than the open backlog
+ * sorted alphabetically — which on a real planner is hundreds of tasks going
+ * back years, and is not what anybody means by "what am I doing today".
+ *
+ * `null` — not an empty list — when Planner has not published that day, so a
+ * caller can fall back rather than show an empty screen. An empty array means
+ * Planner published the day and nothing is laid on it.
+ */
+export function plannerDay(planRecords, day, opts) {
+  const { days } = readPlans(planRecords);
+  const record = days.get(day);
+  if (!record || !Array.isArray(record.tasks)) return null;
+  const { entries } = derive(planRecords, opts || {});
+  const byKey = new Map(entries.map((e) => [`${e.task.source.plan}|${e.task.source.task}`, e]));
+  const out = [];
+  for (const row of record.tasks) {
+    const entry = byKey.get(`${row.plan}|${row.task}`);
+    // A task the day names but this player cannot see (someone else's, done,
+    // archived) is simply not theirs to do; the day is not wrong for holding it.
+    if (entry) out.push({ ...entry.task, laidAt: row.start, laidMinutes: row.minutes });
+  }
+  return out;
+}
+
+/**
  * The definitions Flow's history needs from plans archived since: their tasks
  * (archived, so never offered) and skills. Merge the ones a stored completion
  * points at, so its title, skill and XP survive the plan being put away.
@@ -296,7 +361,12 @@ export function plannerEvents(db, planRecords, opts) {
   const { entries, skills } = derive(planRecords, { me: name, skills: db.skills, stats: db.stats, history: true });
   let work = withDefinitions(db, entries.map((e) => e.task), skills);
   const finished = entries.filter((e) => e.doneAt !== null && e.doneAt >= +from && e.doneAt <= now).sort((a, b) => a.doneAt - b.doneAt || a.task.id.localeCompare(b.task.id));
+  // Housekeeping is not work: a finish that was only catching up earns nothing
+  // and is not logged at all. Computed over every finish in the window, because
+  // a burst is a property of the run and not of any one tick in it.
+  const caught = caughtUpFinishes(finished);
   for (const { task, doneAt: ms, sheets } of finished) {
+    if (caught.has(task.id)) continue;
     const iso = new Date(ms).toISOString();
     const { plan, task: taskId } = task.source;
     const mine = work.done.filter((d) => d.task === task.id);
@@ -342,13 +412,18 @@ export function projectList(db, planRecords, opts) {
   const week = isoWeek(day);
   const { plans, ops } = readPlans(planRecords);
   const { entries } = derive(planRecords, { me, skills: skills ?? db.skills, stats: stats ?? db.stats, now });
+  // Today is Planner's Today here too (SPEC.md › Planner tasks): when Planner
+  // has published the day, only what it laid is open work. A day naming
+  // nothing is treated as no day at all, same as everywhere else.
+  const laid = plannerDay(planRecords, day, { me, skills: skills ?? db.skills, stats: stats ?? db.stats, now });
+  const onDay = laid && laid.length ? new Set(laid.map((t) => t.id)) : null;
   const out = [];
   for (const { id, body } of plans) {
     if (body.template === true || body.archived === true) continue;
     const mine = entries.filter((e) => e.task.source.plan === id);
     if (!mine.length) continue;
     const ids = new Set(mine.map((e) => e.task.source.task));
-    const open = mine.filter((e) => e.percent < 100 && !isDoneFor(db, e.task, day)).map((e) => e.task);
+    const open = mine.filter((e) => e.percent < 100 && !isDoneFor(db, e.task, day) && (!onDay || onDay.has(e.task.id))).map((e) => e.task);
     const deadline = open.map((t) => t.deadline).filter(Boolean).sort()[0] || null;
     let hours = 0;
     for (const e of mine) for (const x of e.sheets) if (isoWeek(x.date) === week) hours += +x.hours;

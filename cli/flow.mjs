@@ -21,6 +21,10 @@
 //   flow loadout edit <loadout> [slots; --<slot> none] | equip <loadout> | list [--json]
 //   flow inventory [--json]                 saved vs spent this month, in use, low stock, stashes
 //   flow undo [event-id|last]               take back a mistaken entry (ids are in flow log)
+//   flow fix <event-id> --void --reason "…"  withdraw a record that should never have counted
+//   flow fix <event-id> [--minutes N] [--points N] [--note "…"] --reason "…"   correct its numbers
+//   flow fix --list [--json]                the corrections made
+//   flow unfix <correction-id>              put a corrected record back
 //   flow reward add --title "…" --price N [--once] | edit <reward> [--title …] [--price N] | archive <reward>
 //   flow task add --title "…" --skill S [--measure time|count|quality] [--cadence daily|weekly|once|anytime]
 //             [--estimate MIN] [--stamina N] [--mana N] [--deadline YYYY-MM-DD] [--place P] [--batch TYPE]
@@ -72,7 +76,7 @@ const {
   index, play, pickNext, replayDay, makeTask, makeSkill, makePlace, makeReward, makeDone, makeRework, makePurchase,
   makeEnergy, makeMoment, makeReview, stamp, tombstone, newId, dayOf, addDays, isDay, taskStats, levelFor,
   RECORD_TYPES, DEFAULT_STATS, DEFAULT_PLACES, DEFAULT_KINDS, ZONES, BONUS_CAP, SKILL_STEP, WEEK,
-  DIFFICULTY, DEFAULT_DIFFICULTY, difficultyOn,
+  DIFFICULTY, DEFAULT_DIFFICULTY, difficultyOn, makeCorrection, AMENDABLE, balanceOf,
 } = M;
 
 // ─── plumbing ───────────────────────────────────────────────────────────────
@@ -1151,6 +1155,47 @@ const commands = {
     return `Undid ${rec.type}: ${what}`;
   },
 
+  /**
+   * Withdraw a record that should never have counted, or correct its numbers
+   * (SPEC.md › Corrections). Unlike `undo` this writes rather than deletes:
+   * the record stays, with the reason beside it, and any device can do it.
+   */
+  async fix(game) {
+    const db = await game.load();
+    if (game.opt.list) {
+      if (game.opt.json) return JSON.stringify(db.corrections, null, 2);
+      if (!db.corrections.length) return 'No corrections.';
+      return [...db.corrections].reverse().map((c) => {
+        const rec = game.raw.find((r) => r.id === c.target);
+        const what = rec && rec.type === 'done' ? db.task.get(rec.task)?.title || rec.task : c.of;
+        return `${c.day}  ${c.kind === 'void' ? 'withdrew' : 'amended'}  ${what}  — ${c.reason}  [${c.id}]`;
+      }).join('\n');
+    }
+    const target = game.pos[0];
+    if (!target) throw new Error('flow fix <event-id> … (ids are in flow log)');
+    const reason = typeof game.opt.reason === 'string' ? game.opt.reason : '';
+    const patch = {};
+    for (const k of AMENDABLE) {
+      if (game.opt[k] === undefined) continue;
+      patch[k] = k === 'note' ? String(game.opt[k]) : Number(game.opt[k]);
+    }
+    const kind = game.opt.void || !Object.keys(patch).length ? 'void' : 'amend';
+    const rec = makeCorrection(db, { target, kind, patch, reason, at: game.now });
+    await game.write(rec);
+    const after = await game.load();
+    return kind === 'void'
+      ? `Withdrew ${rec.of} ${target}: ${reason}. Balance is now ${Math.round(balanceOf(after))} pts.`
+      : `Corrected ${rec.of} ${target} (${Object.entries(patch).map(([k, v]) => `${k} ${v}`).join(', ')}): ${reason}. Balance is now ${Math.round(balanceOf(after))} pts.`;
+  },
+
+  async unfix(game) {
+    const db = await game.load();
+    const rec = db.corrections.find((c) => c.id === game.pos[0]);
+    if (!rec) throw new Error(`no correction "${game.pos[0]}" (flow fix --list)`);
+    await game.remove(rec);
+    return `Put ${rec.of} ${rec.target} back. Balance is now ${Math.round(balanceOf(await game.load()))} pts.`;
+  },
+
   async log(game) {
     const db = await game.load();
     return logText(db, dayOf(game.now), Math.max(1, Number(game.opt.days) || 7));
@@ -1354,7 +1399,7 @@ async function config(opt, game) {
   ].join('\n');
 }
 
-const WRITES = new Set(['planner', 'undo', 'init', 'energy', 'done', 'rework', 'moment', 'buy', 'reward', 'task', 'skill', 'stat', 'place', 'kind', 'review', 'import',
+const WRITES = new Set(['planner', 'undo', 'fix', 'unfix', 'init', 'energy', 'done', 'rework', 'moment', 'buy', 'reward', 'task', 'skill', 'stat', 'place', 'kind', 'review', 'import',
   'item', 'skip', 'purchase', 'wish', 'loadout']);
 const READS = new Set(['status', 'next', 'log', 'replay', 'list', 'export', 'have', 'inventory', 'difficulty']);
 const ALIASES = { setup: 'init', ls: 'list', did: 'done', redo: 'rework', shop: 'buy', items: 'inventory', inv: 'inventory', owned: 'have', spend: 'purchase' };

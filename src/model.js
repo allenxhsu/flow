@@ -9,9 +9,13 @@
 //                 is the right rule for them. `world` is the player's private
 //                 world pack for the game (id 'world'); without one the game
 //                 draws its generic world (src/game/).
-//   events      — done, rework, purchase, energy, review, moment, skip, spend, visit.
+//   events      — done, rework, purchase, energy, review, moment, skip, spend,
+//                 visit, correction.
 //                 Written once and never edited, so two devices can never
-//                 overwrite each other.
+//                 overwrite each other. A record written in error is not
+//                 edited either: a `correction` event names it and either
+//                 withdraws it or replaces a number on it, and index()
+//                 applies that before anything derives from it.
 //                 A review redone in the same ISO week is a new event; the
 //                 latest one counts for that week. A visit (the iPhone app's
 //                 arrive / leave at a geofenced place) holds place ids and
@@ -135,7 +139,10 @@ export const FILE_MAX_BYTES = 2 * 1024 * 1024;
 export const PHOTO_MAX_PX = 1024;
 
 const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish', 'world', 'reshelve'];
-export const EVENT_TYPES = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit', 'file'];
+export const EVENT_TYPES = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit', 'correction', 'file'];
+/** The fields a correction may amend (SPEC.md › Corrections); everything else is derived. */
+export const AMENDABLE = ['minutes', 'points', 'note'];
+export const CORRECTION_KINDS = ['void', 'amend'];
 export const RECORD_TYPES = [...DEFINITIONS, ...EVENT_TYPES];
 
 // ─── dates ──────────────────────────────────────────────────────────────────
@@ -176,12 +183,65 @@ export function tombstone(record, { now = Date.now(), device = 'local' } = {}) {
 }
 
 /**
+ * Corrections by the id of the event they name, in time order
+ * (SPEC.md › Corrections). A deleted correction is no correction: that is how
+ * one is undone.
+ */
+function correctionsBy(records) {
+  const m = new Map();
+  for (const r of records) {
+    if (!r || r.type !== 'correction' || r.deletedAt || !r.target) continue;
+    m.set(r.target, [...(m.get(r.target) || []), r]);
+  }
+  for (const list of m.values()) list.sort((a, b) => (a.at ?? 0) - (b.at ?? 0) || a.id.localeCompare(b.id));
+  return m;
+}
+
+/** Whether the corrections on an event withdraw it. */
+const isVoided = (list) => !!list?.some((c) => c.kind === 'void');
+
+/**
+ * One event with its amendments applied, latest last so the latest wins.
+ * Points live in a different field per event type — `price.points` on a
+ * completion, `charged` on a rework or a purchase, `points` on a skip — so an
+ * amended `points` goes wherever that record carries its own.
+ */
+function amend(rec, list) {
+  let out = rec;
+  for (const c of list) {
+    if (c.kind !== 'amend' || !c.patch) continue;
+    const p = c.patch;
+    out = { ...out, corrected: true };
+    if ('minutes' in p) out.minutes = p.minutes;
+    if ('note' in p) out.note = p.note;
+    if ('points' in p) {
+      if (out.price) out.price = { ...out.price, points: p.points };
+      else if ('charged' in out) out.charged = p.points;
+      else out.points = p.points;
+    }
+  }
+  return out;
+}
+
+/**
  * Index the live records by type. Unknown types and tombstones are skipped,
  * so a record from a newer build is carried by sync but ignored here.
+ * Corrections are applied here, once, so that every derivation below — points,
+ * levels, balances, streaks, bests, the replay — sees only corrected records.
  */
 export function index(records) {
   const by = Object.fromEntries(RECORD_TYPES.map((t) => [t, []]));
-  for (const r of records) if (r && !r.deletedAt && by[r.type]) by[r.type].push(r);
+  const fixes = correctionsBy(records);
+  // Voiding a completion withdraws the rework logged against it: a penalty for
+  // a completion that never happened is not a debt.
+  const gone = new Set();
+  for (const [target, list] of fixes) if (isVoided(list)) gone.add(target);
+  if (gone.size) for (const r of records) if (r?.type === 'rework' && !r.deletedAt && gone.has(r.done)) gone.add(r.id);
+  for (const r of records) {
+    if (!r || r.deletedAt || !by[r.type] || gone.has(r.id)) continue;
+    const list = fixes.get(r.id);
+    by[r.type].push(list ? amend(r, list) : r);
+  }
   const stats = by.stat.length ? by.stat : DEFAULT_STATS.map((s, i) => ({ ...s, type: 'stat', order: i }));
   stats.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name));
   const byStart = (a, b) => (a.end ?? a.at ?? 0) - (b.end ?? b.at ?? 0) || a.id.localeCompare(b.id);
@@ -220,6 +280,8 @@ export function index(records) {
     spends: by.spend.sort(byStart),
     world: worldRecord(records),
     visits: by.visit.sort((a, b) => a.leave - b.leave || a.id.localeCompare(b.id)),
+    corrections: by.correction.sort((a, b) => (a.at ?? 0) - (b.at ?? 0) || a.id.localeCompare(b.id)),
+    correction: fixes,
   };
 }
 
@@ -430,6 +492,16 @@ export function makeReward({ title, price, repeatable = true, now = Date.now() }
 
 /** A task is critical when you say so, when it has a deadline, or when someone else is waiting on it. */
 export const isCritical = (task) => !!(task.critical || task.forOthers || task.deadline || task.urgent);
+
+/**
+ * A Planner task the calendar did not lay on today is not today's work
+ * (SPEC.md › Planner tasks › Today is Planner's Today). sync.js marks them
+ * when Planner has published the day; nothing else is ever hidden, and Flow's
+ * own tasks never are. The rule lives here so that every screen, the picker
+ * and Play's menu obey it — it used to live in the Tasks screen alone, and
+ * Play went on offering a backlog of 2024 coursework.
+ */
+export const offToday = (task) => !!(task.source && task.offToday);
 
 // ─── history and targets ────────────────────────────────────────────────────
 
@@ -725,6 +797,61 @@ const countOf = (v, what) => {
  * and ask for enough to get back to `usual`. `slot` is where it is worn in a
  * loadout; `skills` are the skills it helps (the gear bonus).
  */
+// ─── corrections ────────────────────────────────────────────────────────────
+// SPEC.md › Corrections. Rework is for work really done and then redone; a
+// correction is for a record that should never have counted. Events are
+// write-once, so the fix is its own event, and index() applies it.
+
+/** Every event of the db, by id: what a correction is allowed to name. */
+function eventsById(db) {
+  const m = new Map();
+  for (const list of [db.done, db.rework, db.purchases, db.energy, db.moments, db.reviews, db.skips || [], db.spends || [], db.visits || []]) {
+    for (const r of list) m.set(r.id, r);
+  }
+  return m;
+}
+
+/**
+ * Withdraw an event, or replace a number on it. `patch` may carry only
+ * AMENDABLE fields, and the reason is the player's own words: both are shown
+ * beside the withdrawn record for as long as it exists.
+ */
+export function makeCorrection(db, { target, kind = 'void', patch = {}, reason = '', at = Date.now() } = {}) {
+  if (!CORRECTION_KINDS.includes(kind)) throw new Error(`a correction's kind is ${CORRECTION_KINDS.join(' or ')}, not "${kind}"`);
+  const why = typeof reason === 'string' ? reason.trim() : '';
+  if (!why) throw new Error('a correction needs a reason: what was wrong with the record');
+  if (db.corrections?.some((c) => c.id === target)) throw new Error('a correction is not an event to correct: delete it to undo it');
+  if (isVoided(db.correction?.get(target))) throw new Error(`${target} is already withdrawn`);
+  const rec = eventsById(db).get(target);
+  if (!rec) {
+    const known = [db.task, db.skill, db.reward, db.place, db.kind, db.item].some((m) => m?.get?.(target));
+    throw new Error(known || target === 'settings' ? `${target} is a definition, not an event: edit it instead` : `no event ${target}`);
+  }
+  let fields = {};
+  if (kind === 'amend') {
+    const bad = Object.keys(patch || {}).filter((k) => !AMENDABLE.includes(k));
+    if (bad.length) throw new Error(`a correction can amend ${AMENDABLE.join(', ')} — not ${bad.join(', ')}`);
+    fields = Object.fromEntries(AMENDABLE.filter((k) => k in (patch || {}) && patch[k] !== undefined).map((k) => [k, patch[k]]));
+    if (!Object.keys(fields).length) throw new Error(`an amend needs one of ${AMENDABLE.join(', ')}`);
+    for (const k of ['minutes', 'points']) {
+      if (k in fields && !(Number.isFinite(+fields[k]) && +fields[k] >= 0)) throw new Error(`${k} is a number, 0 or more`);
+      if (k in fields) fields[k] = +fields[k];
+    }
+    if ('note' in fields) fields.note = String(fields.note);
+  }
+  return {
+    id: newId('correction', at), type: 'correction', target, of: rec.type, kind,
+    ...(kind === 'amend' ? { patch: fields } : {}), reason: why, at, day: dayOf(at),
+  };
+}
+
+/** Undo a correction: the one deletion Flow allows, because it puts a record back. */
+export function undoCorrection(record, { now = Date.now(), device = 'local' } = {}) {
+  if (record?.type !== 'correction') throw new Error('only a correction is deleted');
+  return tombstone(record, { now, device });
+}
+
+
 export function makeItem(db, { name, category = '', aliases = [], place = null, qty = 1, price = 0,
   consumable = false, lowStock = 0, usual = lowStock + 1, skills = [], slot = null, photo = null, color = null,
   brand = '', model = '', serial = '', bought = null, warranty = null, notes = '', photos = [], receipts = [],
@@ -1345,7 +1472,7 @@ export function pickNext(db, now, g = null) {
   const energy = g?.energy || energyOn(db, day);
   const skills = g?.skillLevels || new Map(db.skills.map((s) => [s.id, levelFor(skillXp(db).get(s.id) || 0, SKILL_STEP)]));
   const under = new Set(g?.underdogs || underdogsOn(db, day));
-  const open = db.tasks.filter((t) => !t.archived && !isDoneFor(db, t, day));
+  const open = db.tasks.filter((t) => !t.archived && !offToday(t) && !isDoneFor(db, t, day));
   const soon = (t) => t.deadline && daysBetween(day, t.deadline) <= DEADLINE_SOON_DAYS;
 
   const batches = new Map();
@@ -1457,7 +1584,7 @@ export function play(records, now = Date.now()) {
   const totalXp = [...xp.values()].reduce((a, b) => a + b, 0);
 
   const tier = difficultyOn(db, day);
-  const tasks = db.tasks.map((t) => {
+  const tasks = db.tasks.filter((t) => !offToday(t)).map((t) => {
     const mine = db.done.filter((d) => d.task === t.id);
     const hist = taskStats(db, t, Infinity, rw, difficultyOn(db, day, t.skill).targetStep);
     const streak = t.cadence === 'daily' ? dailyStreak(new Set(mine.map((d) => d.day)), day, tier.grace)

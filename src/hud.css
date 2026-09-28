@@ -305,3 +305,23 @@
 :root[data-mode='hud'] .play :is(h3, h4) { font-family: inherit; }
 :root[data-mode='hud'] .muted-box p { margin: 0; }
 :root[data-mode='hud'] .term-view p { margin: 0; }
+
+/* Fix (SPEC.md › Corrections): one row per event — pick, time, what it was,
+   minutes, what it earned, and the two buttons. It collapses to two lines on
+   a phone so nothing is cut off. */
+:root[data-mode='hud'] .fix-list { list-style: none; margin: 0; padding: 0; }
+:root[data-mode='hud'] .fix-row { display: grid; grid-template-columns: auto 5.5em 1fr 3.5em 4.5em auto; align-items: center; gap: var(--sc-space-2); padding: var(--sc-space-2) var(--sc-space-3); }
+:root[data-mode='hud'] .fix-row .fix-what { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+:root[data-mode='hud'] .fix-row .fix-title { overflow-wrap: anywhere; }
+:root[data-mode='hud'] .fix-row .fix-when { color: var(--sc-text-3); font-family: var(--sc-font-mono); font-size: var(--sc-text-sm); }
+:root[data-mode='hud'] .fix-row .fix-pts { text-align: right; font-family: var(--sc-font-mono); }
+:root[data-mode='hud'] .fix-row .fix-pts.is-debt { color: var(--sc-danger); }
+:root[data-mode='hud'] .fix-row .fix-min { text-align: right; }
+:root[data-mode='hud'] .fix-row .fix-why { color: var(--sc-text-2); font-size: var(--sc-text-sm); overflow-wrap: anywhere; }
+:root[data-mode='hud'] .fix-day { margin: var(--sc-space-3) 0 0; color: var(--sc-text-3); font-family: var(--sc-font-mono); font-size: var(--sc-text-sm); }
+@media (max-width: 640px) {
+  :root[data-mode='hud'] .fix-row { grid-template-columns: auto 1fr auto; }
+  :root[data-mode='hud'] .fix-row .fix-when { grid-column: 2; }
+  :root[data-mode='hud'] .fix-row .fix-what { grid-column: 2 / -1; }
+  :root[data-mode='hud'] .fix-row .fix-min { display: none; }
+}
