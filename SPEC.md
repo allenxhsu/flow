@@ -149,7 +149,7 @@ second in the same week replaces the first.
 
 1. **Core loop + Day Replay:** the Portal app, the CLI and skill, the replay.
    ui-kit PR: register `flow`, retire `habit`.
-2. Planner deadlines + reopen-as-rework, calendars (Google via the Portal's
+2. Planner tasks, deadlines + reopen-as-rework (see Planner tasks), calendars (Google via the Portal's
    `/calendar/*`, Apple/Outlook via ICS), MCP connector, benchmark calibration,
    iOS Shortcuts geofence visits.
 3. Mac app (shell-kit), Apple Health, retire project-planner's character sheet.
@@ -255,8 +255,92 @@ and chose this one "first", **with all the metric bars and the inventory system*
 Original work only — no copied sprites, icons, fonts or UI from any game.
 
 Original work only: no Blizzard (or any game's) art, units, icons, UI frames,
-faction names or sounds — "inspired by the genre and its polish". The rest of
-the app keeps the ui-kit look.
+faction names or sounds — "inspired by the genre and its polish".
+
+### The app's screens match the game (decided 2026-09-28)
+
+The player: "ui of rest of the system just need to match the ui of the game".
+Every screen — Now, Tasks, Skills, Bag, Shop, Review, Replay, Settings, Rules —
+takes the handheld-console look of the replay's lower screen, replacing the
+ui-kit sci-fi HUD inside Flow (the Portal's shared top bar stays):
+
+- A 4:3 lower-screen frame on desktop, full width on a phone; a light panel
+  palette (cream panels, dark navy ink, one accent per tab), 2 px dark outlines,
+  hard pixel corners, no gradients, glows or blur.
+- A pixel-style font drawn from the page's own CSS (no external fonts) —
+  `image-rendering: pixelated` for icons; icons are original pixel sprites.
+- Big touch buttons (≥ 44 px) in a bottom tab row; the framed text box with a
+  speaker tab for toasts and confirmations; hearts / magic bar / gem counter
+  as the status strip on every screen.
+- **Bag** is a new screen: the paper doll and loadouts, stash per storage
+  place, "have it" lookups and skips — what the CLI's `inventory`, `have`,
+  `loadout`, `skip` already do.
+
+Original work only, as above. The replay's personal version (the player's own
+home and workplace, and real colleagues) is kept off this public repository;
+the Replay tab here draws the generic world above.
+
+## Planner tasks (phase 2, decided 2026-09-28)
+
+Tasks come from **Project Planner** (toolkit app `project`), synced through the
+same server. Flow reads Planner's workspace **read-only**: it never writes a
+plan. Flow's own tasks (dailies, habits, chores) stay alongside.
+
+- **Which:** leaf tasks (not summaries, not milestones, not archived, not
+  cancelled) of plans that are neither archived nor templates, **assigned to
+  the player**: no assignment at all (a plan of one's own work is "me"), or an
+  assignment to a resource whose name matches the player's Planner name
+  (Settings, defaulting to the player's name; case- and space-insensitive).
+- **Shape:** each becomes a derived Flow task — never stored — with id
+  `task_pl_<planId>_<taskId>`, title the task's name, project name shown,
+  measure `time`, cadence `once`, `source: { app: 'project', plan, task }`:
+  - **estimate** = Planner's expected work in minutes: the task's stated `work`
+    hours × 60, else duration (days) × the plan's hours per day × the plan's
+    assumed load (default 100%) × 60; at least 1 minute.
+  - **deadline** = Planner's deadline; **urgent** when urgency is `now` or
+    `high` (so critical, per Shape).
+  - **skill** = Planner's own skill for it (the task's, else the project's,
+    else its folder or workspace name, else the project name), matched to a
+    Flow skill by name case-insensitively; an unmatched name becomes a derived
+    skill `skill_pl_<slug>` under the Work stat (the stat with id `stat_work`,
+    else the first stat).
+  - **energy:** Planner's physical → stamina, mental (the default) → mana,
+    2 per hour of estimate, rounded to 0.5, capped at 10.
+- **Done in Planner = logged in Flow.** When a Planner task has a done time
+  (`doneAt`, set at 100%) and Flow holds no completion covering it, Flow writes
+  one: id `done_pl_<planId>_<taskId>_<doneAt ms>` (the same on every device, so
+  two devices noticing it write the same record), ending at `doneAt`, minutes =
+  the estimate, quality 1, `planner: <doneAt ISO>`, priced by the normal rules.
+  A Flow completion covers it when it is for that task and either carries that
+  same `planner` time or ended no more than 24 h before `doneAt` with no later
+  Planner completion covered by it (the timer or Log done got there first).
+- **Reopen = rework.** A Planner task finished again (a new `doneAt` later than
+  24 h after the completion that covered the previous one) is rework of that
+  completion. Fix minutes = Planner timesheet hours on that task dated after
+  the earlier completion, × 60; when there are none, Flow asks "Reopened in
+  Planner: how long did the fix take?" on Now and logs the rework with the
+  answer. Rework already logged against that completion after it (the timer's
+  "is this rework?") covers it; nothing is charged twice.
+- **Read-only both ways:** completing a Planner task in Flow does not change
+  the plan; the player ticks it off in Planner. Editing a Planner task in Flow
+  is not offered (its row links to Planner instead).
+- **Where from:** the app reads the `project` workspace through the Portal
+  session (or the pasted server + token) into its own read-only store; the CLI
+  reads it with `flow planner pull` over the same `HttpTransport`, or
+  `flow planner import <store-export.json>` from Planner's Settings ▸ export.
+
+### Contract
+
+`src/planner.js` (pure, no I/O):
+
+- `plannerTasks(planRecords, { me, skills, stats })` → `{ tasks, skills }`,
+  the derived definitions above, from sync-kit document records
+  (`type: 'document'`, `format: 'project-planner'`, `body` = Planner's saved
+  JSON). Unreadable bodies are skipped, never thrown.
+- `plannerEvents(db, planRecords, { me, now })` → `{ done: [...], rework:
+  [...], ask: [{ done, task, title }] }`: the records Flow should write now and
+  the fix-minutes questions to show. Idempotent: applying its output and
+  calling it again returns nothing new.
 
 ## Difficulty
 
