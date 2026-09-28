@@ -5,6 +5,7 @@
   "description": "Flow: work and life as a game of getting faster and better. A toolkit app.",
   "engines": { "node": ">=22.13" },
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "ios:install": "bash ios/scripts/install-iphone.sh"
   }
 }

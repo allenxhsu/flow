@@ -75,6 +75,8 @@ jobs:
         run: |
           app=$(find build/Build/Products -name Flow.app -type d | head -1)
           test -f "$app/web/index.html"
+          grep -q 'src/terminal.js' "$app/web/index.html"
+          test -f "$app/web/src/planops.js"
           test -f "$app/web/src/native.js"
           test -f "$app/web/sync-kit/js/index.js"
           test ! -e "$app/web/test" && test ! -e "$app/web/cli" && test ! -e "$app/web/docs"
