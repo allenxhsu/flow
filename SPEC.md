@@ -154,7 +154,7 @@ second in the same week replaces the first.
 2. Planner tasks, deadlines + reopen-as-rework (see Planner tasks), calendars (Google via the Portal's
    `/calendar/*`, Apple/Outlook via ICS), MCP connector, benchmark calibration,
    iOS Shortcuts geofence visits.
-3. Mac app (shell-kit), Apple Health, retire project-planner's character sheet.
+3. Mac app (shell-kit); the iOS app and Apple Health moved up (see iOS app), retire project-planner's character sheet.
 
 Changes to other repos go in separate PRs, opened when their phase needs them.
 
@@ -281,6 +281,39 @@ ui-kit sci-fi HUD inside Flow (the Portal's shared top bar stays):
 Original work only, as above. The replay's personal version (the player's own
 home and workplace, and real colleagues) is kept off this public repository;
 the Replay tab here draws the generic world above.
+
+## iOS app (decided 2026-09-28)
+
+Flow ships as an iPhone app (paid Apple Developer account: TestFlight, then
+the App Store), built on **shell-kit**'s iOS shell — the same web app, bundled
+and served offline from the app, paired with the Portal for sync exactly as
+the Mac shell pairs. The web code stays the product; Swift adds only what a
+page cannot do. The Xcode project lives in `ios/`; the developer team and
+bundle id prefix come from a local, uncommitted `ios/Local.xcconfig`.
+
+- **Lock-screen timer.** Starting the timer (Now or Play) starts a Live
+  Activity — task title, elapsed time, the place — on the Lock Screen and
+  Dynamic Island; stopping or cancelling ends it. Its **Finish** button opens
+  Flow at Log done for that task with the timer's minutes filled in (value and
+  quality are still the player's to confirm).
+- **Home-screen widget** (small and medium): stamina, mana, points, level and
+  the next task; tapping the task opens Flow and starts its timer. The page
+  writes a snapshot to the app group on every change; the widget never
+  computes rules itself.
+- **Arrive / leave places.** In Settings the player marks named Flow places
+  ("Set to where I am now") for geofencing; the coordinates stay on the device
+  only — never in a record, a sync, a log or a repository. Arriving and leaving
+  write a **`visit`** event `{ place, arrive, leave }` (write-once). Leaving
+  one geofenced place and arriving at another within 3 hours also writes a
+  Drive moment for the time between (skipped when a moment already covers it).
+  The replay uses visits to put the hero in the right place.
+- **Apple Health, read-only.** Last night's sleep and yesterday's steps are
+  shown with the morning rating as a **suggestion** (sleep ≥ 7.5 h → 8, ≥ 6.5 h
+  → 6, less → 4; +1 when yesterday had ≥ 8 000 steps, max 10). The player's
+  own rating is what counts; nothing is written to Health, and Health data is
+  never stored in Flow's records beyond the rating the player picks.
+- Every native feature degrades cleanly: in a browser, or with a permission
+  refused, the page works as it does today.
 
 ## Play (decided 2026-09-28)
 
