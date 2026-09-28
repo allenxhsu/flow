@@ -62,7 +62,7 @@ import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import * as M from '../src/model.js';
-import { plannerTasks, plannerEvents } from '../src/planner.js';
+import { plannerTasks, plannerEvents, plannerHistory, plannerSinceStamp } from '../src/planner.js';
 import { FileStore } from '../sync-kit/js/stores/file.js';
 import { HttpTransport } from '../sync-kit/js/http.js';
 import { SyncEngine, SYNC_CURSOR_KEYS } from '../sync-kit/js/engine.js';
@@ -309,8 +309,14 @@ class Game {
     this.plans = planner ? await planner.all() : [];
     const base = index(this.raw);
     // Planner tasks are derived from the plans every time, never stored.
-    this.derived = this.plans.length ? plannerTasks(this.plans, { me: plannerName(base), skills: base.skills, stats: base.stats }) : { tasks: [], skills: [] };
-    this.db = this.derived.tasks.length ? index([...this.raw, ...this.derived.skills, ...this.derived.tasks]) : base;
+    const opts = { me: plannerName(base), skills: base.skills, stats: base.stats };
+    this.derived = this.plans.length ? plannerTasks(this.plans, opts) : { tasks: [], skills: [] };
+    // Plans archived since: only the tasks a stored completion points at, for its history.
+    const h = this.plans.length ? plannerHistory(this.plans, opts) : { tasks: [], skills: [] };
+    const logged = new Set(base.done.map((d) => d.task));
+    const kept = h.tasks.filter((t) => logged.has(t.id));
+    const skills = [...this.derived.skills, ...h.skills.filter((k) => kept.some((t) => t.skill === k.id) && !this.derived.skills.some((x) => x.id === k.id))];
+    this.db = this.derived.tasks.length || kept.length ? index([...this.raw, ...skills, ...this.derived.tasks, ...kept]) : base;
     return this.db;
   }
 
@@ -1161,7 +1167,8 @@ const commands = {
     const db = await game.load();
     const what = game.pos[0] || 'tasks';
     const rows = {
-      tasks: () => db.tasks.map((t) => `${t.archived ? '(archived) ' : ''}${describeTask(db, t)}`),
+      // A task of a Planner plan archived since is history, not a task to do.
+      tasks: () => db.tasks.filter((t) => !(t.source && t.archived)).map((t) => `${t.archived ? '(archived) ' : ''}${describeTask(db, t)}`),
       skills: () => db.skills.map((s) => `${s.name} — ${db.stat.get(s.stat)?.name}${s.place ? `, at ${db.place.get(s.place)?.name}` : ''} [${s.id}]`),
       stats: () => db.stats.map((s) => `${s.icon} ${s.name} [${s.id}] — review flag --${slug(s.name)}`),
       rewards: () => db.rewards.map((r) => `${r.archived ? '(archived) ' : ''}${r.title} — ${r.price} pts${r.repeatable ? '' : ' one-off'} [${r.id}]`),
@@ -1216,11 +1223,14 @@ const commands = {
 
 /** Write the completions and rework Planner implies (ids are the same on every device), and say what was written. */
 async function plannerLog(game) {
-  const db = await game.load();
-  const out = plannerEvents(db, game.plans, { me: plannerName(db), now: game.now });
+  let db = await game.load();
+  // SPEC.md › From when: the first successful read stamps settings.plannerSince, once.
+  const stamp = plannerSinceStamp(game.raw.find((r) => r.type === 'settings' && r.id === 'settings' && !r.deletedAt) || null, game.now);
+  if (stamp) db = await game.write(stamp);
+  const out = plannerEvents(db, game.plans, { me: plannerName(db), now: game.now, since: db.settings.plannerSince });
   const have = new Set([...db.done, ...db.rework].map((r) => r.id));
   const fresh = [...out.done, ...out.rework].filter((r) => !have.has(r.id));
-  if (fresh.length) await game.write(...fresh);
+  if (fresh.length) db = await game.write(...fresh); // now a task of a plan archived since has its definition too
   const lines = [];
   for (const d of out.done.filter((r) => !have.has(r.id))) lines.push(`✓ logged from Planner: ${db.task.get(d.task)?.title} (${d.day}, ${d.minutes} min) +${d.price.points} pts`);
   for (const r of out.rework.filter((x) => !have.has(x.id))) lines.push(`↺ reopened in Planner: ${db.task.get(r.task)?.title} — ${r.minutes} min of rework from its timesheets, −${r.penalty} XP, −${r.charged} pts`);
@@ -1293,13 +1303,15 @@ async function plannerImport(game, file) {
 
 async function plannerStatusText(game) {
   const db = await game.load();
-  const out = plannerEvents(db, game.plans, { me: plannerName(db), now: game.now });
+  const out = plannerEvents(db, game.plans, { me: plannerName(db), now: game.now, since: db.settings.plannerSince });
   const tasks = game.derived.tasks.map((t) => ({ ...t, done: db.done.some((d) => d.task === t.id) }));
   const store = await game.openPlanner();
   const lastPullAt = store ? await store.meta('planner.lastPullAt') : null;
-  if (game.opt.json) return JSON.stringify({ url: game.config.planner?.url || null, me: plannerName(db), lastPullAt, tasks, skills: game.derived.skills, pending: out }, null, 2);
+  const since = db.settings.plannerSince ?? null;
+  if (game.opt.json) return JSON.stringify({ url: game.config.planner?.url || null, me: plannerName(db), since, lastPullAt, tasks, skills: game.derived.skills, pending: out }, null, 2);
   if (!game.plans.length) return 'No Planner plans read yet — flow planner pull --url https://<portal>/w/<project workspace>, or flow planner import <store-export.json>';
   const lines = [`${plannerSummary(game)} (name in Planner: ${plannerName(db) || '—'}; flow init --planner-name "…" to change)`];
+  if (since) lines.push(`Finishes in Planner logged since ${new Date(since).toISOString().replace('T', ' ').slice(0, 16)} (when Flow first read Planner; earlier ones are history)`);
   if (lastPullAt) lines.push(`Last read ${new Date(lastPullAt).toISOString()} from ${game.config.planner?.url || 'an import'}`);
   for (const t of tasks) lines.push(`- [${t.done ? 'x' : ' '}] ${describeTask(db, t)}`);
   if (out.done.length || out.rework.length) lines.push(`Not logged yet: ${out.done.length} finished, ${out.rework.length} reopened — flow planner pull (or import) logs them.`);

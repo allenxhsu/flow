@@ -23,7 +23,7 @@ import {
   portalApp, portalSession, portalRemote, requestPersistentStorage, storageStatus, mergeRecord,
 } from '../sync-kit/js/index.js';
 import { index, stamp, tombstone, RECORD_TYPES } from './model.js';
-import { plannerTasks, plannerEvents } from './planner.js';
+import { plannerTasks, plannerEvents, plannerHistory, plannerSinceStamp } from './planner.js';
 
 export const WORKSPACE = 'flow';
 export const APP_ID = 'flow';
@@ -55,6 +55,8 @@ let plannerState = { lastPullAt: null, lastError: null, pulling: false };
 const plannerById = new Map();
 /** Flow has synced once this session: until then a covering completion may not be here yet. */
 let flowSynced = false;
+/** When Planner was first read successfully this session: what settings.plannerSince is stamped with. */
+let plannerReadAt = null;
 
 /** Every record this device holds, tombstones included, by id. */
 const byId = new Map();
@@ -94,8 +96,14 @@ export const allRecords = () => [...byId.values()];
 export function db() {
   if (!cachedDb) {
     const base = index(allRecords());
-    const d = plannerById.size ? plannerTasks(plannerRecords(), { me: plannerName(base), skills: base.skills, stats: base.stats }) : { tasks: [], skills: [] };
-    cachedDb = d.tasks.length ? index([...allRecords(), ...d.skills, ...d.tasks]) : base;
+    const opts = { me: plannerName(base), skills: base.skills, stats: base.stats };
+    const d = plannerById.size ? plannerTasks(plannerRecords(), opts) : { tasks: [], skills: [] };
+    // Plans archived since: only the tasks a stored completion points at, so its history keeps its title and skill.
+    const h = plannerById.size ? plannerHistory(plannerRecords(), opts) : { tasks: [], skills: [] };
+    const logged = new Set(base.done.map((x) => x.task));
+    const kept = h.tasks.filter((t) => logged.has(t.id));
+    const skills = [...d.skills, ...h.skills.filter((k) => kept.some((t) => t.skill === k.id) && !d.skills.some((x) => x.id === k.id))];
+    cachedDb = d.tasks.length || kept.length ? index([...allRecords(), ...skills, ...d.tasks, ...kept]) : base;
   }
   return cachedDb;
 }
@@ -323,7 +331,7 @@ export const plannerName = (base = db()) => base.settings.plannerName || base.se
 
 export function plannerStatus() {
   const live = plannerRecords().filter((r) => !r.deletedAt && r.type === 'document' && r.format === 'project-planner');
-  return { ...plannerState, configured: plannerConfigured(), portal: !!plannerPortal, plans: live.length, tasks: db().tasks.filter((t) => t.source?.app === PLANNER_APP).length };
+  return { ...plannerState, configured: plannerConfigured(), portal: !!plannerPortal, plans: live.length, since: db().settings.plannerSince ?? null, tasks: db().tasks.filter((t) => t.source?.app === PLANNER_APP && !t.archived).length };
 }
 
 function plannerTransport() {
@@ -361,6 +369,7 @@ export async function pullPlanner() {
         if (records.length < 1000) break; // a full page means there is more
       }
       plannerState = { ...plannerState, lastPullAt: Date.now(), lastError: null };
+      plannerReadAt ??= plannerState.lastPullAt;
       if (applied.length) changed('planner');
       await autoLog();
       return applied.length;
@@ -378,18 +387,23 @@ export async function pullPlanner() {
 /** The fix-minutes questions for tasks reopened in Planner with no hours logged there. */
 export function plannerAsks(now = Date.now()) {
   if (!plannerById.size) return [];
-  return plannerEvents(db(), plannerRecords(), { me: plannerName(), now }).ask;
+  return plannerEvents(db(), plannerRecords(), { me: plannerName(), now, since: db().settings.plannerSince }).ask;
 }
 
 /**
- * Write the completions and rework Planner implies. Their ids are the same on
+ * Stamp settings.plannerSince at the first successful read (SPEC.md › From
+ * when), then write the completions and rework Planner implies. Their ids are the same on
  * every device, so two devices noticing one finish write one record. With
  * sync on, it waits for Flow's first sync: a covering completion from another
  * device might not be here yet.
  */
 async function autoLog() {
-  if (!plannerById.size || (syncConfigured() && !flowSynced)) return;
-  const out = plannerEvents(db(), plannerRecords(), { me: plannerName(), now: Date.now() });
+  // Settings are last-write-wins: stamp only once Flow's own copy is here, or it could overwrite them.
+  if (syncConfigured() && !flowSynced) return;
+  const stamp = plannerSinceStamp(getRecord('settings'), plannerReadAt);
+  if (stamp) await save(stamp);
+  if (!plannerById.size) return;
+  const out = plannerEvents(db(), plannerRecords(), { me: plannerName(), now: Date.now(), since: db().settings.plannerSince });
   const fresh = [...out.done, ...out.rework].filter((r) => !byId.has(r.id));
   if (fresh.length) await add(fresh);
 }

@@ -90,6 +90,12 @@ timesheet hours on the task after it, × 60. With no hours logged there, Flow
 asks for the minutes. Rework already logged against that completion (the
 timer's "is this rework?") covers it, so nothing is charged twice.
 
+**From when.** Planner history from before Flow first read Planner is not
+logged: the first successful read stamps `settings.plannerSince` (once; it
+never moves), and only finishes at or after it are logged or count as
+reopens (`flow planner status` shows the date). A plan archived since still
+logs its finishes and reopens; templates never count.
+
 ## Balance, shop and debt
 
 Balance = points earned + skip points − rework charges − purchases, as charged. Debt is

@@ -75,7 +75,7 @@ function estimateOf(plan, t) {
  * The player's tasks in the plans, with what each needs from its plan. The
  * shared work behind plannerTasks and plannerEvents.
  */
-function derive(planRecords, { me = '', skills = [], stats = [] } = {}) {
+function derive(planRecords, { me = '', skills = [], stats = [], history = false } = {}) {
   const { plans, workspaces } = readPlans(planRecords);
   const who = nameKey(me);
   const liveSkills = (skills || []).filter((s) => s && !s.deletedAt && typeof s.name === 'string');
@@ -92,7 +92,9 @@ function derive(planRecords, { me = '', skills = [], stats = [] } = {}) {
 
   const out = [];
   for (const { id: planId, body: plan } of plans) {
-    if (plan.archived === true || plan.template === true) continue;
+    // Templates never count. An archived plan is off the list of tasks to do,
+    // but its history (finishes and reopens) still is.
+    if (plan.template === true || (plan.archived === true && !history)) continue;
     const project = text(plan.name) || 'Untitled project';
     const resources = new Map((Array.isArray(plan.resources) ? plan.resources : []).filter((r) => r && typeof r === 'object').map((r) => [r.id, r]));
     const cancelled = new Set((Array.isArray(plan.stages) ? plan.stages : []).filter((st) => st && st.cancelled).map((st) => st.id));
@@ -115,7 +117,7 @@ function derive(planRecords, { me = '', skills = [], stats = [] } = {}) {
         skill: skillFor(skillName), measure: 'time', cadence: 'once', estimate,
         stamina: physical ? cost : 0, mana: physical ? 0 : cost,
         critical: false, forOthers: false, deadline: isDay(t.deadline) ? t.deadline : null, urgent: URGENT.has(t.urgency),
-        batch: null, unit: '', place: null, archived: false,
+        batch: null, unit: '', place: null, archived: plan.archived === true,
         source: { app: 'project', plan: planId, task: taskId },
       };
       const sheets = (Array.isArray(plan.timesheets) ? plan.timesheets : []).filter((x) => x && x.taskId === taskId && isDay(x.date) && Number.isFinite(+x.hours) && +x.hours > 0);
@@ -133,6 +135,30 @@ function derive(planRecords, { me = '', skills = [], stats = [] } = {}) {
 export function plannerTasks(planRecords, opts) {
   const { entries, skills } = derive(planRecords, opts);
   return { tasks: entries.map((e) => e.task), skills };
+}
+
+/**
+ * The definitions Flow's history needs from plans archived since: their tasks
+ * (archived, so never offered) and skills. Merge the ones a stored completion
+ * points at, so its title, skill and XP survive the plan being put away.
+ */
+export function plannerHistory(planRecords, opts) {
+  const { entries, skills } = derive(planRecords, { ...opts, history: true });
+  const tasks = entries.map((e) => e.task).filter((t) => t.archived);
+  const used = new Set(tasks.map((t) => t.skill));
+  return { tasks, skills: skills.filter((k) => used.has(k.id)) };
+}
+
+/**
+ * SPEC.md › From when: the settings record to write when Planner has been read
+ * successfully at `readAt` — stamped with plannerSince — or null when there is
+ * nothing to write (no successful read, or a stamp already there: it is
+ * written once and never moved later).
+ */
+export function plannerSinceStamp(settings, readAt) {
+  if (!Number.isFinite(readAt)) return null;
+  if (Number.isFinite(settings?.plannerSince)) return null;
+  return { ...(settings || { id: 'settings', type: 'settings', name: 'Player', mission: '' }), id: 'settings', type: 'settings', plannerSince: readAt };
 }
 
 // ─── done in Planner, reopened in Planner ──────────────────────────────────
@@ -191,15 +217,20 @@ export function plannerRework(db, ask, minutes) {
  *            hours after it; nothing when rework is already logged against it.
  *   ask    — [{ done, task, title, … }] the same, when Planner has no hours.
  *
+ * Only finishes at or after `since` (settings.plannerSince) count; with no
+ * `since`, nothing does. Plans archived since still count; templates never.
+ *
  * Idempotent: once its records are written it returns nothing new.
  */
 export function plannerEvents(db, planRecords, opts) {
-  const { me, now = Date.now() } = opts || {};
-  const name = me ?? (db.settings?.plannerName || db.settings?.name || '');
-  const { entries, skills } = derive(planRecords, { me: name, skills: db.skills, stats: db.stats });
-  let work = withDefinitions(db, entries.map((e) => e.task), skills);
+  const { me, now = Date.now(), since = null } = opts || {};
   const out = { done: [], rework: [], ask: [] };
-  const finished = entries.filter((e) => e.doneAt !== null && e.doneAt <= now).sort((a, b) => a.doneAt - b.doneAt || a.task.id.localeCompare(b.task.id));
+  // Planner history before Flow first read it is not logged; without the stamp, nothing is.
+  if (since === null || since === undefined || !Number.isFinite(+since)) return out;
+  const name = me ?? (db.settings?.plannerName || db.settings?.name || '');
+  const { entries, skills } = derive(planRecords, { me: name, skills: db.skills, stats: db.stats, history: true });
+  let work = withDefinitions(db, entries.map((e) => e.task), skills);
+  const finished = entries.filter((e) => e.doneAt !== null && e.doneAt >= +since && e.doneAt <= now).sort((a, b) => a.doneAt - b.doneAt || a.task.id.localeCompare(b.task.id));
   for (const { task, doneAt: ms, sheets } of finished) {
     const iso = new Date(ms).toISOString();
     const { plan, task: taskId } = task.source;

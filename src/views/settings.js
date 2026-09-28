@@ -37,7 +37,7 @@ function syncSection(ctx) {
 function plannerSection(ctx) {
   const st = ctx.store.plannerStatus?.() || { configured: false, plans: 0, tasks: 0 };
   const ps = ctx.store.plannerSettingsNow?.() || { url: '', token: '' };
-  const state = `<div class="small sc-faint" id="planner-status">${st.configured ? `${st.plans} plan${st.plans === 1 ? '' : 's'} · ${st.tasks} task${st.tasks === 1 ? '' : 's'} for you${st.lastPullAt ? ` · read ${new Date(st.lastPullAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}` : 'Not connected.'}</div>
+  const state = `<div class="small sc-faint" id="planner-status">${st.configured ? `${st.plans} plan${st.plans === 1 ? '' : 's'} · ${st.tasks} task${st.tasks === 1 ? '' : 's'} for you${st.lastPullAt ? ` · read ${new Date(st.lastPullAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}${st.since ? ` · finishes logged since ${new Date(st.since).toLocaleDateString()}` : ''}` : 'Not connected.'}</div>
     ${st.lastError ? `<div class="sc-alert sc-alert--danger small"><strong>Last error</strong> ${esc(st.lastError)}</div>` : ''}`;
   const intro = '<p class="small sc-muted" style="margin:0">Your Planner tasks show up in Tasks and Now. Flow only reads Planner: tick tasks off there, and a finish or a reopen is logged here.</p>';
   if (st.portal) {

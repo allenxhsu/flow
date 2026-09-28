@@ -98,7 +98,9 @@ export function replayDay(records, day, { now = Date.now() } = {})
 export const PLANNER_COVER_MS = 86400000;
 export function plannerTasks(planRecords, opts)          // opts: { me, skills, stats } → { tasks, skills }
 export function plannerRework(db, ask, minutes)          // the rework record for an answered ask
-export function plannerEvents(db, planRecords, opts)     // opts: { me, now } → { done, rework, ask }
+export function plannerHistory(planRecords, opts)        // tasks (archived) and skills of plans archived since
+export function plannerSinceStamp(settings, readAt)      // the settings record stamped with plannerSince, or null
+export function plannerEvents(db, planRecords, opts)     // opts: { me, now, since } → { done, rework, ask }
 ```
 
 # CLI usage (cli/flow.mjs --help)

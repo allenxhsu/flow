@@ -65,10 +65,11 @@ export function render(ctx) {
     return `<div class="view"><div class="sc-panel pad stack"><h2>Tasks</h2><p class="sc-muted" style="margin:0">A task belongs to a skill. Make a skill first.</p><div class="row"><button class="sc-button sc-button--primary" data-go="skills">Add a skill</button></div></div></div>`;
   }
   const editing = ui.editTask;
-  const list = g.tasks.filter((t) => ui.showArchived || !t.archived).sort((a, b) => Number(a.archived) - Number(b.archived) || a.title.localeCompare(b.title));
-  const archived = g.tasks.filter((t) => t.archived).length;
+  // A task of a Planner plan archived since is history, not a task to do.
+  const list = g.tasks.filter((t) => !(t.source && t.archived)).filter((t) => ui.showArchived || !t.archived).sort((a, b) => Number(a.archived) - Number(b.archived) || a.title.localeCompare(b.title));
+  const archived = g.tasks.filter((t) => t.archived && !t.source).length;
   return `<div class="view">
-    <div class="row-between"><h2>Tasks · ${g.tasks.length - archived}</h2>
+    <div class="row-between"><h2>Tasks · ${g.tasks.filter((t) => !t.archived).length}</h2>
       <div class="row">${archived ? `<label class="check-field small"><input class="sc-check" type="checkbox" data-toggle="archived" ${ui.showArchived ? 'checked' : ''}> archived (${archived})</label>` : ''}
       <button class="sc-button sc-button--primary" data-action="new">+ New task</button></div></div>
     ${editing && !db.task.get(editing)?.source ? form(ctx, editing === 'new' ? null : db.task.get(editing)) : ''}
