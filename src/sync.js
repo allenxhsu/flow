@@ -22,7 +22,7 @@ import {
   SYNC_CURSOR_KEYS, publishStatus, onSyncNow,
   portalApp, portalSession, portalRemote, requestPersistentStorage, storageStatus, mergeRecord,
 } from '../sync-kit/js/index.js';
-import { index, stamp, tombstone, RECORD_TYPES } from './model.js';
+import { index, stamp, tombstone, RECORD_TYPES, EVENT_TYPES } from './model.js';
 import { plannerTasks, plannerEvents, plannerHistory, plannerSinceStamp } from './planner.js';
 
 export const WORKSPACE = 'flow';
@@ -33,7 +33,10 @@ const INTERVAL_MS = 30_000;
 /** How long after a write it goes to the server. */
 const AFTER_WRITE_MS = 1_500;
 export const STORE_EXPORT_FORMAT = 'flow.store';
-const EVENTS = new Set(['done', 'rework', 'purchase', 'energy', 'review', 'moment']);
+// The model's own list, so a new event type is write-once here the day it exists.
+const EVENTS = new Set(EVENT_TYPES);
+/** Whether records of this type are events: written once, never edited or deleted. */
+export const isEvent = (type) => EVENTS.has(type);
 /** Project Planner's app id and workspace: read, never written. */
 export const PLANNER_APP = 'project';
 const PLANNER_KEY = 'flow.planner';

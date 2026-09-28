@@ -124,8 +124,8 @@ export const GEAR_MAX = 0.10;
 export const SLOTS = ['head', 'body', 'legs', 'feet', 'hands', 'bag', 'tech', 'vehicle'];
 
 const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish'];
-const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend'];
-export const RECORD_TYPES = [...DEFINITIONS, ...EVENTS];
+export const EVENT_TYPES = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend'];
+export const RECORD_TYPES = [...DEFINITIONS, ...EVENT_TYPES];
 
 // ─── dates ──────────────────────────────────────────────────────────────────
 // Days are 'YYYY-MM-DD' in the player's own calendar; instants are epoch ms.
