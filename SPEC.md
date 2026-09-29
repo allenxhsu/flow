@@ -31,6 +31,187 @@ take their look from it. See "## Play".
 - **Critical** = flagged, or has a deadline, or is for someone else, or the
   planner marks it urgent (phase 2).
 
+## The board: seven trees (decided 2026-09-28)
+
+The default stats (Body, Mind, Craft, Work, Bonds) were a placeholder. This is
+the real board, cut from 403 of the player's own Planner tasks across 39
+projects. Seven trees — four professional, three private — each with at least
+three skills. It raises the stat cap from six to seven.
+
+Every skill declares a **unit of output**, because the player's *tasks* are
+nearly all one-offs but their *units* repeat: eleven "Release Drawing for…",
+sixty reqs, fifty threads. Pace is measured per unit, never per task.
+
+| tree | skill | unit of output | the meter (what cannot be faked) |
+|---|---|---|---|
+| **ARTIFICE** | Shaping | a modelled part | true minutes per part |
+| | Interlock | an assembly | minutes per assembly · mates that break on edit |
+| | Inscription | a released drawing | minutes per sheet · **revisions per release** |
+| | Sundering | a project's BOM | unique parts per project · reuse across projects |
+| **CAMPAIGN** | Summoning | a requisition | req→on-dock days · **% needing a second req** |
+| | Quickening | a machine to dry-run | defects at dry run · kit-complete→pass days |
+| | Trial | a FAT | **first-time pass rate** |
+| | Deliverance | a project | on-time vs deadline · estimate accuracy |
+| **RHETORIC** | Scribing | a thread to resolution | **round-trips to resolution** |
+| | Parley | a conversation with a purpose | did it produce the decision it was for |
+| | Council | a meeting | **say-back rate** |
+| | Augury | a written claim with a check date | **calibration** (see below) |
+| **COMMAND** | Battle Orders | a handoff | **chase count** before delivery |
+| | Decree | a decision | stood vs relitigated |
+| | Bulwark | an escalation | closed here vs passed up |
+| | Tutelage | a person coached | did *their* meter move |
+| **SINEW** | Might | a session | total load · estimated 1RM |
+| | Vigor | a session | pace at fixed HR · time over a benchmark |
+| | Poise | a run (snowboard) | **falls per run** · terrain grade · *seasonal* |
+| **ARCANA** | Alacrity | a reaction test | median reaction time |
+| | Concentration | a timer run | longest unbroken run · % cancelled |
+| | Lore | a course unit | the external grade · time per unit |
+| **HEARTH** | Covenant · Bloodline · Fellowship | — | hours only. **Never graded** |
+
+The display name is the tree's; the plain meaning is the grey subtitle beside
+it — *Summoning · procurement* — so the character sheet does not become a
+crossword.
+
+### One spine
+
+Every quality measure above is the same measure wearing different clothes:
+**did it come back?** A revision, a second req, a failed FAT, another
+round-trip, another chase, a reopened decision, a fall. Rework is not a
+feature of one tree; it is the only honest quality signal the game has, and it
+generalises to all seven.
+
+### What a level is
+
+Points are **fuel**, capped at 720 a day, and are not the score. A skill
+carries two numbers, both logarithmic, doing different jobs.
+
+**Depth** = `1 + ⌊log₂(hours)⌋` — the logbook. Never falls. Each level costs
+double the last, so a lifetime in a skill is about fourteen levels rather than
+the two hundred the old square-root curve would hand out.
+
+| hours | 8 | 75 | 300 | 1,000 | 10,000 |
+|---|---|---|---|---|---|
+| Depth | 4 | 7 | 9 | 11 | 14 |
+
+Depth is **grey subtext on the skill row and never in the header**. It is the
+only thing that gates difficulty tiers and the mastery discount: a tier cannot
+be chosen on a skill the player has three hours in. Ranks by band — Initiate
+1–3, Journeyman 4–6, Adept 7–9, Master 10–12, Grandmaster 13+.
+
+**Grade** = `round(10 × log₂(pace))`, where `pace` = baseline minutes-per-unit
+÷ current minutes-per-unit, with rework folded into true minutes so that fast
+and sloppy cannot move it. **This is the score, and it can fall.**
+
+| you are | at your baseline | 15% faster | 50% faster | twice as fast |
+|---|---|---|---|---|
+| Grade | 0 | 2 | 6 | 10 |
+
+At a sustained 1% a day, Grade ticks **one level every seven days** — a
+straight line, which is the whole point of a log scale: constant *percentage*
+improvement becomes constant progress. A plateau stops the ticking on its own.
+No rule enforces that; it is what the curve does.
+
+### Rules the board needs
+
+- **Season 0 is a baseline.** Grade is meaningless until a skill has a
+  baseline, so the first four weeks of any skill are measured and not graded.
+  A skill shows `Grade —` until its baseline closes.
+- **Hearth is never graded.** No Grade, no pace, no trajectory, no streak.
+  Hours are logged and the weekly satisfaction score is the only number near
+  it. Scoring a relationship changes what the relationship is for.
+- **Dormant skills do not go cold.** Poise is ridden twenty days a year in one
+  quarter. Out of season it is not "not worked this week" — a nag that is
+  always wrong teaches the player to ignore the list.
+- **A perfect Augury score is a failure.** If every written claim comes true,
+  the claims are too safe to be worth making. The target hit rate is about
+  70%; 100% is a finding, not an achievement.
+- **A season is 12 weeks**, matching the horizon already in Purpose. It is
+  scored on slope held above zero and on which plateaus were broken — not on
+  levels reached.
+
+### Most tasks belong to no skill, and that is the point
+
+A task joins a skill **only when it is an instance of that skill's unit of
+output** — a modelled part, a released drawing, a req, a thread with a
+question in it, a handoff. Everything else is left unclassified. Not
+"miscellaneous": unclassified.
+
+Forcing every task into a tree would be the worst thing the board could do to
+itself. *Reimbursement*, *PO Receipt*, *Deliver to the room*, *Clear Tickets*,
+*25G* are real work and real minutes, and none of them is an instance of
+anything the player is getting better at. Filed under Summoning they would
+poison minutes-per-req with things that are not reqs, and the meter would
+drift while the player did nothing differently. A measure is only as good as
+its denominator.
+
+So the three numbers count different things, deliberately:
+
+- **Points (fuel)** count *every* minute. The 720 cap is a budget of hours in
+  a day and every hour spends from it, classified or not.
+- **Depth** counts only the hours inside a skill.
+- **Grade** counts only completed units of that skill.
+
+**Toil** is the share of the week that belongs to no skill — work that pays
+fuel and makes the player better at nothing. It is shown on the week's
+grouping beside the trees, as a percentage, and it is the one number on the
+board that is meant to go **down**. Driving it down is the whole operational
+thesis in a single figure: the same output from fewer hours that teach nothing.
+
+**Routing.** A task's skill comes from Planner's own skill for it where there
+is one, else a rule the player keeps in Settings (project → skill, or a title
+pattern → skill), else nothing. Classification is by unit of output, never by
+topic: "Talk to Jeffery about Alcon" is a **Parley** only if it had a decision
+to produce, and otherwise it is a moment with a duration.
+
+### Objectives
+
+Each skill carries a **target condition** stated before the season, and each
+tree has a **boss**: an external audit that can fail, sat on a schedule.
+Objectives are the player's to set each season; these are season one.
+
+| skill | target condition, season one |
+|---|---|
+| Shaping | baseline over 20 parts, then −10% true minutes |
+| Interlock | zero rebuild errors on any released assembly |
+| Inscription | revisions per released drawing below 0.5 |
+| Sundering | 30% of parts on the next machine are reused library parts |
+| Summoning | second-req rate below 10% |
+| Quickening | dry-run defect list under five |
+| Trial | every FAT passes first time |
+| Deliverance | 80% of projects land on the date given at kickoff |
+| Scribing | median round-trips to resolution ≤ 2 |
+| Parley | 80% of purposed conversations produce their decision |
+| Council | a say-back asked for in every customer meeting; ≥80% correct |
+| Augury | five claims a week with check dates; hit rate near 70% |
+| Battle Orders | median chases per handoff ≤ 1 |
+| Decree | under 20% of decisions reopened |
+| Bulwark | escalations closed here, not forwarded |
+| Tutelage | one person, one measurable improvement |
+| Might | +5% estimated 1RM on the main lifts |
+| Vigor | −3% on a benchmark distance |
+| Poise | ride switch on a named grade, in season |
+| Alacrity | −5% median reaction time |
+| Concentration | median unbroken timer run ≥ 50 minutes |
+| Lore | the course grade |
+
+**Bosses**, in the order they are worth sitting:
+
+| tree | boss | note |
+|---|---|---|
+| ARTIFICE | **CSWA** → **CSWP** → CSWPA Sheet Metal · Weldments · Drawing Tools → **CSWE** | CSWA has no prerequisite, 3h, 70%; CSWP is three segments, ~3.5h, 75%; each CSWPA needs a current CSWP; CSWE needs CSWP + four CSWPA at 85% |
+| ARTIFICE (Sundering) | DFMA, or ASME GDTP for interface definition | no certification exists for modularity itself; the BOM is the instrument |
+| CAMPAIGN | **Six Sigma Green Belt** — ASQ (3 years' experience, expects a real project) or IASSC (no prerequisite, exam only) | ASQ certifies what you have done, IASSC what you know |
+| CAMPAIGN (Deliverance) | PMP / CAPM | |
+| RHETORIC | STC CPTC · Toastmasters Pathways | thin, and the only tree whose boss is weaker than its meter |
+| COMMAND | none credible | measured by chase count and decision durability alone |
+| SINEW | the bar and the clock | the most honest audit on the board |
+| ARCANA | the course grade | an external grader already attached |
+| HEARTH | none, by design | |
+
+**A boss is an audit, not a score.** Two or three a year cannot move a daily
+trajectory — they can only confirm that the weekly meter was not lying. The
+game runs on the meters; the certificate says the meters were honest.
+
 ## Points (= XP)
 
 - Base = **estimated minutes × quality × 1 point/min**. Estimates: a repeated
