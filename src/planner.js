@@ -278,6 +278,46 @@ export function plannerHistory(planRecords, opts) {
 }
 
 /**
+ * SPEC.md › Planner tasks › Planner changed its mind. A Planner completion's
+ * minutes are the estimate at the moment it was logged, and an event is never
+ * rewritten — so a plan corrected afterwards cannot reach back into Flow.
+ * This is what Flow offers the player instead: one entry per stored Planner
+ * completion whose minutes no longer match what the plan says the work is,
+ * each carrying the correction's numbers and a reason in Planner's own terms.
+ *
+ * Never a write and never automatic. A completion the player timed is what
+ * really happened whatever the plan says, and one the player has already
+ * corrected by hand is their decision, so neither is offered.
+ */
+export function plannerDrift(db, planRecords, opts) {
+  if (!planRecords?.length) return [];
+  const { entries } = derive(planRecords, { ...opts, skills: opts?.skills ?? db.skills, stats: opts?.stats ?? db.stats, history: true });
+  const now = new Map(entries.map((e) => [e.task.id, e.task]));
+  const out = [];
+  for (const d of db.done) {
+    if (!d.planner || d.timed) continue;
+    if (db.correction?.get(d.id)?.length) continue;
+    const task = now.get(d.task);
+    if (!task || !Number.isFinite(task.estimate)) continue;
+    if (task.estimate === d.minutes) continue;
+    out.push({
+      done: d.id, task: task.id, title: task.title, project: task.project || '',
+      logged: d.minutes, minutes: task.estimate, points: d.price?.points ?? null,
+      reason: `Planner now puts this at ${fmtMinutes(task.estimate)}, not the ${fmtMinutes(d.minutes)} it said when Flow logged it`,
+    });
+  }
+  return out;
+}
+
+/** Minutes as the reason line says them: "2h", "1h 30m", "15m", "nothing". */
+function fmtMinutes(m) {
+  if (!(m > 0)) return 'nothing';
+  const h = Math.floor(m / 60);
+  const min = Math.round(m % 60);
+  return h && min ? `${h}h ${min}m` : h ? `${h}h` : `${min}m`;
+}
+
+/**
  * SPEC.md › From when: the settings record to write when Planner has been read
  * successfully at `readAt` — stamped with plannerSince — or null when there is
  * nothing to write (no successful read, or a stamp already there: it is

@@ -112,3 +112,35 @@ test('Fix: writing an amend sends only the numbers that were filled in', async (
   assert.equal(written[0].kind, 'amend');
   assert.deepEqual(written[0].patch, { points: 15 });
 });
+
+// ─── what Planner now disagrees with (SPEC.md › Planner changed its mind) ──
+
+const DRIFT = [{ done: 'done_pl_ge_hose_1', task: 'task_pl_ge_hose', title: 'Receive hose', project: 'GE SO 278078',
+  logged: 120, minutes: 0, points: 120, reason: 'Planner now puts this at nothing, not the 2h it said when Flow logged it' }];
+
+test('Fix: Planner disagreeing with a logged completion is offered, never applied', () => {
+  const { g } = world();
+  const html = fix.render({ ...ctxOf(g), store: { plannerDrift: () => DRIFT } });
+  assert.match(html, /Receive hose/);
+  assert.match(html, /2h/, 'what Flow logged');
+  assert.match(html, /nothing|0m/, 'what Planner says now');
+  assert.match(html, /data-action="accept-drift"[^>]*data-done="done_pl_ge_hose_1"|data-done="done_pl_ge_hose_1"[^>]*data-action="accept-drift"/);
+});
+
+test('Fix: no disagreement, no section', () => {
+  const { g } = world();
+  const html = fix.render({ ...ctxOf(g), store: { plannerDrift: () => [] } });
+  assert.doesNotMatch(html, /Planner now/);
+});
+
+test('Fix: accepting one writes an amend carrying Planner\'s numbers and reason', async () => {
+  const { g } = world();
+  const written = [];
+  const ctx = { ...ctxOf(g), store: { plannerDrift: () => DRIFT, add: async (...r) => written.push(...r.flat()) }, toast: () => {}, render: () => {} };
+  ctx.db = { ...ctx.db, done: [...ctx.db.done, { id: 'done_pl_ge_hose_1', type: 'done', task: 'task_mail', day: '2026-09-28', end: at('17:30'), minutes: 120, measure: 'time', value: 120, quality: 1, price: { points: 120 } }] };
+  await fix.actions['accept-drift']({ dataset: { done: 'done_pl_ge_hose_1' } }, ctx);
+  assert.equal(written.length, 1);
+  assert.equal(written[0].kind, 'amend');
+  assert.deepEqual(written[0].patch, { minutes: 0, points: 0 });
+  assert.match(written[0].reason, /Planner now puts this at nothing/);
+});

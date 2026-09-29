@@ -575,6 +575,16 @@ plan. Flow's own tasks (dailies, habits, chores) stay alongside.
   A Flow completion covers it when it is for that task and either carries that
   same `planner` time or ended no more than 24 h before `doneAt` with no later
   Planner completion covered by it (the timer or Log done got there first).
+- **Planner changed its mind** (decided 2026-09-28): a Planner completion's
+  minutes are the estimate at the moment it was logged, and an event is never
+  rewritten — so correcting the plan afterwards cannot reach back into Flow.
+  Instead Flow **notices and offers**: when the plan's expected work for a task
+  no longer matches the minutes Flow logged, the Fix screen lists it — what
+  Flow logged, what Planner says now — and one press writes the amendment, with
+  Planner's own numbers as the reason. Never automatic: a completion the player
+  timed is what really happened whatever the plan says, so only completions
+  priced from the estimate are offered, and one already corrected by hand is
+  left alone.
 - **Reopen = rework.** A Planner task finished again (a new `doneAt` later than
   24 h after the completion that covered the previous one) is rework of that
   completion. Fix minutes = Planner timesheet hours on that task dated after

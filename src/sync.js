@@ -30,7 +30,7 @@ import {
   portalApp, portalSession, portalRemote, requestPersistentStorage, storageStatus, mergeRecord,
 } from '../sync-kit/js/index.js';
 import { index, stamp, tombstone, undoCorrection as undo, dayOf, RECORD_TYPES, EVENT_TYPES } from './model.js';
-import { plannerTasks, plannerEvents, plannerHistory, plannerSinceStamp, expiredOps, plannerDay } from './planner.js';
+import { plannerTasks, plannerEvents, plannerHistory, plannerSinceStamp, expiredOps, plannerDay, plannerDrift as drift } from './planner.js';
 import { pushOps, opsToWrite, plannerUrlFrom, isOp } from './planops.js';
 
 export const WORKSPACE = 'flow';
@@ -456,6 +456,17 @@ export async function pullPlanner() {
     }
   })();
   return pulling;
+}
+
+/**
+ * What Planner now disagrees with (SPEC.md › Planner changed its mind): the
+ * amendments the Fix screen offers for completions whose plan has changed
+ * since Flow logged them. Read-only — the player presses, or nothing happens.
+ */
+export function plannerDrift(now = Date.now()) {
+  if (!plannerById.size) return [];
+  const base = db();
+  return drift(base, plannerRecords(), { me: plannerName(base), now });
 }
 
 /** The fix-minutes questions for tasks reopened in Planner with no hours logged there. */
