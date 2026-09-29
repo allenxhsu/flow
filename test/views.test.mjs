@@ -658,6 +658,7 @@ test('Review: a week with no Toil says nothing about Toil', () => {
 
 // ─── Settings: adopting the board and routing tasks to it ─────────────────
 import { boardRecords, SKILLS } from '../src/board.js';
+import { STARTER_RULES } from '../src/board-routing.js';
 
 const settingsCtx = (g, over = {}) => ({
   ...ctxOf(g), ui: {},
@@ -710,4 +711,28 @@ test('adopting the board writes seven stats and every skill, once', async () => 
   await settingsView.actions['adopt-board'](null, ctx);
   assert.equal(written.filter((r) => r.type === 'stat').length, 7);
   assert.equal(written.filter((r) => r.type === 'skill').length, SKILLS.length);
+});
+
+test('Settings offers the starter rules once the board is adopted and there are none', () => {
+  const g = game([...boardRecords()]);
+  const html = settingsView.render(settingsCtx(g));
+  assert.match(html, /data-action="starter-rules"/);
+});
+
+test('Settings stops offering the starter rules once there are rules', () => {
+  const g = game([...boardRecords(), { id: 'settings', type: 'settings', name: 'A',
+    routing: [{ pattern: 'x', skill: 'shaping' }] }]);
+  assert.doesNotMatch(settingsView.render(settingsCtx(g)), /data-action="starter-rules"/);
+});
+
+test('taking the starter rules writes them all, in order', async () => {
+  const g = game([...boardRecords()]);
+  const written = [];
+  const ctx = { ...settingsCtx(g), toast: () => {}, render: () => {} };
+  ctx.store.save = async (...r) => { written.push(...r.flat()); };
+  ctx.store.getRecord = () => ({ id: 'settings', type: 'settings', name: 'A' });
+  await settingsView.actions['starter-rules'](null, ctx);
+  assert.equal(written.length, 1);
+  assert.equal(written[0].routing.length, STARTER_RULES.length);
+  assert.deepEqual(written[0].routing, STARTER_RULES);
 });

@@ -3,6 +3,7 @@
 import { makePlace, newId, ZONES } from '../model.js';
 import { esc, materialize } from '../util.js';
 import { TREES, SKILLS, boardRecords, statId } from '../board.js';
+import { STARTER_RULES } from '../board-routing.js';
 import { validateWorld, worldRecord, worldFor } from '../game/world.js';
 import { modeSwitch } from '../mode.js';
 
@@ -171,7 +172,8 @@ function boardSection(ctx) {
     <div class="stack">
       <h3>Routing</h3>
       <p class="small sc-faint" style="margin:0">A task joins a skill only when it is an instance of that skill's unit of output. Everything else is Toil, and Toil is the number to drive down. Planner's own skill wins where it has one; otherwise the first rule that matches, in this order.</p>
-      ${rows ? `<ul class="list rule-list">${rows}</ul>` : '<div class="muted-box">No rules yet, so every Planner task is Toil until Planner names a skill for it.</div>'}
+      ${rows ? `<ul class="list rule-list">${rows}</ul>` : `<div class="muted-box"><p>No rules yet, so every Planner task is Toil until Planner names a skill for it.</p>${
+        adopted ? `<div class="row"><button class="sc-button" type="button" data-action="starter-rules">Take the ${STARTER_RULES.length} starter rules</button></div>` : ''}</div>`}
       <form class="stack" data-form="routing">
         <div class="form-grid">
           <label class="sc-field"><span>Project is</span><input class="sc-input" name="project" placeholder="e.g. Swagelok Bellows Project"></label>
@@ -242,6 +244,13 @@ export const actions = {
   'adopt-board': async (el, ctx) => {
     await ctx.store.save(boardRecords());
     ctx.toast(`The board is yours: ${TREES.length} trees, ${SKILLS.length} skills.`, 'success');
+    ctx.render?.({ force: true });
+  },
+
+  /** The starter set, written in order. Offered only while there are no rules. */
+  'starter-rules': async (el, ctx) => {
+    await ctx.store.save({ ...ctx.store.getRecord('settings'), id: 'settings', type: 'settings', routing: [...STARTER_RULES] });
+    ctx.toast(`${STARTER_RULES.length} rules added. Edit or remove any of them.`, 'success');
     ctx.render?.({ force: true });
   },
 

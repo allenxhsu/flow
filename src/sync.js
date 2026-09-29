@@ -32,6 +32,8 @@ import {
 import { index, stamp, tombstone, undoCorrection as undo, dayOf, RECORD_TYPES, EVENT_TYPES } from './model.js';
 import { plannerTasks, plannerEvents, plannerHistory, plannerSinceStamp, expiredOps, plannerDay, plannerDrift as drift } from './planner.js';
 import { pushOps, opsToWrite, plannerUrlFrom, isOp } from './planops.js';
+import { applyRouting } from './board-routing.js';
+import { compileRules } from './routing.js';
 
 export const WORKSPACE = 'flow';
 export const APP_ID = 'flow';
@@ -111,7 +113,11 @@ export function db() {
   if (!cachedDb) {
     const base = index(allRecords());
     const opts = { me: plannerName(base), skills: base.skills, stats: base.stats, now: Date.now() };
-    const d = plannerById.size ? plannerTasks(plannerRecords(), opts) : { tasks: [], skills: [] };
+    let d = plannerById.size ? plannerTasks(plannerRecords(), opts) : { tasks: [], skills: [] };
+    // Once the board is adopted, Planner's folder names ("Work", "AMADA
+    // WORKSPACE") stop standing in for skills: a task routes onto the board
+    // or belongs to no skill at all (SPEC.md › Most tasks belong to no skill).
+    d = applyRouting(base, d, { rules: compileRules(base.settings.routing || []) });
     // What Planner laid on today, if it has said. A Planner task that is not
     // on it is not today's work — it is somewhere in a backlog that, on a real
     // planner, runs to hundreds of tasks going back years. It stays in the
