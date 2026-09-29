@@ -184,7 +184,7 @@ the two hundred the old square-root curve would hand out.
 
 | hours | 8 | 75 | 300 | 1,000 | 10,000 |
 |---|---|---|---|---|---|
-| Depth | 4 | 7 | 9 | 11 | 14 |
+| Depth | 4 | 7 | 9 | 10 | 14 |
 
 Depth is **grey subtext on the skill row and never in the header**. It is the
 only thing that gates difficulty tiers and the mastery discount: a tier cannot

@@ -352,3 +352,38 @@ test('contract: corrections — makeCorrection, undoCorrection and what index() 
   assert.equal(M.undoCorrection(c, { now: T(`${D}T12:00:00`), device: 'dev1' }).deletedAt, T(`${D}T12:00:00`));
   assert.throws(() => M.undoCorrection({ id: 'done_x', type: 'done' }), /correction/);
 });
+
+test('contract: the board — trees, skills and the two curves the screens read', async () => {
+  const B = await import('../src/board.js');
+  assert.equal(B.MAX_STATS, 7);
+  assert.equal(B.TREES.length, 7);
+  for (const t of B.TREES) for (const k of ['id', 'name', 'plain', 'icon', 'side', 'graded']) {
+    assert.ok(k in t, `tree.${k}`);
+  }
+  for (const s of B.SKILLS) for (const k of ['id', 'tree', 'name', 'plain', 'unit', 'oneShot', 'dormant', 'graded']) {
+    assert.ok(k in s, `skill ${s.id}.${k}`);
+  }
+  assert.equal(typeof B.depthFor, 'function');
+  assert.equal(typeof B.gradeFor, 'function');
+  assert.equal(typeof B.paceFor, 'function');
+  assert.equal(typeof B.rankFor, 'function');
+  // boardRecords must produce records index() accepts without complaint.
+  const db = M.index(B.boardRecords());
+  assert.equal(db.stats.length, 7);
+  assert.equal(db.skills.length, B.SKILLS.length);
+  for (const s of db.skills) assert.ok(db.stat.get(s.stat), `${s.id} has a stat`);
+});
+
+test('contract: routing — the six types and what the screens call', async () => {
+  const R = await import('../src/routing.js');
+  assert.deepEqual(Object.keys(R.TYPES).sort(), ['boss', 'claim', 'moment', 'rework', 'skill', 'toil']);
+  for (const fn of ['routeTask', 'routeAll', 'typeOf', 'toilOf', 'compileRules']) {
+    assert.equal(typeof R[fn], 'function', `routing.${fn}`);
+  }
+  const r = R.routeTask({ title: 'Reimbursement' }, { rules: [] });
+  for (const k of ['skill', 'type']) assert.ok(k in r, `routeTask().${k}`);
+  const toil = R.toilOf([], () => null, { rules: [] });
+  for (const k of ['total', 'minutes', 'weighted', 'units', 'bounces', 'share', 'bounceRate']) {
+    assert.ok(k in toil, `toilOf().${k}`);
+  }
+});
