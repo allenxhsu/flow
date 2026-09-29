@@ -231,6 +231,29 @@ grouping beside the trees, as a percentage, and it is the one number on the
 board that is meant to go **down**. Driving it down is the whole operational
 thesis in a single figure: the same output from fewer hours that teach nothing.
 
+**Toil is measured once, and it is not pace.** Administrative work is where
+doing it twice hurts most: a reimbursement filed wrong, a PO with the wrong
+part number, a bounced requisition. The cost of the error is high *and* the
+redo teaches nothing — a drawing redone at least leaves the player better at
+drawings; a refiled expense report leaves them exactly where they were, minus
+an hour. So Toil carries no Depth and no Grade, because nobody is trying to
+become a master of expense reports, and exactly one number: **bounce rate**,
+how often administrative work comes back. Its minutes count double when it
+does.
+
+Two scoreboards, wanting opposite things:
+
+| | hours | quality meter | target |
+|---|---|---|---|
+| a skill | up or steady | pace on clean units | Grade climbing |
+| Toil | **down** | bounce rate | **zero**, on fewer hours |
+
+**The intervention for Toil is a checklist, not practice.** Deliberate
+practice is for work with a craft in it. For a routine one-shot procedure the
+answer is a template that cannot be filled in wrongly — make the mistake
+impossible rather than get better at not making it. A Toil type that bounces
+twice has earned a checklist, and the checklist retires it.
+
 **Routing.** A task's skill comes from Planner's own skill for it where there
 is one, else a rule the player keeps in Settings (project → skill, or a title
 pattern → skill), else nothing. Classification is by unit of output, never by
