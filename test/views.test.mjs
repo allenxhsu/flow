@@ -640,3 +640,74 @@ test('Review: a week with no work says so rather than showing an empty table', (
   const html = review.render(ctxOf(game(), '2026-09-27T12:00:00'));
   assert.match(html, /nothing logged|no work this week/i);
 });
+
+test('Review: Toil is shown beside the trees as the number meant to go down', () => {
+  const g = workedWeek();
+  g.add({ id: 'task_reimb', type: 'task', title: 'Reimbursement', measure: 'time', cadence: 'anytime', estimate: 20, skill: null, stamina: 0, mana: 0 });
+  g.add({ id: 'done_toil', type: 'done', task: 'task_reimb', day: '2026-09-23', start: T('2026-09-23T14:00:00') - 24e5,
+    end: T('2026-09-23T14:00:00'), minutes: 40, measure: 'time', value: 40, quality: 1, price: { points: 40, energy: {} } });
+  const html = review.render(ctxOf(g, '2026-09-27T12:00:00'));
+  assert.match(html, /data-week-toil/, 'Toil has its own readout');
+  assert.match(html, /toil/i);
+});
+
+test('Review: a week with no Toil says nothing about Toil', () => {
+  const html = review.render(ctxOf(workedWeek(), '2026-09-27T12:00:00'));
+  assert.doesNotMatch(html, /data-week-toil/);
+});
+
+// ─── Settings: adopting the board and routing tasks to it ─────────────────
+import { boardRecords, SKILLS } from '../src/board.js';
+
+const settingsCtx = (g, over = {}) => ({
+  ...ctxOf(g), ui: {},
+  store: {
+    getSettings: () => ({ url: '', token: '', enabled: false }),
+    plannerSettingsNow: () => ({ url: '', token: '' }),
+    plannerStatus: () => ({ phase: 'idle', lastError: null, lastSyncAt: null }),
+    syncStatus: () => ({ phase: 'idle', lastError: null, lastSyncAt: null }),
+    deviceId: () => 'dev', persistence: () => 'indexeddb', storeKind: () => 'IndexedDbStore',
+    inPortal: () => false, plannerInPortal: () => false,
+    syncConfigured: () => false, plannerConfigured: () => false,
+    allRecords: () => [], getRecord: () => null, ...over,
+  },
+});
+
+test('Settings offers the board when it has not been adopted', () => {
+  const html = settingsView.render(settingsCtx(game()));
+  assert.match(html, /data-action="adopt-board"/);
+  assert.match(html, /seven|board/i);
+});
+
+test('Settings does not offer to adopt a board that is already there', () => {
+  const g = game([...boardRecords()]);
+  const html = settingsView.render(settingsCtx(g));
+  assert.doesNotMatch(html, /data-action="adopt-board"/);
+});
+
+test('Settings has a routing rules editor listing the board\'s skills', () => {
+  const g = game([...boardRecords()]);
+  const html = settingsView.render(settingsCtx(g));
+  assert.match(html, /data-form="routing"/);
+  assert.match(html, /Summoning/, 'the skills are choosable by name');
+  assert.match(html, /name="pattern"/);
+  assert.match(html, /name="project"/);
+});
+
+test('Settings shows the rules already set, each removable', () => {
+  const g = game([...boardRecords(), { id: 'settings', type: 'settings', name: 'Allen Xu',
+    routing: [{ pattern: '^Release Drawing', skill: 'inscription' }] }]);
+  const html = settingsView.render(settingsCtx(g));
+  assert.match(html, /\^Release Drawing/);
+  assert.match(html, /data-action="drop-rule"/);
+});
+
+test('adopting the board writes seven stats and every skill, once', async () => {
+  const written = [];
+  const g = game();
+  const ctx = { ...settingsCtx(g), toast: () => {}, render: () => {} };
+  ctx.store.save = async (...r) => { written.push(...r.flat()); };
+  await settingsView.actions['adopt-board'](null, ctx);
+  assert.equal(written.filter((r) => r.type === 'stat').length, 7);
+  assert.equal(written.filter((r) => r.type === 'skill').length, SKILLS.length);
+});

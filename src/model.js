@@ -1354,6 +1354,40 @@ export function weekInSkills(db, day) {
   return { week, day, minutes: total, points: skills.reduce((n, k) => n + k.points, 0), days: days.size, skills, stats, untouched };
 }
 
+/**
+ * Toil over an ISO week (SPEC.md › Most tasks belong to no skill): the share
+ * of the week's minutes spent on work that is an instance of nothing the
+ * player is getting better at. It is the one number on the board meant to go
+ * down. A bounced unit's minutes count twice, because a redo of
+ * administrative work teaches nothing and is pure waste.
+ */
+export function weekToil(db, day) {
+  const week = isoWeek(day);
+  let total = 0;
+  let minutes = 0;
+  let weighted = 0;
+  let units = 0;
+  let bounces = 0;
+  for (const d of db.done) {
+    if (isoWeek(d.day) !== week) continue;
+    const mins = d.minutes || 0;
+    total += mins;
+    if (db.task.get(d.task)?.skill) continue;
+    minutes += mins;
+    units += 1;
+    if (d.bounced) { bounces += 1; weighted += mins * 2; } else { weighted += mins; }
+  }
+  for (const r of db.rework) {
+    if (isoWeek(r.day) !== week) continue;
+    total += r.minutes || 0;
+  }
+  return {
+    week, total, minutes, weighted, units, bounces,
+    share: total > 0 ? minutes / total : 0,
+    bounceRate: units > 0 ? bounces / units : 0,
+  };
+}
+
 // ─── achievements ───────────────────────────────────────────────────────────
 
 const ACHIEVEMENTS = [

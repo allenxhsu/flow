@@ -329,3 +329,12 @@
 :root[data-mode='hud'] .wk-tasks .wk-task { color: var(--sc-text-2); overflow-wrap: anywhere; }
 :root[data-mode='hud'] .wk-cold { border-top: 1px dashed var(--sc-line); padding-top: var(--sc-space-3); }
 :root[data-mode='hud'] .wk-cold .row { flex-wrap: wrap; gap: 6px; }
+
+/* Routing rules (SPEC.md › Most tasks belong to no skill): match → skill. */
+:root[data-mode='hud'] .rule-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+:root[data-mode='hud'] .rule-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2); padding: var(--sc-space-2) var(--sc-space-3); border: 1px solid var(--sc-line); }
+:root[data-mode='hud'] .rule-row code { font-family: var(--sc-font-mono); color: var(--sc-text-2); }
+:root[data-mode='hud'] .rule-row .rule-match { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+:root[data-mode='hud'] .rule-row .rule-arrow { color: var(--sc-text-3); }
+:root[data-mode='hud'] .rule-row .rule-skill { color: var(--sc-app); font-weight: 600; }
+:root[data-mode='hud'] .wk-toil { --tint: var(--sc-warning); }

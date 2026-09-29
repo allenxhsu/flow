@@ -162,3 +162,46 @@ test('untouched is longest-cold first, so the top of that list is the one to not
   assert.deepEqual(w.untouched.map((k) => k.name), ['Mail', 'Read']);
   assert.ok(w.untouched[0].days > w.untouched[1].days);
 });
+
+// ─── Toil: the share that belongs to no skill (SPEC.md › Most tasks…) ──────
+import { weekToil } from '../../src/model.js';
+
+test('the week reports the share of itself that belongs to no skill', () => {
+  const g = game();
+  g.task({ id: 'task_mail', title: 'Mail', skill: 'sk_mail', measure: 'time', cadence: 'anytime', estimate: 30 });
+  g.add({ id: 'task_reimb', type: 'task', title: 'Reimbursement', measure: 'time', cadence: 'anytime', estimate: 20, skill: null, stamina: 0, mana: 0 });
+  g.done('task_mail', `${MON}T10:00:00`, 60);
+  const w = weekToil(g.db(), SUN);
+  assert.equal(w.total, 60);
+  assert.equal(w.minutes, 0, 'everything this week had a skill');
+  assert.equal(w.share, 0);
+});
+
+test('a completion whose task has no skill is Toil', () => {
+  const g = game();
+  g.add({ id: 'task_reimb', type: 'task', title: 'Reimbursement', measure: 'time', cadence: 'anytime', estimate: 20, skill: null, stamina: 0, mana: 0 });
+  g.task({ id: 'task_mail', title: 'Mail', skill: 'sk_mail', measure: 'time', cadence: 'anytime', estimate: 30 });
+  g.done('task_mail', `${MON}T10:00:00`, 60);
+  g.add({ id: 'done_toil', type: 'done', task: 'task_reimb', day: WED, start: T(`${WED}T10:00:00`) - 24e5,
+    end: T(`${WED}T10:00:00`), minutes: 40, measure: 'time', value: 40, quality: 1, price: { points: 40, energy: {} } });
+  const w = weekToil(g.db(), SUN);
+  assert.equal(w.total, 100);
+  assert.equal(w.minutes, 40);
+  assert.equal(w.share, 0.4);
+});
+
+test('Toil is not in the skill rows, and the skill rows are not in Toil', () => {
+  const g = game();
+  g.add({ id: 'task_reimb', type: 'task', title: 'Reimbursement', measure: 'time', cadence: 'anytime', estimate: 20, skill: null, stamina: 0, mana: 0 });
+  g.add({ id: 'done_toil', type: 'done', task: 'task_reimb', day: WED, start: T(`${WED}T10:00:00`) - 24e5,
+    end: T(`${WED}T10:00:00`), minutes: 40, measure: 'time', value: 40, quality: 1, price: { points: 40, energy: {} } });
+  const w = weekInSkills(g.db(), SUN);
+  assert.deepEqual(w.skills, [], 'a skill-less completion makes no skill row');
+  assert.equal(weekToil(g.db(), SUN).minutes, 40);
+});
+
+test('an empty week has no Toil rather than dividing by zero', () => {
+  const w = weekToil(game().db(), SUN);
+  assert.equal(w.share, 0);
+  assert.equal(w.total, 0);
+});

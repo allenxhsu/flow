@@ -2,7 +2,7 @@
 // one change, and the difficulty for next week) and how satisfaction has
 // moved. XP cannot buy this number. Difficulty is set only here.
 
-import { makeReview, weekInSkills, DIFFICULTY, addDays } from '../model.js';
+import { makeReview, weekInSkills, weekToil, DIFFICULTY, addDays } from '../model.js';
 import { esc, fmtMin, fmtPts, chartGeometry, nearestPoint } from '../util.js';
 
 function chart(reviews, width = 640) {
@@ -128,10 +128,15 @@ function weekSection(ctx) {
     </section>`;
   }
   const cold = w.untouched.slice(0, 6);
+  // Toil: the share of the week that made the player better at nothing. Shown
+  // only when there is some — a zero would be a row of noise every week.
+  const toil = weekToil(ctx.db, ctx.g.day);
   return `<section class="sc-panel pad stack" id="week-skills">
     <div class="row-between"><h2>Where the week went · ${esc(w.week)}</h2>
       <span class="small sc-faint num">${fmtMin(w.minutes)} over ${w.days} day${w.days === 1 ? '' : 's'} · ${fmtPts(w.points)} pts</span></div>
-    <div class="row wk-stats">${w.stats.map((s) => `<span class="sc-pill wk-stat" data-week-stat="${esc(s.id)}">${esc(s.name)} <b class="num">${pct(s.share)}</b></span>`).join('')}</div>
+    <div class="row wk-stats">${w.stats.map((s) => `<span class="sc-pill wk-stat" data-week-stat="${esc(s.id)}">${esc(s.name)} <b class="num">${pct(s.share)}</b></span>`).join('')}${
+      toil.minutes ? `<span class="sc-pill wk-stat wk-toil" data-week-toil title="Work that belongs to no skill — the one number meant to go down">Toil <b class="num">${pct(toil.share)}</b></span>` : ''}</div>
+    ${toil.minutes ? `<p class="small sc-faint" style="margin:0">${fmtMin(toil.minutes)} of the week made you better at nothing${toil.bounces ? `, and ${toil.bounces} of it came back` : ''}. This is the number to drive down.</p>` : ''}
     <div class="list">${w.skills.map(skillRow).join('')}</div>
     ${cold.length ? `<div class="stack wk-cold">
       <h3>Not worked this week</h3>
