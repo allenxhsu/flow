@@ -163,6 +163,59 @@ pattern → skill), else nothing. Classification is by unit of output, never by
 topic: "Talk to Jeffery about Alcon" is a **Parley** only if it had a decision
 to produce, and otherwise it is a moment with a duration.
 
+### Tiers: the basics first (decided 2026-09-28)
+
+The trees are Diablo's shape, not just its names. A skill sits at a **tier**
+and stands on the one below it, and a tier opens on two conditions at once —
+the tree deep enough, and the prerequisite actually worked. Pouring a thousand
+hours into one root never opens what sits on a sibling.
+
+```
+ARTIFICE                    CAMPAIGN
+T1  Shaping                 T1  Summoning
+     ├── Interlock  T2      T2   └── Quickening
+     └── Inscription T2     T3        └── Trial
+          └── Sundering T3  T4             └── Deliverance
+
+RHETORIC                    COMMAND
+T1  Scribing                T1  Battle Orders
+     ├── Parley     T2      T2   └── Bulwark
+     │    └── Council T3    T3        └── Decree
+     └── Augury     T2      T4             └── Tutelage
+
+SINEW                       ARCANA              HEARTH
+T1  Might   Vigor           T1  Concentration   (flat — not a ladder)
+T2   └── Poise              T2   ├── Alacrity
+                            T2   └── Lore
+```
+
+Each chain is a real dependency: modularity stands on assemblies, running a
+room stands on holding one conversation to a decision, and Campaign is the
+strictest because it is literally sequential — material, build, test, ship.
+
+| tier | tree depth | prerequisite depth |
+|---|---|---|
+| 1 | 0 — open from the first day | — |
+| 2 | 4 *(8 h in the tree)* | 2 *(2 h)* |
+| 3 | 7 *(75 h)* | 3 *(4 h)* |
+| 4 | 10 *(600 h)* | 4 *(8 h)* |
+
+**Tree depth** is log₂ of every hour spent anywhere in that tree: the character
+level for that tree.
+
+**What a lock means.** Flow cannot refuse to log a drawing, so a lock never
+means "you may not do this work". It means the skill **cannot be focused** and
+carries no Grade yet — deliberate practice on it is premature, which is the
+true thing to say about modularity before you can model fluently. The hours
+still count, and they are exactly what opens it. This also makes focus
+properly scarce: one per task, and the tree decides what is even eligible.
+
+**Every node says what it is.** A name alone is a crossword. Each carries
+three lines — what it is in plain words, what **one unit** of it is, and what
+**measures** it — because "Sundering" tells the player nothing and "modularity
+and reuse · one unit: a project's BOM · measured by unique parts per project"
+tells them everything.
+
 ### One spine
 
 Every quality measure above is the same measure wearing different clothes:

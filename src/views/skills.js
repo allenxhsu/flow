@@ -1,7 +1,8 @@
 // Skills: stats → skills, with levels, XP and how much mastery has cut their
 // energy cost. Also where the 4–6 stats themselves are renamed, added, removed.
 
-import { makeSkill, newId } from '../model.js';
+import { makeSkill, newId, dayOf } from '../model.js';
+import { TREES, SKILLS, treeSkills, treeDepth, unlockState, depthFor, rankFor, statId, skillRecordId } from '../board.js';
 import { esc, fmtPts, materialize } from '../util.js';
 
 const MIN_STATS = 4;
@@ -39,6 +40,79 @@ function statPanel(ctx, s) {
   </section>`;
 }
 
+
+// ─── the board, drawn as a tree (SPEC.md › The board › Tiers) ──────────────
+// Diablo's shape: tier rows, a skill standing on the one below it, locked
+// nodes greyed with what is missing. A lock never means "you may not do this
+// work" — it means the skill cannot be focused yet, because deliberate
+// practice on modularity before you can model is not practice.
+
+/** Minutes logged per board skill id, from every completion that points at one. */
+function minutesBySkill(db) {
+  const m = new Map();
+  for (const d of db.done) {
+    const rec = db.skill.get(db.task.get(d.task)?.skill);
+    const id = rec?.skill;
+    if (!id) continue;
+    m.set(id, (m.get(id) || 0) + (d.minutes || 0));
+  }
+  for (const r of db.rework) {
+    const rec = db.skill.get(db.task.get(r.task)?.skill);
+    const id = rec?.skill;
+    if (!id) continue;
+    m.set(id, (m.get(id) || 0) + (r.minutes || 0));
+  }
+  return m;
+}
+
+function skillNode(ctx, s, mins, live) {
+  const worked = mins.get(s.id) || 0;
+  const depth = depthFor(worked);
+  const state = s.graded ? unlockState(s.id, mins) : { unlocked: true, reasons: [] };
+  const cls = ['tree-node', 'sc-card', state.unlocked ? '' : 'is-locked'].filter(Boolean).join(' ');
+  const tags = [
+    s.oneShot ? '<span class="sc-pill" style="--tint: var(--sc-warning)">right once</span>' : '',
+    s.dormant ? '<span class="sc-pill">seasonal</span>' : '',
+  ].join('');
+  return `<div data-skill="${esc(s.id)}"${s.tier ? ` data-tier="${s.tier}"` : ''} class="${cls}">
+    <div class="row-between">
+      <span class="tree-name">${esc(s.name)}</span>
+      ${s.graded ? `<span class="sc-badge" title="Depth — log2 of the hours in it">${esc(rankFor(depth))} ${depth}</span>` : ''}
+    </div>
+    <div class="tree-plain">${esc(s.plain)}</div>
+    ${s.unit ? `<div class="tree-line"><span class="tree-label">one unit</span> ${esc(s.unit)}</div>` : ''}
+    <div class="tree-line"><span class="tree-label">measured by</span> ${esc(s.meter)}</div>
+    ${tags ? `<div class="pills">${tags}</div>` : ''}
+    ${state.unlocked ? '' : `<div class="tree-lock"><span class="tree-lock-mark" aria-hidden="true">🔒</span> Requires ${state.reasons.map((r) => esc(r)).join(' ')}</div>`}
+  </div>`;
+}
+
+function treePanel(ctx, tree, mins) {
+  const skills = treeSkills(tree.id);
+  const depth = treeDepth(tree.id, mins);
+  const tiers = [...new Set(skills.map((s) => s.tier).filter(Boolean))].sort((a, b) => a - b);
+  const body = tiers.length
+    ? tiers.map((n) => `<div class="tree-tier"><span class="tree-tier-label">T${n}</span>
+        <div class="tree-row">${skills.filter((s) => s.tier === n).map((s) => skillNode(ctx, s, mins)).join('')}</div>
+      </div>`).join('')
+    : `<div class="tree-row">${skills.map((s) => skillNode(ctx, s, mins)).join('')}</div>`;
+  return `<section class="sc-panel pad stack tree-panel" data-tree="${esc(tree.id)}">
+    <div class="row-between">
+      <div class="row"><span class="big">${esc(tree.icon)}</span><h2>${esc(tree.name)}</h2><span class="small sc-faint">${esc(tree.plain)}</span></div>
+      ${tree.graded ? `<span class="sc-badge" data-tree-depth="${depth}" title="Every hour spent anywhere in this tree">tree depth ${depth}</span>` : '<span class="small sc-faint">never graded</span>'}
+    </div>
+    ${body}
+  </section>`;
+}
+
+/** The board, when the player has adopted it. */
+function boardTree(ctx) {
+  const mins = minutesBySkill(ctx.db);
+  return `<div class="grid tree-grid">${TREES.map((t) => treePanel(ctx, t, mins)).join('')}</div>`;
+}
+
+const boardAdopted = (db) => TREES.every((t) => !!db.stat.get(statId(t.id)));
+
 export function render(ctx) {
   const { db, g } = ctx;
   const opt = (v, l, sel) => `<option value="${esc(v)}" ${sel ? 'selected' : ''}>${esc(l)}</option>`;
@@ -59,6 +133,7 @@ export function render(ctx) {
         <label class="sc-field"><span>Icon</span><input class="sc-input" name="icon" maxlength="4" value="◇"></label>
         <button class="sc-button sc-button--primary" type="submit">Add stat</button>
         <button class="sc-button sc-button--ghost" type="button" data-action="cancel-stat">Cancel</button></div></form>` : ''}
+    ${boardAdopted(db) ? boardTree(ctx) : ''}
     <div class="grid">${g.stats.map((s) => statPanel(ctx, s)).join('')}</div>
     <p class="small sc-faint">Levels: a skill needs 100 × L XP from level L to L+1, a stat 300 × L, you 500 × L. Each skill level cuts a task's energy by 7.5%, down to a quarter. Rework takes XP away, so levels can drop.</p>
   </div>`;

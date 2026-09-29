@@ -736,3 +736,88 @@ test('taking the starter rules writes them all, in order', async () => {
   assert.equal(written[0].routing.length, STARTER_RULES.length);
   assert.deepEqual(written[0].routing, STARTER_RULES);
 });
+
+// ─── the Skills screen as a tree (SPEC.md › The board › Tiers) ────────────
+import { TIERS, skillById as boardSkill } from '../src/board.js';
+import * as skillsView from '../src/views/skills.js';
+
+/** The board adopted, with some hours in Artifice. */
+function boarded(minutes = {}) {
+  const g = game(boardRecords());
+  let n = 0;
+  for (const [skill, mins] of Object.entries(minutes)) {
+    g.add({ id: `task_${skill}`, type: 'task', title: `Work on ${skill}`, skill: `skill_${skill}`,
+      measure: 'time', cadence: 'anytime', estimate: 30, stamina: 0, mana: 0 });
+    g.add({ id: `done_${skill}_${n++}`, type: 'done', task: `task_${skill}`, day: '2026-09-21',
+      start: T('2026-09-21T09:00:00'), end: T('2026-09-21T10:00:00'), minutes: mins,
+      measure: 'time', value: mins, quality: 1, price: { points: mins, energy: {} } });
+  }
+  return g;
+}
+
+/** One skill node's HTML: from its id up to where the next node begins. */
+const node = (html, id) => {
+  const i = html.indexOf(`data-skill="${id}"`);
+  assert.ok(i >= 0, `no node for ${id}`);
+  const next = html.indexOf('data-skill="', i + 20);
+  return html.slice(i, next === -1 ? html.length : next);
+};
+
+test('Skills draws each tree in tiers, deepest last', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const panels = [...html.matchAll(/data-tree="([a-z]+)"([\s\S]*?)<\/section>/g)];
+  assert.ok(panels.length >= 7, 'a panel per tree');
+  for (const [, tree, body] of panels) {
+    const tiers = [...body.matchAll(/data-tier="(\d)"/g)].map((m) => Number(m[1]));
+    if (!tiers.length) continue; // Hearth is not a ladder
+    assert.deepEqual(tiers, [...tiers].sort((a, b) => a - b), `${tree} renders its tiers in order`);
+    assert.equal(Math.min(...tiers), 1, `${tree} starts at tier 1`);
+  }
+});
+
+test('Skills says what every skill is, what one unit is and what measures it', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const s = boardSkill('inscription');
+  assert.match(html, new RegExp(s.plain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), 'the plain line');
+  assert.match(html, /released drawing/i, 'what one unit is');
+  assert.match(html, /revisions per released drawing/i, 'what measures it');
+});
+
+test('a locked skill is marked locked and says what is missing', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const row = node(html, 'sundering');
+  assert.match(row, /is-locked/);
+  assert.match(row, /Requires|needs/i);
+  assert.match(row, /Interlock/, 'it names the prerequisite');
+});
+
+test('a tier-1 skill is open on day one and is not marked locked', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const row = node(html, 'shaping');
+  assert.doesNotMatch(row, /is-locked/);
+});
+
+test('working the tree unlocks what sits on it', () => {
+  const html = skillsView.render(ctxOf(boarded({ shaping: 60 * 60, interlock: 30 * 60 })));
+  const row = node(html, 'sundering');
+  assert.doesNotMatch(row, /is-locked/, 'both conditions met, so it opens');
+});
+
+test('a one-shot skill says so, and a seasonal one says so', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  assert.match(html, /right once/i);
+  assert.match(html, /seasonal|in season/i);
+});
+
+test('Hearth is drawn without tiers, locks or meters', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const row = node(html, 'covenant');
+  assert.doesNotMatch(row, /is-locked/);
+  assert.doesNotMatch(row, /data-tier/);
+  assert.match(row, /never graded|not measured/i);
+});
+
+test("the tree shows each tree's depth, so the gate is legible", () => {
+  const html = skillsView.render(ctxOf(boarded({ shaping: 600 })));
+  assert.match(html, /data-tree-depth/);
+});
