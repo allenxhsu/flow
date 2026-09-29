@@ -111,6 +111,80 @@ straight line, which is the whole point of a log scale: constant *percentage*
 improvement becomes constant progress. A plateau stops the ticking on its own.
 No rule enforces that; it is what the curve does.
 
+### Right once (decided 2026-09-28)
+
+Half the board is work you do not get to do twice. A released drawing becomes
+cut metal; a wrong requisition costs weeks of lead time; a FAT fails in front
+of the customer; a thing said in a meeting cannot be unsaid. The other half —
+modelling a part, an internal draft, a training session — is cheap to redo.
+
+The two halves reward opposite instincts, and scoring both on minutes-per-unit
+would punish the right behaviour on the first half: slowing down to check a
+drawing would read as getting worse.
+
+**So for a one-shot skill the unit of output is a unit that did not come
+back.** Nothing else changes — the same minutes-per-unit formula, with a
+denominator that only counts what was right the first time.
+
+| | minutes | first-time-right | per clean unit |
+|---|---|---|---|
+| ten drawings at 60 min, none returned | 600 | 10 | **60** |
+| ten at 50 min, four returned needing 40 | 660 | 6 | **110** |
+
+Rushing nearly doubles the real cost, and the formula has a true optimum:
+120 minutes a drawing to get all ten clean is 120, worse than both. That is
+"more with a limited amount of time" written as arithmetic.
+
+**One-shot:** Inscription · Summoning · Trial · Deliverance · Parley ·
+Council · Decree · Poise.
+**Iterable:** Shaping · Interlock · Sundering · Quickening · Scribing ·
+Might · Vigor · Alacrity · Concentration · Lore · Battle Orders · Bulwark ·
+Tutelage.
+
+**Focus belongs on the one-shot skills.** Expected cost is frequency × cost of
+error, and on that side the cost of error is scrapped parts, a lost month, or
+a customer watching. Deliberate practice on Shaping buys minutes; on
+Inscription it buys a month.
+
+### Complexity, and grading yourself (decided 2026-09-28)
+
+**Minutes per drawing means nothing until drawings are comparable.** The
+normalizer must be countable off the artifact and independent of how long the
+work took — **time can never be a complexity factor**, because it is the thing
+being measured and pace would collapse to 1.0. What counts: feature-tree
+count, dimension count, sheets and views, part count, GD&T callouts — all
+readable through the SOLIDWORKS API, which matters because a normalizer typed
+in by hand will not survive three weeks. **New and revised are different
+units**, not a multiplier on one.
+
+Complexity **bins** rather than scales — Simple / Standard / Complex — and
+like is compared with like. A continuous normalizer invites thirty redundant
+dimensions; a bin boundary is not worth gaming, and over-dimensioning comes
+back as a revision anyway.
+
+**The player grades their own work at completion, and the grade is not the
+score — the error is.** A three-point call, made before the world answers:
+*clean · minor fixes expected · this will come back*, resolved against what
+actually happened within 30 days.
+
+| called it | what happened | reading |
+|---|---|---|
+| clean | three revisions | overconfident |
+| will come back | nothing | underconfident |
+| minor fixes | one minor fix | calibrated |
+
+This is what makes self-assessment safe. If a high self-grade were the score,
+inflating it would win; because **accuracy** is the score, inflating it loses
+mechanically, and the honest call becomes the winning move without a rule
+enforcing it. It also measures something worth having: whether the player can
+tell good work from bad at the moment they finish it — the judgement they have
+to rely on every day nobody gives them feedback.
+
+Every skill therefore carries a third small figure beside Depth and Grade:
+**Insight** — how close the call at completion lands to what the world says
+after. Same shape as Augury: perfect calibration means only the easy ones are
+being called.
+
 ### Rules the board needs
 
 - **Season 0 is a baseline.** Grade is meaningless until a skill has a
