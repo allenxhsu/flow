@@ -787,7 +787,7 @@ test('a locked skill is marked locked and says what is missing', () => {
   const html = skillsView.render(ctxOf(boarded()));
   const row = node(html, 'sundering');
   assert.match(row, /is-locked/);
-  assert.match(row, /Requires|needs/i);
+  assert.match(row, /Needs/);
   assert.match(row, /Interlock/, 'it names the prerequisite');
 });
 

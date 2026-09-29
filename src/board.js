@@ -140,13 +140,13 @@ export function unlockState(skillId, minutesBySkill = new Map()) {
   const depth = treeDepth(s.tree, minutesBySkill);
   if (depth < gate.treeDepth) {
     const tree = treeById(s.tree);
-    reasons.push(`${tree ? tree.name : s.tree} needs tree depth ${gate.treeDepth}; it is ${depth}.`);
+    reasons.push(`Needs ${tree ? tree.name : s.tree} at tree depth ${gate.treeDepth} — it is ${depth}.`);
   }
   if (s.requires) {
     const parent = BY_ID.get(s.requires);
     const have = depthFor(Number(minutesBySkill.get(s.requires)) || 0);
     if (have < gate.parentDepth) {
-      reasons.push(`${parent ? parent.name : s.requires} needs depth ${gate.parentDepth}; it is ${have}.`);
+      reasons.push(`Needs ${parent ? parent.name : s.requires} at depth ${gate.parentDepth} — it is ${have}.`);
     }
   }
   return { unlocked: reasons.length === 0, reasons };

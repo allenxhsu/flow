@@ -84,7 +84,7 @@ function skillNode(ctx, s, mins, live) {
     ${s.unit ? `<div class="tree-line"><span class="tree-label">one unit</span> ${esc(s.unit)}</div>` : ''}
     <div class="tree-line"><span class="tree-label">measured by</span> ${esc(s.meter)}</div>
     ${tags ? `<div class="pills">${tags}</div>` : ''}
-    ${state.unlocked ? '' : `<div class="tree-lock"><span class="tree-lock-mark" aria-hidden="true">🔒</span> Requires ${state.reasons.map((r) => esc(r)).join(' ')}</div>`}
+    ${state.unlocked ? '' : `<div class="tree-lock"><span class="tree-lock-mark" aria-hidden="true">🔒</span> ${state.reasons.map((r) => esc(r)).join(' ')}</div>`}
   </div>`;
 }
 
