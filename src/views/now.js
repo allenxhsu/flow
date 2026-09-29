@@ -14,10 +14,23 @@ export const readTimer = () => validTimer(readJson(ls(), TIMER_KEY));
 const readMoment = () => { const m = readJson(ls(), MOMENT_KEY); return m && typeof m.kind === 'string' && Number.isFinite(m.start) ? m : null; };
 
 const BONUS_LABEL = { flow: 'flow', pb: 'personal best', underdog: 'underdog', combo: 'combo', batch: 'batch' };
+/**
+ * What a run earned beyond its minutes. The bonuses no longer multiply points
+ * (SPEC.md › Points) — a chain of tasks is not more work than the same tasks
+ * apart — so the pill says the style they bought and names them, rather than
+ * showing a percentage that is not applied to anything.
+ */
 export function bonusPills(price) {
   const b = price?.bonuses || {};
-  return Object.entries(b).filter(([, v]) => v > 0)
-    .map(([k, v]) => `<span class="sc-pill" style="--tint: var(--sc-app)">${BONUS_LABEL[k] || k} +${Math.round(v * 100)}%</span>`).join('');
+  const named = Object.entries(b).filter(([, v]) => v > 0).map(([k]) => BONUS_LABEL[k] || k);
+  const out = [];
+  if (named.length && price.style > 0) {
+    out.push(`<span class="sc-pill" style="--tint: var(--sc-app)" title="Bonuses are their own score; points are the minutes">+${price.style} style · ${named.join(', ')}</span>`);
+  }
+  if (price?.capped) {
+    out.push(`<span class="sc-pill" style="--tint: var(--sc-warning)" title="A day holds 720 points: twelve hours at a point a minute">capped · ${price.points} of ${price.uncapped}</span>`);
+  }
+  return out.join('');
 }
 const meter = (value, max, cls = '') => `<div class="sc-meter ${cls}" role="meter" aria-valuemin="0" aria-valuemax="${max}" aria-valuenow="${value ?? 0}"><span style="--value: ${Math.max(0, Math.min(100, ((value ?? 0) / max) * 100))}%"></span></div>`;
 const hhmm = (ms) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`; };
@@ -397,7 +410,7 @@ export const forms = {
     ctx.ui.log = null;
     if (L.fromTimer) writeJson(ls(), TIMER_KEY, null);
     await ctx.store.add(rec);
-    ctx.toast(`${task.title}: +${rec.price.points} points${rec.price.multiplier > 1 ? ` (×${rec.price.multiplier})` : ''}.`, 'success');
+    ctx.toast(`${task.title}: +${rec.price.points} points${rec.price.style > 0 ? `, +${rec.price.style} style` : ''}${rec.price.capped ? ' — the day is capped at 720' : ''}.`, 'success');
   },
   rework: async (d, form, ctx) => {
     const rec = makeRework(ctx.db, d.done, { minutes: d.minutes, at: Date.now(), note: d.note || '' });

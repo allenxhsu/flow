@@ -6,8 +6,7 @@ import {
   dayOf, addDays, daysBetween, isDay, isoWeek, index, makeTask, makeReward, makeEnergy, makeReview, makeMoment, makeDone,
   levelFor, masteryFactor, taskStats, actual, chainAt, underdogsOn, priceDone, balanceOf, chargeFor, energyOn,
   pickNext, dailyStreak, weeklyStreak, isDoneFor, isCritical, reworkCandidate, latestPerWeek, play, betterOf,
-  stamp, tombstone, newId, placeOfTask, SKILL_STEP, PLAYER_STEP, BONUS_CAP,
-} from '../src/model.js';
+  stamp, tombstone, newId, placeOfTask, SKILL_STEP, PLAYER_STEP, BONUS_CAP, DAILY_POINTS_CAP } from '../src/model.js';
 import { T, game, baseRecords, close, at9 } from './helpers.mjs';
 
 // ─── dates ──────────────────────────────────────────────────────────────────
@@ -173,8 +172,11 @@ describe('pricing', () => {
     assert.equal(d.price.bonuses.flow, 0.2);
     assert.equal(d.price.bonuses.pb, 0.25);
     assert.equal(d.price.bonuses.underdog, 0);
-    assert.equal(d.price.multiplier, 1.45);
-    assert.equal(d.price.points, 30);
+    assert.equal(d.price.multiplier, 1.45, 'the bonuses still total 1.45x');
+    // ...but they no longer multiply the points (SPEC.md › Points): points are
+    // the minutes, and the bonuses are style beside them.
+    assert.equal(d.price.points, 21);
+    assert.equal(d.price.style, Math.round(21 * 0.45));
   });
   test('the estimate cannot be inflated: it follows the runs, not the task', () => {
     const g = game();
@@ -242,7 +244,8 @@ describe('pricing', () => {
     assert.deepEqual(underdogsOn(g.db(), '2026-09-28'), ['st_b']);
     const d = g.done('t_b', '2026-09-28T09:00:00', 30);
     assert.equal(d.price.bonuses.underdog, 0.5);
-    assert.equal(d.price.points, 45);
+    assert.equal(d.price.points, 30, 'the underdog buys style, not points');
+    assert.equal(d.price.style, 15);
     // Eight days on, the week has forgotten it.
     assert.deepEqual(underdogsOn(g.db(), '2026-10-05'), ['st_a']);
     assert.deepEqual(underdogsOn(g.db(), '2026-10-06'), []);
@@ -256,7 +259,9 @@ describe('pricing', () => {
     const d = g.done('t_mail', '2026-09-28T10:51:00', 10); // gap 31: broken
     assert.deepEqual([a, b, c, d].map((x) => x.comboIndex), [0, 1, 2, 0]);
     assert.deepEqual([a, b, c, d].map((x) => x.price.bonuses.combo), [0, 0.1, 0.2, 0]);
-    assert.deepEqual([a, b, c, d].map((x) => x.price.points), [10, 11, 12, 10]);
+    // The combo is counted and paid in style; the points stay the minutes.
+    assert.deepEqual([a, b, c, d].map((x) => x.price.points), [10, 10, 10, 10]);
+    assert.deepEqual([a, b, c, d].map((x) => x.price.style), [0, 1, 2, 0]);
   });
   test('combo tops out at +100%', () => {
     const g = game();
@@ -336,7 +341,8 @@ describe('pricing', () => {
     assert.deepEqual(d.price.bonuses, { flow: 0.2, pb: 0.25, underdog: 0.5, combo: 1, batch: 0, gear: 0 });
     assert.equal(d.price.multiplier, BONUS_CAP);
     assert.equal(d.price.base, 29); // round(30 × 0.95)
-    assert.equal(d.price.points, 73); // round(29 × 2.5)
+    assert.equal(d.price.points, 29, 'points are the minutes, whatever the bonuses total');
+    assert.equal(d.price.style, Math.round(29 * 1.5)); // the 2.5× cap, less the base
   });
   test('the price never sees rework logged after the run it prices', () => {
     const g = game();
@@ -836,7 +842,7 @@ describe('play', () => {
     assert.equal(p.stats.find((s) => s.id === 'stat_work').xp, 300);
     assert.equal(p.stats.find((s) => s.id === 'stat_work').lastWeek, 300);
     assert.equal(p.skills.find((s) => s.id === 'sk_mail').level, levelFor(300, SKILL_STEP).level);
-    assert.deepEqual(p.today, { points: 600, done: 2, minutes: 120 });
+    assert.deepEqual(p.today, { points: 600, style: 0, cap: DAILY_POINTS_CAP, done: 2, minutes: 120 });
     assert.equal(p.history[0].title, 'Run');
     assert.equal(p.week, '2026-W40');
   });

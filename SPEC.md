@@ -403,13 +403,22 @@ game runs on the meters; the certificate says the meters were honest.
 
 ## Points (= XP)
 
-> **Superseded in part, not yet rebuilt (2026-09-28).** The player has decided
-> that points are **fuel**: `minutes × difficulty`, capped at **720 a day**
-> (twelve hours at a point a minute), and that the bonuses below — flow,
-> personal best, underdog, combo, batch — stop multiplying points and become
-> their own separate score. The rules in this section are what the code still
-> does. The board's Grade, not points, is the score. Until the rebuild lands,
-> read this section as history.
+**Points are fuel, not the score** (decided 2026-09-28). The score is the
+board's Grade; points say only that the day happened, and they buy treats.
+
+- **Points = base × difficulty**, and nothing else multiplies them. A day is
+  capped at **720**: twelve hours at a point a minute, eight of work and four
+  of everything else. Sixteen hours would be 960 and is no longer quality
+  work, so the day stops. A run that crosses the cap takes what is left of it
+  rather than nothing, and says it was capped; a price once written is never
+  rewritten, so the cap cannot reach back into the morning.
+- **The bonuses became their own score, called style.** Flow, personal best,
+  underdog, combo and batch are still computed, still capped at 2.5×, still
+  what unlocks achievements — but they no longer touch points. A chain of
+  tasks is not more work than the same tasks apart, and while combo paid 2.5×
+  a twelve-minute expense report was worth eighteen points and a forty-five
+  minute conversation ninety. Style is shown beside the points and totted up
+  for the day.
 
 - Base = **estimated minutes × quality × 1 point/min**. Estimates: a repeated
   task (≥ 3 runs) uses its flow target in minutes (recent average − 5%), so it
@@ -417,7 +426,8 @@ game runs on the meters; the certificate says the meters were honest.
   planned duration (phase 2). Benchmark calibration of the scale and of your
   estimates is phase 2; recalibration affects future tasks only.
 - **Target** = recent average (last 5 runs) 5% better. Needs ≥ 3 runs.
-- **Bonuses add up, capped at 2.5× base:** flow (hit target) +20%, personal
+- **Bonuses add up, capped at 2.5× base — as style, never as points:** flow
+  (hit target) +20%, personal
   best +25%, underdog (stat with least XP in the previous 7 days) +50%, combo
   +10% per chained task (next start ≤ 30 min after last end) up to +100%,
   **batch** +15% × position (same batch type, gap ≤ 10 min): the 1st task of

@@ -416,7 +416,9 @@ test('gear bonus: sits inside the 2.5× cap', () => {
   const sum = Object.values(last.bonuses).reduce((a, b) => a + b, 0);
   assert.ok(sum > 1.5, `bonuses add to ${sum}`);
   assert.ok(close(last.multiplier, M.BONUS_CAP));
-  assert.equal(last.points, Math.round(last.base * 2.5));
+  // The cap still binds the bonuses; they just buy style now, not points.
+  assert.equal(last.points, last.base);
+  assert.equal(last.style, Math.round(last.base * 1.5));
 });
 
 // ─── inventory() shape ─────────────────────────────────────────────────────

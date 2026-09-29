@@ -84,7 +84,7 @@ test('contract: event records carry id, type, day and their fields', () => {
   }
   const { done, rework, purchase, moment, energy, review } = events;
   for (const f of ['task', 'start', 'end', 'minutes', 'quality']) assert.ok(f in done, `done.${f}`);
-  for (const f of ['base', 'points', 'bonuses', 'multiplier', 'energy']) assert.ok(f in done.price, `done.price.${f}`);
+  for (const f of ['base', 'points', 'style', 'bonuses', 'multiplier', 'energy']) assert.ok(f in done.price, `done.price.${f}`);
   assert.deepEqual(Object.keys(done.price.bonuses).sort(), ['batch', 'combo', 'flow', 'gear', 'pb', 'underdog']);
   for (const f of ['done', 'minutes', 'multiplier', 'penalty', 'charged']) assert.ok(f in rework, `rework.${f}`);
   for (const f of ['reward', 'price', 'charged']) assert.ok(f in purchase, `purchase.${f}`);

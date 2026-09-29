@@ -853,3 +853,22 @@ test('Skills: renaming a stat is still reachable once the board is adopted', () 
   const html = skillsView.render(ctxOf(boarded()));
   assert.match(html, /data-action="edit-stat"/);
 });
+
+// ─── points are fuel, and the bonuses are style (SPEC.md › Points) ────────
+import { bonusPills } from '../src/views/now.js';
+
+test('Now: a chained run shows its style, not a percentage on its points', () => {
+  const html = bonusPills({ points: 30, style: 21, bonuses: { combo: 0.7, flow: 0, pb: 0, underdog: 0, batch: 0, gear: 0 } });
+  assert.match(html, /\+21 style/, 'what the bonuses were worth');
+  assert.match(html, /combo/);
+  assert.doesNotMatch(html, /combo \+70%/, 'not a multiplier on the points, because it is not one');
+});
+
+test('Now: no bonuses, no pills', () => {
+  assert.equal(bonusPills({ points: 30, style: 0, bonuses: { combo: 0, flow: 0 } }), '');
+});
+
+test('Now: a capped run says the day is spent', () => {
+  const html = bonusPills({ points: 20, style: 0, capped: true, uncapped: 60, bonuses: {} });
+  assert.match(html, /capped|720/i);
+});

@@ -460,7 +460,10 @@ function bonusText(price) {
   if (b.combo) parts.push(`combo ×${price.comboIndex + 1} +${pct(b.combo)}`);
   if (b.gear) parts.push(`gear +${pct(b.gear)}`);
   const sum = 1 + Object.values(b).reduce((a, x) => a + x, 0);
-  return parts.length ? ` × ${price.multiplier} (${parts.join(', ')}${sum > BONUS_CAP ? `; capped at ${BONUS_CAP}×` : ''})` : '';
+  // Bonuses no longer multiply the points (SPEC.md › Points): they are style,
+  // a score of their own, so the line says what they bought rather than
+  // implying a multiplier that is no longer applied.
+  return parts.length ? `  +${price.style} style (${parts.join(', ')}${sum > BONUS_CAP ? `; capped at ${BONUS_CAP}×` : ''})` : '';
 }
 
 function levelUps(before, after) {
@@ -707,6 +710,7 @@ const commands = {
     const measure = task.measure === 'time' ? '' : task.measure === 'quality' ? `, ${rec.value}%` : `, ${rec.value}${task.unit ? ` ${task.unit}` : ''}`;
     const tier = tierById(p.difficulty);
     const tierPart = tier && tier.id !== DEFAULT_DIFFICULTY ? ` × ${tier.points} (${tier.name})` : '';
+    if (p.capped) out.push(`  ▲ The day's 720 points are spent: this run earned ${p.points} of ${p.uncapped}.`);
     out.push(`✓ ${task.title} (${minutes} min${measure}): +${p.points} pts  — base ${p.base} (${p.estimate} min ${p.estimateFrom === 'history' ? 'flow estimate' : 'estimate'}${rec.quality < 1 ? ` × ${pct(rec.quality)} quality` : ''})${bonusText(p)}${tierPart}`);
     const wins = [];
     if (p.bonuses.flow) wins.push(`in the zone — beat your target ${p.target}`);

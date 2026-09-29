@@ -32,6 +32,12 @@
 
 /** 1 point per estimated minute, until benchmark calibration (phase 2) says otherwise. */
 export const POINTS_PER_MINUTE = 1;
+/**
+ * Points are fuel, and a day holds twelve hours of them: eight of work and
+ * four of everything else, at a point a minute (SPEC.md › Points). Sixteen
+ * hours would be 960 and is no longer quality work, so the day stops here.
+ */
+export const DAILY_POINTS_CAP = 720;
 export const BONUS = { flow: 0.2, pb: 0.25, underdog: 0.5, comboStep: 0.1, comboMax: 1, batchStep: 0.15 };
 /** Bonuses add up; the total never passes this multiple of the base. */
 export const BONUS_CAP = 2.5;
@@ -560,6 +566,13 @@ export function chainAt(db, task, start) {
  *   base   = estimated minutes × quality × POINTS_PER_MINUTE
  *   points = base × min(BONUS_CAP, 1 + flow + pb + underdog + (batch or combo) + gear)
  */
+/** Points already earned on a day, up to `before`. The cap counts against this. */
+export function pointsToday(db, day, before = Infinity) {
+  let n = 0;
+  for (const d of db.done) if (d.day === day && (d.end ?? 0) < before) n += d.price?.points || 0;
+  return n;
+}
+
 export function priceDone(db, task, { start, end, minutes, value, quality }) {
   const rw = reworkByDone(db);
   const day = dayOf(end);
@@ -578,6 +591,10 @@ export function priceDone(db, task, { start, end, minutes, value, quality }) {
     batch: BONUS.batchStep * chain.batchIndex,
     gear: gearBonus(db, task, start).bonus,
   };
+  // Bonuses no longer touch points (SPEC.md › Points): a chain of tasks is not
+  // more work than the same tasks apart, and combo paying 2.5x made a twelve
+  // minute expense report worth eighteen points. They are kept, and become
+  // their own score.
   const multiplier = Math.min(BONUS_CAP, 1 + Object.values(bonuses).reduce((a, b) => a + b, 0));
   const base = Math.max(1, Math.round(hist.estimate * quality * POINTS_PER_MINUTE));
   const level = levelFor(skillXp(db, start).get(task.skill) || 0, SKILL_STEP).level;
@@ -589,6 +606,12 @@ export function priceDone(db, task, { start, end, minutes, value, quality }) {
     c *= tier.energy;
     return Math.round(c * 10) / 10;
   };
+  // The day is a budget of hours, so it is capped. A run that crosses the cap
+  // takes what is left of it rather than nothing, and a price once written is
+  // never rewritten — the cap cannot reach back into the morning.
+  const earned = Math.round(base * tier.points);
+  const room = Math.max(0, DAILY_POINTS_CAP - pointsToday(db, day, end));
+  const points = Math.min(earned, room);
   return {
     estimate: hist.estimate,
     estimateFrom: hist.estimateFrom,
@@ -597,7 +620,10 @@ export function priceDone(db, task, { start, end, minutes, value, quality }) {
     base,
     bonuses,
     multiplier: Math.round(multiplier * 100) / 100,
-    points: Math.round(base * multiplier * tier.points),
+    points,
+    /** What the bonuses came to, as its own score rather than a multiplier. */
+    style: Math.round(base * (multiplier - 1)),
+    ...(points < earned ? { capped: true, uncapped: earned } : {}),
     difficulty: tier.id,
     energy: { stamina: cost('stamina'), mana: cost('mana') },
     comboIndex: chain.comboIndex,
@@ -1496,7 +1522,15 @@ export function play(records, now = Date.now()) {
     backlog: db.tasks.filter((t) => offToday(t) && !t.archived).sort((a, b) => a.title.localeCompare(b.title)),
     rewards: db.rewards.filter((r) => !r.archived).map((r) => ({ ...r, affordable: balance >= r.price, bought: db.purchases.filter((p) => p.reward === r.id).length })),
     next, combo, batch,
-    today: { points: doneToday.reduce((n, d) => n + (d.price?.points || 0), 0), done: doneToday.length, minutes: doneToday.reduce((n, d) => n + d.minutes, 0) },
+    today: {
+      points: doneToday.reduce((n, d) => n + (d.price?.points || 0), 0),
+      // Style is what the bonuses came to: kept beside the points rather than
+      // multiplied into them (SPEC.md › Points).
+      style: doneToday.reduce((n, d) => n + (d.price?.style || 0), 0),
+      cap: DAILY_POINTS_CAP,
+      done: doneToday.length,
+      minutes: doneToday.reduce((n, d) => n + d.minutes, 0),
+    },
     history: [...db.done].reverse().slice(0, 50).map((d) => ({ ...d, title: db.task.get(d.task)?.title || '(deleted task)', rework: rw.get(d.id) || [] })),
     purchases: [...db.purchases].reverse().slice(0, 20).map((p) => ({ ...p, title: db.reward.get(p.reward)?.title || '(deleted reward)' })),
     satisfaction: { latest, trend, history: reviews, due: reviewDue(reviews, day) },
