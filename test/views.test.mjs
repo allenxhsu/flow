@@ -821,3 +821,35 @@ test("the tree shows each tree's depth, so the gate is legible", () => {
   const html = skillsView.render(ctxOf(boarded({ shaping: 600 })));
   assert.match(html, /data-tree-depth/);
 });
+
+test('Skills: the board replaces the old stat panels rather than doubling them', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const named = (name) => (html.match(new RegExp(`>${name}<`, 'g')) || []).length;
+  assert.equal(named('Sundering'), 1, 'each skill is drawn once, not once per layout');
+  assert.doesNotMatch(html, /<section class="sc-panel pad stack" data-stat=/, 'the old stat panel is gone when the board is there');
+});
+
+test('Skills: without the board, the old stat panels are still the screen', () => {
+  const html = skillsView.render(ctxOf(game()));
+  assert.match(html, /data-stat=/);
+});
+
+test('Skills: a tree panel carries its own level and XP, so nothing is lost', () => {
+  const html = skillsView.render(ctxOf(boarded({ shaping: 600 })));
+  const panel = /data-tree="artifice"([\s\S]*?)<\/section>/.exec(html)[1];
+  assert.match(panel, /LV \d/);
+  assert.match(panel, /XP/);
+  assert.match(panel, /data-tree-depth/);
+});
+
+test('Skills: every node carries an icon, and they differ', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const icons = [...html.matchAll(/class="tree-icon"[^>]*>([^<]+)</g)].map((m) => m[1]);
+  assert.ok(icons.length >= 20, `only ${icons.length} icons`);
+  assert.ok(new Set(icons).size >= 15, 'the icons are not all the same');
+});
+
+test('Skills: renaming a stat is still reachable once the board is adopted', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  assert.match(html, /data-action="edit-stat"/);
+});

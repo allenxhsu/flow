@@ -75,7 +75,8 @@ function skillNode(ctx, s, mins, live) {
     s.dormant ? '<span class="sc-pill">seasonal</span>' : '',
   ].join('');
   return `<div data-skill="${esc(s.id)}"${s.tier ? ` data-tier="${s.tier}"` : ''} class="${cls}">
-    <div class="row-between">
+    <div class="tree-head">
+      <span class="tree-icon" aria-hidden="true">${esc(s.icon)}</span>
       <span class="tree-name">${esc(s.name)}</span>
       ${s.graded ? `<span class="sc-badge" title="Depth — log2 of the hours in it">${esc(rankFor(depth))} ${depth}</span>` : ''}
     </div>
@@ -89,6 +90,7 @@ function skillNode(ctx, s, mins, live) {
 
 function treePanel(ctx, tree, mins) {
   const skills = treeSkills(tree.id);
+  const stat = ctx.g.stats.find((x) => x.id === statId(tree.id));
   const depth = treeDepth(tree.id, mins);
   const tiers = [...new Set(skills.map((s) => s.tier).filter(Boolean))].sort((a, b) => a - b);
   const body = tiers.length
@@ -99,8 +101,12 @@ function treePanel(ctx, tree, mins) {
   return `<section class="sc-panel pad stack tree-panel" data-tree="${esc(tree.id)}">
     <div class="row-between">
       <div class="row"><span class="big">${esc(tree.icon)}</span><h2>${esc(tree.name)}</h2><span class="small sc-faint">${esc(tree.plain)}</span></div>
-      ${tree.graded ? `<span class="sc-badge" data-tree-depth="${depth}" title="Every hour spent anywhere in this tree">tree depth ${depth}</span>` : '<span class="small sc-faint">never graded</span>'}
+      <div class="row">${stat ? `<span class="sc-badge">LV ${stat.level}</span>` : ''}
+      ${tree.graded ? `<span class="sc-badge" data-tree-depth="${depth}" title="Every hour spent anywhere in this tree">tree depth ${depth}</span>` : '<span class="small sc-faint">never graded</span>'}</div>
     </div>
+    ${stat ? `${meter(stat.into, stat.span, 'meter-app')}
+      <div class="small sc-faint num">${fmtPts(stat.xp)} XP · ${fmtPts(stat.toNext)} to next · ${fmtPts(stat.lastWeek)} pts in the last 7 days
+        <button class="sc-button sc-button--ghost sc-button--sm" type="button" data-action="edit-stat" data-stat="${esc(stat.id)}">Rename</button></div>` : ''}
     ${body}
   </section>`;
 }
@@ -133,8 +139,7 @@ export function render(ctx) {
         <label class="sc-field"><span>Icon</span><input class="sc-input" name="icon" maxlength="4" value="◇"></label>
         <button class="sc-button sc-button--primary" type="submit">Add stat</button>
         <button class="sc-button sc-button--ghost" type="button" data-action="cancel-stat">Cancel</button></div></form>` : ''}
-    ${boardAdopted(db) ? boardTree(ctx) : ''}
-    <div class="grid">${g.stats.map((s) => statPanel(ctx, s)).join('')}</div>
+    ${boardAdopted(db) ? boardTree(ctx) : `<div class="grid">${g.stats.map((s) => statPanel(ctx, s)).join('')}</div>`}
     <p class="small sc-faint">Levels: a skill needs 100 × L XP from level L to L+1, a stat 300 × L, you 500 × L. Each skill level cuts a task's energy by 7.5%, down to a quarter. Rework takes XP away, so levels can drop.</p>
   </div>`;
 }

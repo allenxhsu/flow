@@ -353,3 +353,7 @@
 :root[data-mode='hud'] .tree-node .tree-label { color: var(--sc-text-3); text-transform: uppercase; font-size: 10px; letter-spacing: .08em; margin-right: 4px; }
 :root[data-mode='hud'] .tree-node.is-locked { opacity: .55; border-style: dashed; }
 :root[data-mode='hud'] .tree-node .tree-lock { font-size: var(--sc-text-sm); color: var(--sc-warning); }
+:root[data-mode='hud'] .tree-head { display: flex; align-items: center; gap: var(--sc-space-2); }
+:root[data-mode='hud'] .tree-head .tree-icon { font-size: 1.15rem; line-height: 1; color: var(--sc-app); width: 1.4em; text-align: center; }
+:root[data-mode='hud'] .tree-head .tree-name { flex: 1; min-width: 0; }
+:root[data-mode='hud'] .tree-node.is-locked .tree-icon { color: var(--sc-text-3); }

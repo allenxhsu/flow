@@ -49,38 +49,38 @@ const tierGate = (n) => TIERS.find((t) => t.tier === n) || TIERS[0];
  */
 export const SKILLS = [
   // ── Artifice
-  { id: 'shaping', tree: 'artifice', name: 'Shaping', plain: 'modelling a part', tier: 1, requires: null, meter: 'true minutes per part', unit: 'part' },
-  { id: 'interlock', tree: 'artifice', name: 'Interlock', plain: 'assemblies and mates', tier: 2, requires: 'shaping', meter: 'minutes per assembly, and mates that break when something upstream changes', unit: 'assembly' },
-  { id: 'inscription', tree: 'artifice', name: 'Inscription', plain: 'drawings and release', tier: 2, requires: 'shaping', meter: 'revisions per released drawing', unit: 'released drawing', oneShot: true },
-  { id: 'sundering', tree: 'artifice', name: 'Sundering', plain: 'modularity and reuse', tier: 3, requires: 'interlock', meter: 'unique parts per project, and the share reused from the library', unit: 'project BOM' },
+  { id: 'shaping', tree: 'artifice', name: 'Shaping', icon: '⬡', plain: 'modelling a part', tier: 1, requires: null, meter: 'true minutes per part', unit: 'part' },
+  { id: 'interlock', tree: 'artifice', name: 'Interlock', icon: '⧉', plain: 'assemblies and mates', tier: 2, requires: 'shaping', meter: 'minutes per assembly, and mates that break when something upstream changes', unit: 'assembly' },
+  { id: 'inscription', tree: 'artifice', name: 'Inscription', icon: '▤', plain: 'drawings and release', tier: 2, requires: 'shaping', meter: 'revisions per released drawing', unit: 'released drawing', oneShot: true },
+  { id: 'sundering', tree: 'artifice', name: 'Sundering', icon: '⋔', plain: 'modularity and reuse', tier: 3, requires: 'interlock', meter: 'unique parts per project, and the share reused from the library', unit: 'project BOM' },
   // ── Campaign
-  { id: 'summoning', tree: 'campaign', name: 'Summoning', plain: 'procurement', tier: 1, requires: null, meter: 'req-to-on-dock days, and the share needing a second req', unit: 'requisition', oneShot: true },
-  { id: 'quickening', tree: 'campaign', name: 'Quickening', plain: 'build and commissioning', tier: 2, requires: 'summoning', meter: 'defects found at dry run', unit: 'machine to dry-run' },
-  { id: 'trial', tree: 'campaign', name: 'Trial', plain: 'FAT and QA', tier: 3, requires: 'quickening', meter: 'first-time pass rate', unit: 'FAT', oneShot: true },
-  { id: 'deliverance', tree: 'campaign', name: 'Deliverance', plain: 'delivering on the date given', tier: 4, requires: 'trial', meter: 'on-time against the date given at kickoff', unit: 'project', oneShot: true },
+  { id: 'summoning', tree: 'campaign', name: 'Summoning', icon: '⊕', plain: 'procurement', tier: 1, requires: null, meter: 'req-to-on-dock days, and the share needing a second req', unit: 'requisition', oneShot: true },
+  { id: 'quickening', tree: 'campaign', name: 'Quickening', icon: '⚡', plain: 'build and commissioning', tier: 2, requires: 'summoning', meter: 'defects found at dry run', unit: 'machine to dry-run' },
+  { id: 'trial', tree: 'campaign', name: 'Trial', icon: '⚖', plain: 'FAT and QA', tier: 3, requires: 'quickening', meter: 'first-time pass rate', unit: 'FAT', oneShot: true },
+  { id: 'deliverance', tree: 'campaign', name: 'Deliverance', icon: '➤', plain: 'delivering on the date given', tier: 4, requires: 'trial', meter: 'on-time against the date given at kickoff', unit: 'project', oneShot: true },
   // ── Rhetoric
-  { id: 'scribing', tree: 'rhetoric', name: 'Scribing', plain: 'written and email', tier: 1, requires: null, meter: 'round-trips to resolution', unit: 'thread to resolution' },
-  { id: 'parley', tree: 'rhetoric', name: 'Parley', plain: 'customer and vendor conversations', tier: 2, requires: 'scribing', meter: 'whether it produced the decision it was for', unit: 'purposed conversation', oneShot: true },
-  { id: 'council', tree: 'rhetoric', name: 'Council', plain: 'meetings', tier: 3, requires: 'parley', meter: 'say-back rate', unit: 'meeting', oneShot: true },
-  { id: 'augury', tree: 'rhetoric', name: 'Augury', plain: 'daily writing, graded when it resolves', tier: 2, requires: 'scribing', meter: 'calibration — a hit rate near 70%, because always being right means the claims were too safe', unit: 'claim' },
+  { id: 'scribing', tree: 'rhetoric', name: 'Scribing', icon: '✉', plain: 'written and email', tier: 1, requires: null, meter: 'round-trips to resolution', unit: 'thread to resolution' },
+  { id: 'parley', tree: 'rhetoric', name: 'Parley', icon: '⇄', plain: 'customer and vendor conversations', tier: 2, requires: 'scribing', meter: 'whether it produced the decision it was for', unit: 'purposed conversation', oneShot: true },
+  { id: 'council', tree: 'rhetoric', name: 'Council', icon: '◎', plain: 'meetings', tier: 3, requires: 'parley', meter: 'say-back rate', unit: 'meeting', oneShot: true },
+  { id: 'augury', tree: 'rhetoric', name: 'Augury', icon: '✦', plain: 'daily writing, graded when it resolves', tier: 2, requires: 'scribing', meter: 'calibration — a hit rate near 70%, because always being right means the claims were too safe', unit: 'claim' },
   // ── Command
-  { id: 'battle-orders', tree: 'command', name: 'Battle Orders', plain: 'handing work off', tier: 1, requires: null, meter: 'chases needed before it was delivered', unit: 'handoff' },
-  { id: 'decree', tree: 'command', name: 'Decree', plain: 'making the call', tier: 3, requires: 'bulwark', meter: 'decisions that stayed made', unit: 'decision', oneShot: true },
-  { id: 'bulwark', tree: 'command', name: 'Bulwark', plain: 'absorbing the problem', tier: 2, requires: 'battle-orders', meter: 'escalations closed here rather than passed up', unit: 'escalation' },
-  { id: 'tutelage', tree: 'command', name: 'Tutelage', plain: 'making someone else better', tier: 4, requires: 'decree', meter: 'whether their meter moved', unit: 'person coached' },
+  { id: 'battle-orders', tree: 'command', name: 'Battle Orders', icon: '⚑', plain: 'handing work off', tier: 1, requires: null, meter: 'chases needed before it was delivered', unit: 'handoff' },
+  { id: 'decree', tree: 'command', name: 'Decree', icon: '⊡', plain: 'making the call', tier: 3, requires: 'bulwark', meter: 'decisions that stayed made', unit: 'decision', oneShot: true },
+  { id: 'bulwark', tree: 'command', name: 'Bulwark', icon: '⬟', plain: 'absorbing the problem', tier: 2, requires: 'battle-orders', meter: 'escalations closed here rather than passed up', unit: 'escalation' },
+  { id: 'tutelage', tree: 'command', name: 'Tutelage', icon: '✶', plain: 'making someone else better', tier: 4, requires: 'decree', meter: 'whether their meter moved', unit: 'person coached' },
   // ── Sinew
-  { id: 'might', tree: 'sinew', name: 'Might', plain: 'strength', tier: 1, requires: null, meter: 'total load, and estimated 1RM', unit: 'session' },
-  { id: 'vigor', tree: 'sinew', name: 'Vigor', plain: 'stamina', tier: 1, requires: null, meter: 'pace at a fixed heart rate, time over a benchmark', unit: 'session' },
-  { id: 'poise', tree: 'sinew', name: 'Poise', plain: 'agility — snowboard', tier: 2, requires: 'might', meter: 'falls per run, and the grade of terrain ridden', unit: 'run', oneShot: true, dormant: true },
+  { id: 'might', tree: 'sinew', name: 'Might', icon: '▲', plain: 'strength', tier: 1, requires: null, meter: 'total load, and estimated 1RM', unit: 'session' },
+  { id: 'vigor', tree: 'sinew', name: 'Vigor', icon: '∿', plain: 'stamina', tier: 1, requires: null, meter: 'pace at a fixed heart rate, time over a benchmark', unit: 'session' },
+  { id: 'poise', tree: 'sinew', name: 'Poise', icon: '◣', plain: 'agility — snowboard', tier: 2, requires: 'might', meter: 'falls per run, and the grade of terrain ridden', unit: 'run', oneShot: true, dormant: true },
   // ── Arcana
-  { id: 'alacrity', tree: 'arcana', name: 'Alacrity', plain: 'response time', tier: 2, requires: 'concentration', meter: 'median reaction time', unit: 'reaction test' },
-  { id: 'concentration', tree: 'arcana', name: 'Concentration', plain: 'focus', tier: 1, requires: null, meter: 'longest unbroken run, and the share cancelled', unit: 'timer run' },
-  { id: 'lore', tree: 'arcana', name: 'Lore', plain: 'coursework', tier: 2, requires: 'concentration', meter: 'the external grade', unit: 'course unit' },
+  { id: 'alacrity', tree: 'arcana', name: 'Alacrity', icon: '⟐', plain: 'response time', tier: 2, requires: 'concentration', meter: 'median reaction time', unit: 'reaction test' },
+  { id: 'concentration', tree: 'arcana', name: 'Concentration', icon: '◉', plain: 'focus', tier: 1, requires: null, meter: 'longest unbroken run, and the share cancelled', unit: 'timer run' },
+  { id: 'lore', tree: 'arcana', name: 'Lore', icon: '❑', plain: 'coursework', tier: 2, requires: 'concentration', meter: 'the external grade', unit: 'course unit' },
   // ── Hearth: who, not what. Logged, never graded.
-  { id: 'covenant', tree: 'hearth', name: 'Covenant', plain: 'the one person', tier: null, requires: null, meter: 'nothing — hours are logged and never graded', unit: null, graded: false },
-  { id: 'bloodline', tree: 'hearth', name: 'Bloodline', plain: 'family', tier: null, requires: null, meter: 'nothing — hours are logged and never graded', unit: null, graded: false },
-  { id: 'fellowship', tree: 'hearth', name: 'Fellowship', plain: 'friends', tier: null, requires: null, meter: 'nothing — hours are logged and never graded', unit: null, graded: false },
-].map((s) => ({ oneShot: false, dormant: false, graded: true, tier: null, requires: null, ...s }));
+  { id: 'covenant', tree: 'hearth', name: 'Covenant', icon: '♡', plain: 'the one person', tier: null, requires: null, meter: 'nothing — hours are logged and never graded', unit: null, graded: false },
+  { id: 'bloodline', tree: 'hearth', name: 'Bloodline', icon: '⌂', plain: 'family', tier: null, requires: null, meter: 'nothing — hours are logged and never graded', unit: null, graded: false },
+  { id: 'fellowship', tree: 'hearth', name: 'Fellowship', icon: '⚭', plain: 'friends', tier: null, requires: null, meter: 'nothing — hours are logged and never graded', unit: null, graded: false },
+].map((s) => ({ oneShot: false, dormant: false, graded: true, tier: null, requires: null, icon: '◇', ...s }));
 
 const BY_ID = new Map(SKILLS.map((s) => [s.id, s]));
 export const skillById = (id) => BY_ID.get(id) || null;
@@ -107,7 +107,7 @@ export function boardRecords() {
   const skills = SKILLS.map((s) => ({
     id: skillRecordId(s.id), type: 'skill', name: s.name, plain: s.plain,
     stat: statId(s.tree), tree: s.tree, skill: s.id, place: null,
-    unit: s.unit, oneShot: s.oneShot, dormant: s.dormant, graded: s.graded,
+    unit: s.unit, icon: s.icon, oneShot: s.oneShot, dormant: s.dormant, graded: s.graded,
     tier: s.tier, requires: s.requires, meter: s.meter,
   }));
   return [...stats, ...skills];

@@ -81,6 +81,14 @@ describe('every skill says what it is', () => {
     assert.match(skillById('poise').meter, /fall/i);
   });
 
+  test('every skill has an icon, and no two in a tree share one', () => {
+    for (const s of SKILLS) assert.ok(s.icon && s.icon.length <= 2, `${s.id} has no icon`);
+    for (const tree of [...new Set(SKILLS.map((x) => x.tree))]) {
+      const icons = treeSkills(tree).map((x) => x.icon);
+      assert.equal(new Set(icons).size, icons.length, `${tree} has a duplicate icon`);
+    }
+  });
+
   test('Hearth says plainly that it is not measured', () => {
     for (const s of treeSkills('hearth')) assert.match(s.meter, /never graded|not measured/i);
   });
