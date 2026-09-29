@@ -21,9 +21,10 @@ take their look from it. See "## Play".
 
 ## Shape
 
-- **Stats → skills → tasks.** 4–6 stats of the player's choosing (defaults
-  Body, Mind, Craft, Work, Bonds). Skills sit under stats and level up.
-  Life satisfaction is a separate weekly 0–10 score XP cannot buy.
+- **Stats → skills → tasks.** Up to **seven** stats of the player's choosing;
+  theirs are the seven trees of "The board" below, which supersede the old
+  Body / Mind / Craft / Work / Bonds defaults. Skills sit under stats and
+  level up. Life satisfaction is a separate weekly 0–10 score XP cannot buy.
 - **Task:** a measure (`time` | `count` | `quality`), a cadence (`daily` |
   `weekly` | `once` | `anytime`), an estimate in minutes, stamina/mana cost
   (negative restores), optional deadline, place, batch type, `critical`,
@@ -72,6 +73,96 @@ The display name is the tree's; the plain meaning is the grey subtitle beside
 it — *Summoning · procurement* — so the character sheet does not become a
 crossword.
 
+### What lands in Flow: six types
+
+Everything the day produces is one of six things, and **only one of them is a
+choice the player makes.** The rest are decided by facts — whether the work is
+an instance of a unit of output, whether the world sent it back — which is
+what keeps the board from becoming a set of self-selected labels.
+
+| type | what it is | what it earns |
+|---|---|---|
+| **Skill work** | an instance of a skill's unit of output | points · Depth · Grade · Insight |
+| **Toil** | real work that is an instance of nothing the player is improving at | points · counts toward **Toil %** · has a **bounce rate** |
+| **Moment** | life, not work: a drive, a meal, rest, a chat | energy only, never points |
+| **Rework** | a redo of something already done | **never a new unit.** Folds into the original's true minutes and takes its points back |
+| **Claim** | a written prediction with a check date (Augury) | nothing when written; **Insight** when it resolves |
+| **Boss** | a scheduled external audit: a certification, a FAT, a course grade | confirms the meters were not lying; moves no meter itself |
+
+What decides which:
+
+- **Skill work or Toil** — whether the task is an instance of a declared unit
+  of output. Not how it felt, not a dropdown.
+- **One-shot or iterable** is a property of the **skill**, fixed once, never
+  of the individual task (see "Right once").
+- **Rework** is decided by the world: something came back.
+- **Focus** is the only free choice — one skill per task, declared before
+  starting. It does **not** change which meter the task feeds. A released
+  drawing scores as Inscription whatever the player was thinking about; a
+  focus of Sundering only changes the question asked afterwards ("how many
+  library parts did you reuse?"), and that answer is the experiment.
+
+Focus is optional. A task with nothing to get better at — *Reimbursement*,
+*PO Receipt* — takes no focus and Toil absorbs it. Forcing a focus onto
+filing an expense report is how a good mechanic becomes a tax.
+
+### Most tasks belong to no skill, and that is the point
+
+A task joins a skill **only when it is an instance of that skill's unit of
+output** — a modelled part, a released drawing, a req, a thread with a
+question in it, a handoff. Everything else is left unclassified. Not
+"miscellaneous": unclassified.
+
+Forcing every task into a tree would be the worst thing the board could do to
+itself. *Reimbursement*, *PO Receipt*, *Deliver to the room*, *Clear Tickets*,
+*25G* are real work and real minutes, and none of them is an instance of
+anything the player is getting better at. Filed under Summoning they would
+poison minutes-per-req with things that are not reqs, and the meter would
+drift while the player did nothing differently. A measure is only as good as
+its denominator.
+
+So the three numbers count different things, deliberately:
+
+- **Points (fuel)** count *every* minute. The 720 cap is a budget of hours in
+  a day and every hour spends from it, classified or not.
+- **Depth** counts only the hours inside a skill.
+- **Grade** counts only completed units of that skill.
+
+**Toil** is the share of the week that belongs to no skill — work that pays
+fuel and makes the player better at nothing. It is shown on the week's
+grouping beside the trees, as a percentage, and it is the one number on the
+board that is meant to go **down**. Driving it down is the whole operational
+thesis in a single figure: the same output from fewer hours that teach nothing.
+
+**Toil is measured once, and it is not pace.** Administrative work is where
+doing it twice hurts most: a reimbursement filed wrong, a PO with the wrong
+part number, a bounced requisition. The cost of the error is high *and* the
+redo teaches nothing — a drawing redone at least leaves the player better at
+drawings; a refiled expense report leaves them exactly where they were, minus
+an hour. So Toil carries no Depth and no Grade, because nobody is trying to
+become a master of expense reports, and exactly one number: **bounce rate**,
+how often administrative work comes back. Its minutes count double when it
+does.
+
+Two scoreboards, wanting opposite things:
+
+| | hours | quality meter | target |
+|---|---|---|---|
+| a skill | up or steady | pace on clean units | Grade climbing |
+| Toil | **down** | bounce rate | **zero**, on fewer hours |
+
+**The intervention for Toil is a checklist, not practice.** Deliberate
+practice is for work with a craft in it. For a routine one-shot procedure the
+answer is a template that cannot be filled in wrongly — make the mistake
+impossible rather than get better at not making it. A Toil type that bounces
+twice has earned a checklist, and the checklist retires it.
+
+**Routing.** A task's skill comes from Planner's own skill for it where there
+is one, else a rule the player keeps in Settings (project → skill, or a title
+pattern → skill), else nothing. Classification is by unit of output, never by
+topic: "Talk to Jeffery about Alcon" is a **Parley** only if it had a decision
+to produce, and otherwise it is a moment with a duration.
+
 ### One spine
 
 Every quality measure above is the same measure wearing different clothes:
@@ -83,7 +174,9 @@ generalises to all seven.
 ### What a level is
 
 Points are **fuel**, capped at 720 a day, and are not the score. A skill
-carries two numbers, both logarithmic, doing different jobs.
+carries three numbers doing different jobs: **Depth** and **Grade**, both
+logarithmic, below — and **Insight**, defined under "Complexity, and grading
+yourself". Toil carries none of them; it has a bounce rate and nothing else.
 
 **Depth** = `1 + ⌊log₂(hours)⌋` — the logbook. Never falls. Each level costs
 double the last, so a lifetime in a skill is about fourteen levels rather than
@@ -100,7 +193,10 @@ be chosen on a skill the player has three hours in. Ranks by band — Initiate
 
 **Grade** = `round(10 × log₂(pace))`, where `pace` = baseline minutes-per-unit
 ÷ current minutes-per-unit, with rework folded into true minutes so that fast
-and sloppy cannot move it. **This is the score, and it can fall.**
+and sloppy cannot move it. For a **one-shot** skill the unit counts only if it
+did not come back (see "Right once"), which is what stops the score punishing
+the player for slowing down to get it right. **This is the score, and it can
+fall.**
 
 | you are | at your baseline | 15% faster | 50% faster | twice as fast |
 |---|---|---|---|---|
@@ -203,63 +299,6 @@ being called.
   scored on slope held above zero and on which plateaus were broken — not on
   levels reached.
 
-### Most tasks belong to no skill, and that is the point
-
-A task joins a skill **only when it is an instance of that skill's unit of
-output** — a modelled part, a released drawing, a req, a thread with a
-question in it, a handoff. Everything else is left unclassified. Not
-"miscellaneous": unclassified.
-
-Forcing every task into a tree would be the worst thing the board could do to
-itself. *Reimbursement*, *PO Receipt*, *Deliver to the room*, *Clear Tickets*,
-*25G* are real work and real minutes, and none of them is an instance of
-anything the player is getting better at. Filed under Summoning they would
-poison minutes-per-req with things that are not reqs, and the meter would
-drift while the player did nothing differently. A measure is only as good as
-its denominator.
-
-So the three numbers count different things, deliberately:
-
-- **Points (fuel)** count *every* minute. The 720 cap is a budget of hours in
-  a day and every hour spends from it, classified or not.
-- **Depth** counts only the hours inside a skill.
-- **Grade** counts only completed units of that skill.
-
-**Toil** is the share of the week that belongs to no skill — work that pays
-fuel and makes the player better at nothing. It is shown on the week's
-grouping beside the trees, as a percentage, and it is the one number on the
-board that is meant to go **down**. Driving it down is the whole operational
-thesis in a single figure: the same output from fewer hours that teach nothing.
-
-**Toil is measured once, and it is not pace.** Administrative work is where
-doing it twice hurts most: a reimbursement filed wrong, a PO with the wrong
-part number, a bounced requisition. The cost of the error is high *and* the
-redo teaches nothing — a drawing redone at least leaves the player better at
-drawings; a refiled expense report leaves them exactly where they were, minus
-an hour. So Toil carries no Depth and no Grade, because nobody is trying to
-become a master of expense reports, and exactly one number: **bounce rate**,
-how often administrative work comes back. Its minutes count double when it
-does.
-
-Two scoreboards, wanting opposite things:
-
-| | hours | quality meter | target |
-|---|---|---|---|
-| a skill | up or steady | pace on clean units | Grade climbing |
-| Toil | **down** | bounce rate | **zero**, on fewer hours |
-
-**The intervention for Toil is a checklist, not practice.** Deliberate
-practice is for work with a craft in it. For a routine one-shot procedure the
-answer is a template that cannot be filled in wrongly — make the mistake
-impossible rather than get better at not making it. A Toil type that bounces
-twice has earned a checklist, and the checklist retires it.
-
-**Routing.** A task's skill comes from Planner's own skill for it where there
-is one, else a rule the player keeps in Settings (project → skill, or a title
-pattern → skill), else nothing. Classification is by unit of output, never by
-topic: "Talk to Jeffery about Alcon" is a **Parley** only if it had a decision
-to produce, and otherwise it is a moment with a duration.
-
 ### Objectives
 
 Each skill carries a **target condition** stated before the season, and each
@@ -310,6 +349,14 @@ trajectory — they can only confirm that the weekly meter was not lying. The
 game runs on the meters; the certificate says the meters were honest.
 
 ## Points (= XP)
+
+> **Superseded in part, not yet rebuilt (2026-09-28).** The player has decided
+> that points are **fuel**: `minutes × difficulty`, capped at **720 a day**
+> (twelve hours at a point a minute), and that the bonuses below — flow,
+> personal best, underdog, combo, batch — stop multiplying points and become
+> their own separate score. The rules in this section are what the code still
+> does. The board's Grade, not points, is the score. Until the rebuild lands,
+> read this section as history.
 
 - Base = **estimated minutes × quality × 1 point/min**. Estimates: a repeated
   task (≥ 3 runs) uses its flow target in minutes (recent average − 5%), so it
