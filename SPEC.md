@@ -150,6 +150,33 @@ still due on the days after a week that was missed, until one is done. A new
 player's first review is due on their first Sunday. One review per week; a
 second in the same week replaces the first.
 
+### The week in skills (decided 2026-09-28)
+
+A week of completions is a pile of task names, and what it does not say is the
+thing worth knowing: **which skill sets the week actually went into.** So the
+review opens with the week grouped by skill, not by task.
+
+- One row per skill worked this week, **longest first**: the true minutes
+  spent (a completion's minutes plus any fix minutes logged against it), the
+  points earned, how many runs, the share of the week, and the tasks inside it
+  with their own runs and minutes.
+- Skills roll up into their stat, so the week also reads as four to six
+  numbers: where the week went at the level the player thinks in.
+- Beside each, **the week before**: the change in minutes, so a skill being
+  picked up or dropped is visible without doing arithmetic. Nothing else is
+  inferred from one week — a week is too short to call a trend.
+- A skill with no work this week is not a row. Moments are not work and are
+  not counted. Rework minutes belong to the skill they were spent on.
+- **What needs improving, not only where the time went.** Each row carries its
+  **rework share** — fix minutes over true minutes — because that is where the
+  week went wrong rather than merely where it went. And below the rows, the
+  skills **not** worked this week, longest-cold first, with how long since each
+  last was: a skill you keep not choosing is the one worth noticing.
+
+Points are the fuel and the level is the receipt; neither says what is
+improving. That is the trajectory (see below), and this grouping is what it is
+measured over.
+
 ## Moments and places
 
 - **Moments** = life that is not a task (Drive, Chat, Walk the floor,

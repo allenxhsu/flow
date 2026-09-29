@@ -600,3 +600,43 @@ test('Tasks: the backlog toggle shows what Planner has, marked as not today', ()
   assert.match(html, /Burger King/);
   assert.match(html, /Global Security Training/);
 });
+
+// ─── the week in skills (SPEC.md › Streaks, reviews, achievements) ─────────
+
+/** Mail twice and Run once this week, Read never; one rework on Mail. */
+function workedWeek() {
+  const g = game();
+  g.task({ id: 'task_mail', title: 'Mail', skill: 'sk_mail', measure: 'time', cadence: 'anytime', estimate: 30 });
+  g.task({ id: 'task_pr', title: 'Purchase request', skill: 'sk_mail', measure: 'time', cadence: 'anytime', estimate: 20 });
+  g.task({ id: 'task_run', title: 'Run 5k', skill: 'sk_run', measure: 'time', cadence: 'daily', estimate: 30 });
+  const d = g.done('task_mail', '2026-09-21T10:00:00', 30);
+  g.done('task_pr', '2026-09-23T10:00:00', 20);
+  g.done('task_run', '2026-09-23T18:00:00', 45);
+  g.rework(d, '2026-09-23T09:00:00', 20);
+  return g;
+}
+
+test('Review: the week opens with the skills it went into, longest first', () => {
+  const html = review.render(ctxOf(workedWeek(), '2026-09-27T12:00:00'));
+  const order = [...html.matchAll(/data-week-skill="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(order, ['sk_mail', 'sk_run'], '70 minutes of Mail before 45 of Run');
+  assert.match(html, /Purchase request/, 'the tasks inside the skill');
+});
+
+test('Review: each skill shows its share, its rework and the change on last week', () => {
+  const html = review.render(ctxOf(workedWeek(), '2026-09-27T12:00:00'));
+  const row = /data-week-skill="sk_mail"[\s\S]*?<\/section>|data-week-skill="sk_mail"[\s\S]*?<\/div>\s*<\/div>/.exec(html)[0];
+  assert.match(row, /61%|61 %/, '70 of 115 minutes');
+  assert.match(row, /rework/i);
+});
+
+test('Review: the skills not worked this week are named, so a gap is visible', () => {
+  const html = review.render(ctxOf(workedWeek(), '2026-09-27T12:00:00'));
+  assert.match(html, /Read/, 'never worked at all');
+  assert.match(html, /not worked|untouched|no work/i);
+});
+
+test('Review: a week with no work says so rather than showing an empty table', () => {
+  const html = review.render(ctxOf(game(), '2026-09-27T12:00:00'));
+  assert.match(html, /nothing logged|no work this week/i);
+});

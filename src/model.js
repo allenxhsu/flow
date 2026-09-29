@@ -1251,6 +1251,109 @@ export function reviewDue(reviews, day) {
   return !!latest && latest.week < isoWeek(addDays(day, -7));
 }
 
+// ─── the week in skills ─────────────────────────────────────────────────────
+// SPEC.md › Streaks, reviews, achievements › The week in skills. A week of
+// completions is a pile of task names; what it does not say is which skill
+// sets the week went into, and which one keeps not being chosen. The time in
+// a day is fixed, so the question is never "did I do more hours" — it is
+// where the hours went and how much of them was spent doing something twice.
+
+/** Minutes really spent in a week on a skill, and what they bought. */
+function weekBucket(skill, db) {
+  return {
+    id: skill.id, name: skill.name, stat: skill.stat,
+    statName: db.stat.get(skill.stat)?.name || '',
+    minutes: 0, points: 0, runs: 0, rework: { count: 0, minutes: 0 }, tasks: new Map(),
+  };
+}
+
+/**
+ * The ISO week `day` falls in, grouped by skill and rolled up by stat, with
+ * the week before beside it. Minutes are where the time was really spent: a
+ * completion's minutes in the week it was done, a rework's fix minutes in the
+ * week the fix was done. Moments are not work and are not counted.
+ */
+export function weekInSkills(db, day) {
+  const week = isoWeek(day);
+  const prior = isoWeek(addDays(day, -7));
+  const now = new Map();
+  const was = new Map();
+  const of = (id) => db.skill.get(id);
+  const bucketFor = (map, skillId) => {
+    const skill = of(skillId);
+    if (!skill) return null;
+    if (!map.has(skillId)) map.set(skillId, weekBucket(skill, db));
+    return map.get(skillId);
+  };
+  const pick = (w) => (w === week ? now : w === prior ? was : null);
+
+  const days = new Set();
+  for (const d of db.done) {
+    const map = pick(isoWeek(d.day));
+    if (!map) continue;
+    const task = db.task.get(d.task);
+    const b = bucketFor(map, task?.skill);
+    if (!b) continue;
+    if (map === now) days.add(d.day);
+    b.minutes += d.minutes || 0;
+    b.points += d.price?.points || 0;
+    b.runs += 1;
+    const t = b.tasks.get(d.task) || { id: d.task, title: task?.title || '(deleted task)', runs: 0, minutes: 0, points: 0 };
+    t.runs += 1; t.minutes += d.minutes || 0; t.points += d.price?.points || 0;
+    b.tasks.set(d.task, t);
+  }
+  for (const r of db.rework) {
+    const map = pick(isoWeek(r.day));
+    if (!map) continue;
+    const taskId = r.task || db.done.find((d) => d.id === r.done)?.task;
+    const b = bucketFor(map, db.task.get(taskId)?.skill);
+    if (!b) continue;
+    b.minutes += r.minutes || 0;
+    b.rework.count += 1;
+    b.rework.minutes += r.minutes || 0;
+    const t = b.tasks.get(taskId);
+    if (t) t.minutes += r.minutes || 0;
+  }
+
+  const total = [...now.values()].reduce((n, b) => n + b.minutes, 0);
+  const longest = (a, b) => b.minutes - a.minutes || a.name.localeCompare(b.name);
+  const skills = [...now.values()].map((b) => ({
+    ...b,
+    tasks: [...b.tasks.values()].sort((x, y) => y.minutes - x.minutes || x.title.localeCompare(y.title)),
+    share: total ? b.minutes / total : 0,
+    reworkShare: b.minutes ? b.rework.minutes / b.minutes : 0,
+    prior: { minutes: was.get(b.id)?.minutes || 0, points: was.get(b.id)?.points || 0 },
+    change: b.minutes - (was.get(b.id)?.minutes || 0),
+  })).sort(longest);
+
+  const stats = [];
+  for (const k of skills) {
+    let s = stats.find((x) => x.id === k.stat);
+    if (!s) { s = { id: k.stat, name: k.statName, minutes: 0, points: 0, runs: 0, reworkMinutes: 0, skills: [] }; stats.push(s); }
+    s.minutes += k.minutes; s.points += k.points; s.runs += k.runs; s.reworkMinutes += k.rework.minutes;
+    s.skills.push(k.name);
+  }
+  for (const s of stats) {
+    s.share = total ? s.minutes / total : 0;
+    s.reworkShare = s.minutes ? s.reworkMinutes / s.minutes : 0;
+  }
+  stats.sort(longest);
+
+  // The ones not chosen this week, longest-cold first: never worked is coldest
+  // of all. A skill you keep not picking is the one worth noticing.
+  const lastDay = new Map();
+  for (const d of db.done) {
+    const skill = db.task.get(d.task)?.skill;
+    if (skill && (!lastDay.has(skill) || d.day > lastDay.get(skill))) lastDay.set(skill, d.day);
+  }
+  const untouched = db.skills.filter((k) => !now.has(k.id)).map((k) => {
+    const last = lastDay.get(k.id) || null;
+    return { id: k.id, name: k.name, stat: k.stat, last, days: last ? daysBetween(last, day) : null };
+  }).sort((a, b) => (b.days ?? Infinity) - (a.days ?? Infinity) || a.name.localeCompare(b.name));
+
+  return { week, day, minutes: total, points: skills.reduce((n, k) => n + k.points, 0), days: days.size, skills, stats, untouched };
+}
+
 // ─── achievements ───────────────────────────────────────────────────────────
 
 const ACHIEVEMENTS = [

@@ -317,3 +317,15 @@
   :root[data-mode='hud'] .fix-row .fix-what { grid-column: 2 / -1; }
   :root[data-mode='hud'] .fix-row .fix-min { display: none; }
 }
+
+/* The week in skills (SPEC.md › The week in skills): one row per skill set the
+   week went into, its share as a bar, and the tasks inside it. */
+:root[data-mode='hud'] .wk-stats { flex-wrap: wrap; gap: 6px; }
+:root[data-mode='hud'] .wk-skill .item-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--sc-space-2); }
+:root[data-mode='hud'] .wk-skill .wk-minutes { font-family: var(--sc-font-mono); }
+:root[data-mode='hud'] .wk-skill .wk-share { color: var(--sc-text-3); font-family: var(--sc-font-mono); min-width: 3em; text-align: right; }
+:root[data-mode='hud'] .wk-tasks { list-style: none; margin: 0; padding: 0 0 0 var(--sc-space-3); display: grid; gap: 2px; border-left: 1px solid var(--sc-line); }
+:root[data-mode='hud'] .wk-tasks li { display: flex; justify-content: space-between; gap: var(--sc-space-2); font-size: var(--sc-text-sm); }
+:root[data-mode='hud'] .wk-tasks .wk-task { color: var(--sc-text-2); overflow-wrap: anywhere; }
+:root[data-mode='hud'] .wk-cold { border-top: 1px dashed var(--sc-line); padding-top: var(--sc-space-3); }
+:root[data-mode='hud'] .wk-cold .row { flex-wrap: wrap; gap: 6px; }
