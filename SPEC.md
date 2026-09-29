@@ -519,10 +519,12 @@ plan. Flow's own tasks (dailies, habits, chores) stay alongside.
   offered anywhere: not on Now, not in Tasks, not in Play's Start menu, not in
   the Terminal, and the picker never suggests it. It stays in the index, so a
   stored completion keeps its title and skill. Flow's own tasks are not
-  Planner's to schedule and are never hidden by this. When Planner has not
-  published the day, or published one naming nothing, nothing is hidden: an
-  empty list is far likelier to be a failure to compute the day than a day
-  with no work on it.
+  Planner's to schedule and are never hidden by this. A day published with
+  nothing on it is a real answer — by the evening Planner has rolled what is
+  left to tomorrow — so the Planner list is then empty and the screen says the
+  day is clear, with everything Planner has one toggle away. Only a day
+  Planner has **never** published hides nothing and offers the backlog as
+  today's list.
 - **Shape:** each becomes a derived Flow task — never stored — with id
   `task_pl_<planId>_<taskId>`, title the task's name, project name shown,
   measure `time`, cadence `once`, `source: { app: 'project', plan, task }`:

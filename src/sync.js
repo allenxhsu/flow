@@ -119,12 +119,15 @@ export function db() {
     // `offToday` so the screens can leave it out. Null means Planner has not
     // published the day, and then nothing is hidden.
     const laid = plannerById.size ? plannerDay(plannerRecords(), dayOf(opts.now), opts) : null;
-    // `laid.length` and not just `laid`: a published day naming nothing empties
-    // the whole list, which is indistinguishable from a bug and is the worst
-    // outcome available — it is far likelier to mean Planner failed to compute
-    // the day than that there is genuinely nothing on it. An empty day falls
-    // back to the backlog, same as no day at all.
-    if (laid && laid.length) {
+    // An empty published day is a real answer, not a missing one: by the
+    // evening Planner has rolled what is left to tomorrow and publishes a
+    // today with nothing on it. This used to fall back to the backlog, and at
+    // 8 pm 403 Planner tasks going back to 2024 came back. Only `null` — a day
+    // Planner has never published — means "I do not know", and only that
+    // falls back. The Tasks screen says when the day is clear and keeps the
+    // backlog one toggle away (play().backlog), so an empty list is never
+    // just an empty list.
+    if (laid) {
       const on = new Map(laid.map((t) => [t.id, t]));
       d.tasks = d.tasks.map((t) => {
         const row = on.get(t.id);

@@ -572,3 +572,31 @@ test('Now: a deep link to Log done opens the form for that task with the minutes
   await now.openLink({ ...ctx, toast: (m) => warned.push(m) }, { action: 'done', task: 'task_gone', minutes: 5 });
   assert.equal(warned.length, 1, 'a task that is gone is said, not thrown');
 });
+
+// ─── the day is clear (SPEC.md › Planner tasks › Today is Planner's Today) ──
+
+/** Two Planner tasks, neither laid on today: the evening, everything rolled on. */
+function clearDay() {
+  const g = game();
+  const skill = { id: 'sk_pl', type: 'skill', name: 'Work', stat: 'stat_work' };
+  const of = (id, title) => ({ id, type: 'task', title, skill: 'sk_pl', measure: 'time', cadence: 'once', estimate: 30, stamina: 0, mana: 0, source: { app: 'project', plan: 'p', task: id }, project: 'Amada', offToday: true });
+  g.add(skill, of('task_pl_p_a', 'Visit Burger King for Lunch'), of('task_pl_p_b', 'Global Security Training'));
+  return g;
+}
+
+test('Tasks: a clear day says so and does not fall back to the backlog', () => {
+  const g = clearDay();
+  const html = tasksView.render(ctxOf(g));
+  assert.doesNotMatch(html, /Burger King/, 'nothing Planner left off today');
+  assert.match(html, /clear|nothing on today/i, 'it says why the list is empty');
+  assert.match(html, /data-toggle="backlog"/, 'and offers the backlog');
+  assert.match(html, /\b2\b/, 'saying how many are in it');
+});
+
+test('Tasks: the backlog toggle shows what Planner has, marked as not today', () => {
+  const g = clearDay();
+  const ctx = { ...ctxOf(g), ui: { showBacklog: true } };
+  const html = tasksView.render(ctx);
+  assert.match(html, /Burger King/);
+  assert.match(html, /Global Security Training/);
+});

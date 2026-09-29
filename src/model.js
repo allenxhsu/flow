@@ -1293,7 +1293,8 @@ export function play(records, now = Date.now()) {
   const totalXp = [...xp.values()].reduce((a, b) => a + b, 0);
 
   const tier = difficultyOn(db, day);
-  const tasks = db.tasks.filter((t) => !offToday(t)).map((t) => {
+  const onToday = db.tasks.filter((t) => !offToday(t));
+  const tasks = onToday.map((t) => {
     const mine = db.done.filter((d) => d.task === t.id);
     const hist = taskStats(db, t, Infinity, rw, difficultyOn(db, day, t.skill).targetStep);
     const streak = t.cadence === 'daily' ? dailyStreak(new Set(mine.map((d) => d.day)), day, tier.grace)
@@ -1353,6 +1354,9 @@ export function play(records, now = Date.now()) {
     now, day, week: isoWeek(day),
     settings: db.settings,
     player, difficulty, balance, energy, stats, skills, tasks,
+    // What Planner has, but did not lay on today: never offered, kept here so
+    // a screen can show it behind a toggle (SPEC.md › Today is Planner's Today).
+    backlog: db.tasks.filter((t) => offToday(t) && !t.archived).sort((a, b) => a.title.localeCompare(b.title)),
     rewards: db.rewards.filter((r) => !r.archived).map((r) => ({ ...r, affordable: balance >= r.price, bought: db.purchases.filter((p) => p.reward === r.id).length })),
     next, combo, batch,
     today: { points: doneToday.reduce((n, d) => n + (d.price?.points || 0), 0), done: doneToday.length, minutes: doneToday.reduce((n, d) => n + d.minutes, 0) },

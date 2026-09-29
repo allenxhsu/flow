@@ -88,14 +88,16 @@ test("another day's record is not today's", () => {
   assert.equal(plannerDay([...RECORDS, other], '2026-09-29', opts).length, 1);
 });
 
-test('an empty published day must not empty the task list', () => {
-  // It did. Planner's Agenda threw after publishing, so it published a day
-  // naming nothing; Flow marked every Planner task offToday and the list went
-  // blank. `sync.js` now falls back unless the day names at least one task —
-  // hiding everything is never the right reading of "I do not know".
+test('an empty published day is a day with nothing on it, not a missing day', () => {
+  // This assertion used to say the opposite, and it was wrong. Flow fell back
+  // to the whole backlog whenever the day named nothing, so at 8 pm — when
+  // Planner had rolled the rest of the day to tomorrow and published an empty
+  // today, truthfully — 403 Planner tasks going back to 2024 came back. An
+  // empty day is a real answer. Only a day Planner has never published (null)
+  // is "I do not know", and only that falls back.
   const empty = plannerDay([...RECORDS, agenda([])], DAY, opts);
-  assert.equal(empty.length, 0);
-  assert.equal(Boolean(empty && empty.length), false, 'the guard sync.js applies');
+  assert.deepEqual(empty, [], 'published and empty');
+  assert.equal(plannerDay(RECORDS, DAY, opts), null, 'never published');
 });
 
 // ── catching up earns nothing ───────────────────────────────────────────────
@@ -181,6 +183,19 @@ test('Planner has not published the day: nothing is hidden', () => {
   const { tasks, skills } = plannerTasks(RECORDS, opts);
   const g = play(index([...STATS, ...skills, ...tasks]), NOW);
   assert.ok(g.tasks.length >= 5, 'without an agenda the whole backlog is still offered');
+  assert.deepEqual(g.backlog, [], 'nothing is off the day, so nothing is in the backlog');
+});
+
+test('a day with nothing on it empties the Planner list, and the backlog is kept aside', () => {
+  const { tasks, skills } = plannerTasks(RECORDS, opts);
+  // What sync.js does when the day is published and names nothing: every
+  // Planner task is off today.
+  const off = tasks.map((t) => ({ ...t, offToday: true }));
+  const g = play(index([...STATS, ...skills, ...off]), NOW);
+  assert.deepEqual(g.tasks, [], 'nothing is on today');
+  assert.equal(g.backlog.length, tasks.length, 'the screens can still show it behind a toggle');
+  assert.ok(g.backlog.every((t) => t.title), 'the backlog carries the same shape as a task');
+  assert.equal(g.next.next, null, 'and the picker suggests nothing');
 });
 
 test('the Terminal lists the day too', () => {
