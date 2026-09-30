@@ -337,8 +337,9 @@ being called.
 ### Rules the board needs
 
 - **Season 0 is a baseline.** Grade is meaningless until a skill has a
-  baseline, so the first four weeks of any skill are measured and not graded.
-  A skill shows `Grade —` until its baseline closes.
+  baseline, so a skill is measured and not graded until its baseline closes:
+  four weeks **and** 10 units (5 for a one-shot skill), whichever comes later
+  (see "Engagement › 2"). A skill shows `Grade —` until then.
 - **Hearth is never graded.** No Grade, no pace, no trajectory, no streak.
   Hours are logged and the weekly satisfaction score is the only number near
   it. Scoring a relationship changes what the relationship is for.
@@ -597,6 +598,297 @@ measured over.
 - Finale: day totals, energy through the day with drains/restores, where time
   went, tomorrow's first task.
 - Sound: original chiptune via WebAudio, **off by default**.
+
+## Engagement (decided 2026-09-30)
+
+The board was checked against the twelve things that keep a game played:
+clear goals, immediate feedback, progression, reward loops, balanced
+challenge, mastery, variable rewards, short and long goals, autonomy, social,
+novelty and low friction. Progression, balance, mastery, goals and autonomy
+are already the board's strengths. Five changes close the rest, in this order.
+None of them lets points be multiplied, and none lets chance touch Depth,
+Grade or Insight.
+
+### 1. The friction budget
+
+Success test one is **checking in on five days a week**. Every field the
+player must fill in works against it, so logging has a budget.
+
+- **A check-in day** is any day with at least one record the player wrote:
+  a done, rework, moment, energy rating, review, skip, spend, visit, habit
+  tick, mood or gratitude entry. Corrections do not count; they edit a day,
+  they do not attend it.
+- **Check-in rate** is shown as a number, not a streak: days checked in over
+  the last 7 (`5/7`) in the Now header, and over the last 28 in the weekly
+  review, beside the week's satisfaction. It earns nothing. It is the first
+  success test, on the board where the player can see it.
+- **One tap to log.** Stopping the timer on a task whose skill is not
+  one-shot logs it at once, with the timer's minutes and quality 100%. A
+  toast offers **Edit** for ten seconds; after that a change is a correction
+  (amend). A `count` task shows one number field, filled with the last value
+  logged for that task (1 if none), and its Log button: still one tap when
+  nothing changed.
+- **One-shot skills ask one question, and the answer is the tap.** Stopping
+  the timer on a task in a one-shot skill (Inscription, Summoning, Trial,
+  Deliverance, Parley, Council, Decree, Poise) shows three large buttons —
+  **Clean** · **Minor fixes expected** · **This will come back** — and
+  pressing one logs the task with that call. This is the right-once call from
+  "Complexity, and grading yourself", and nothing else asks for it.
+- **The budget:** one tap after stopping the timer, for every task. A new
+  required field anywhere in logging needs a spec decision; everything else
+  must default.
+
+### 2. The real score, straight away
+
+Points arrive at once and are not the score. Grade is the score and, until
+now, nothing computed it. This wires it up and shows it the moment a unit is
+logged.
+
+**Baseline.** A graded skill's baseline starts with its first unit and closes
+when **both** four weeks have passed **and** it holds a minimum number of
+units: **10 for an iterable skill, 5 for a one-shot skill**, overridable per
+skill in Settings. (This settles "Season 0" and "baseline over 20 parts": the
+later of the two.) Until it closes the skill shows `Grade —` and the progress
+towards closing.
+
+**Provisional units.** A one-shot unit counts as clean only once it has gone
+30 days without coming back. Before that it is **provisional**: counted as
+clean in the provisional Grade, left out of the settled one. The skill shows
+the settled Grade, with the provisional one beside it marked as such while any
+unit is still inside its 30 days.
+
+**The call resolves.** When a one-shot unit's 30 days are up, its call is
+checked against what happened: no rework is *clean*; one rework whose fix
+minutes are at most a quarter of the original is *minor*; anything more *came
+back*. **Insight** is the share of the last 20 resolved calls that matched.
+
+**The finish card.** After a skill task is logged, the card shows up to four
+lines, and only the ones that apply:
+
+1. **Pace vs target** — `38 min · 5% under target (40)`, for any task with a
+   target (three or more runs).
+2. **Grade move** — `Inscription Grade 4 → 5 (provisional)`, or
+   `Grade 4, held`. Hidden during the baseline.
+3. **Baseline progress** — `Baseline 7/10 units · week 3 of 4`, only during
+   the baseline.
+4. **Personal best** — a highlighted banner when the run beat the best.
+
+Toil shows none of this: it has a bounce rate and nothing else. Hearth is
+never graded.
+
+#### Contract
+
+- `BASELINE_UNITS = { iterable: 10, oneShot: 5 }`, `BASELINE_WEEKS = 4`,
+  `RETURN_WINDOW_DAYS = 30`, `INSIGHT_WINDOW = 20`.
+- `makeDone(…, { call })`: `call` is `'clean' | 'minor' | 'back' | null`;
+  required (not null) for a task in a one-shot skill, refused on any other.
+- `gradeOf(db, skillId, at)` →
+  `{ state: 'baseline' | 'graded' | 'ungraded', baseline: { units, clean, minutes, weeks, need: { units, weeks } }, grade, provisionalGrade, pace, insight }`.
+- `callOutcome(db, doneId, at)` → `'clean' | 'minor' | 'back' | 'pending'`.
+- `finishCard(db, doneId)` → `[{ kind: 'pace' | 'grade' | 'baseline' | 'best', text, … }]`.
+- `checkInRate(db, day, days = 7)` → `{ days, of }`.
+
+### 3. Getting better unlocks treats
+
+Points pay for treats because they say the day happened; nothing paid for
+getting better. Now a treat can be **locked** behind a condition. Its price
+in points does not change; the condition decides whether it is on the shelf.
+
+- `reward.unlock` is one of:
+  `{ kind: 'grade', skill: id | null, grade: n }` (null = any graded skill),
+  `{ kind: 'savings', goal: id, share: 0.25 | 0.5 | 0.75 | 1 }`,
+  `{ kind: 'bingo', card: id }` (any line on that card),
+  `{ kind: 'event' }` (the mid-season quest, below),
+  `{ kind: 'quest', quest: id }`.
+- A grade unlock uses the **settled** Grade, never the provisional one, so
+  work that later comes back cannot open a treat.
+- Once open a treat stays open, even if the Grade later falls: it was earned.
+- The shop shows a locked treat greyed out with its condition and how close
+  the player is.
+
+### 4. Chance, only where it cannot lie
+
+Every draw is seeded by the day and the player, so every device agrees and
+opening the app again never re-rolls.
+
+- **Daily bounty.** Each day one graded skill that is unlocked and was worked
+  in the last 28 days is drawn; its tasks earn **double style** today. Never
+  points, Grade or Insight. It is shown on Now.
+- **Mystery treat.** One shop slot holds a repeatable treat drawn from the
+  player's own list, its name hidden until bought, priced at **80%** of that
+  treat's price. A new draw each day.
+- **Encounters.** In Play, on the real clock, at most one random NPC
+  encounter a day, drawn from the world pack's `encounters` (the generic world
+  ships a few). An encounter writes nothing unless the player picks a choice
+  that already writes a record (such as `walk`).
+
+### 5. The mid-season quest
+
+A **season** starts on the date in Settings (`seasonStart`; default: the
+Monday of the player's first review) and lasts 12 weeks. On the first day of
+**week 6**, the skill that has gone longest without work — from the review's
+cold list, leaving out locked skills, dormant skills out of season and Hearth —
+gets a **two-week side quest: three units of that skill**. Finishing it opens
+the treats marked `{ kind: 'event' }`. Ignoring it costs nothing.
+
+## The Life layer (decided 2026-09-30)
+
+The board has seven trees and a cap of seven, and most of life is not an
+instance of any unit of output. Money, the home, the body's daily habits,
+people, mood, travel and hobbies still deserve streaks, quests and
+collections. They live in the **Life layer**, beside the board, not in it.
+
+**The rule of the layer:** it earns **streaks, style and achievements, and can
+open treats**. It never earns points, Depth, Grade or Insight, so it cannot
+move a meter. Work that is skill work (a run, a lift, a creative skill) stays
+on the board; the layer holds everything around it.
+
+### Habits
+
+A `habit` (definition) is `{ name, cadence: 'daily' | 'weekly', target = 1, unit = '', source = 'manual', threshold = null, key = false, penalty = 0 }`.
+A `tick` (event) records one period's progress: `{ habit, day, value = 1 }`.
+A period is met when its ticks add up to the target.
+
+- **Streaks** follow the board's rules: daily streaks forgive the difficulty
+  tier's grace days, weekly streaks count ISO weeks.
+- **The chain.** Any habit, and any daily task or daily moment, opens a
+  calendar with an X on each met day — the wall calendar, not a number.
+- **Apple Health habits** (`source: 'health:steps' | 'health:sleep'`,
+  `threshold` in steps or hours): the iOS app writes a `tick` **only when the
+  day met the threshold**, and never the number itself. Health data stays out
+  of Flow's records, as before.
+- **Style:** 5 per met period.
+
+| area | habits it covers |
+|---|---|
+| Health | steps ≥ threshold (Health), slept ≥ threshold (Health), 8 glasses of water (count), 5 servings of vegetables (count) |
+| People | reach out to someone (weekly), one kind act (daily). Hearth itself stays hours only. |
+| Mind | meditation (the existing daily moment keeps its streak) |
+
+### Today's three
+
+The player can pick up to three tasks or habits as **today's three** (or a
+saved set, such as a tidying trio). All three done that day: **+15 style** and
+a count toward an achievement.
+
+### Productivity additions
+
+- **Rounds.** A timer run of at least 25 unbroken minutes is a **round**. Now
+  shows today's rounds and the best day's count, as a high score.
+- **Stay in Flow.** Where the platform reports it (the iOS app; a browser
+  tab's visibility), leaving Flow for more than ten seconds while the timer
+  runs marks the run **broken**. A broken run is not a round, and is what
+  Concentration's "% cancelled" counts.
+- **Dread.** A task can be flagged `dread`. Before noon, the next-task picker
+  puts an affordable dread task first. Finished before noon: **+25% style**,
+  "dread slain". ("Boss" keeps its meaning: an external audit.)
+- **Speed runs.** A `count` task can carry `timebox` minutes: the timer counts
+  down and the count is the result, so the usual personal best applies.
+  Chores are Toil tasks, and already earn a point a minute.
+
+### Quests, challenges and collections
+
+- **Quest** (definition): `{ name, due, skill | habit | null, checkpoints: [{ by, text, task?, value? }] }` —
+  "5K by December" as weekly checkpoints. A checkpoint with a task and a value
+  ticks itself when a done on that task reaches the value; the rest are ticked
+  by hand. Finishing it is an achievement and can open treats.
+- **Challenge** (definition): `{ name, start, days, habit | task, total? }` — a
+  streak with an end date: 30-day drawing prompts, a photo a day, or a total
+  by a date (50,000 words in November) with a daily pace line.
+- **Collection** (definition): `{ name, target, year?, items: [{ name, place?, at? }] }` —
+  countries, national parks, trails, the neighbourhood's coffee shops, 10 new
+  restaurants, 12 books this year. An item with a named place ticks itself on
+  a `visit` there. Visited places light up on the Play map; coordinates are
+  never stored, as before.
+
+### Mood and gratitude
+
+- **Mood** (event): `{ day, value: 1–5 }`, one tap on Now, drawn as a
+  **year in pixels**. The weekly satisfaction score stays the success
+  measure; mood is the daily colour.
+- **Gratitude** (event): `{ day, text }`, up to three a day, filling a jar.
+  The text is the player's own, stored like a note.
+
+### Habit bingo
+
+A **bingo card** (definition) is `{ name, season, cells: [25 × { habit | quest | challenge | text }] }`.
+A cell is done when its habit was met on at least 5 days (daily) or 3 weeks
+(weekly) in the season, its quest or challenge is finished, or the player
+ticks a text cell. Each full row, column or diagonal gives **+50 style** and
+opens the card's treats.
+
+### Money
+
+The money comes from the player's own budgeting app (a Monarch clone, not yet
+on GitHub). **Flow never talks to a bank or a card.** The budgeting app
+exports a `flow.money` file (or serves it); Flow imports it in Settings, and
+later through the budgeting app writing into Flow's sync workspace.
+
+**Flow stores day totals, not transactions**: a `money` event per day,
+`{ day, discretionary, balances: { accountId: amount } }`, keeping only the
+accounts that a goal names. Merchant names, categories and card numbers never
+enter Flow's records. Importing the same day again replaces that day.
+
+- **Goals** (definition): `{ name, kind: 'save' | 'debt', account, start, target }`.
+- **Savings meter:** a `save` goal fills from its account's balance towards
+  the target. At 25/50/75/100% it drops **loot**: it opens that milestone's
+  treats and reminds the player to put a small real reward aside.
+- **Debt boss:** a `debt` goal is a boss with HP = balance ÷ start. Each fall
+  in the balance is shown as damage on that day; at zero it is slain. (This
+  is a Life boss, not an external audit.)
+- **No-spend streak:** a day whose `discretionary` total is 0. The
+  budgeting app decides what counts as discretionary.
+- **The penalty jar:** a `key` habit with `penalty: $n` adds $n to the jar for
+  every missed period past its grace. Flow moves no money: the jar is a
+  number, and paying it into savings is logged by hand.
+- Inventory's **money saved** by skips stays where it is, shown beside the
+  goals.
+
+### Hypermail
+
+Inbox zero week over week belongs to Hypermail. A later, separate change lets
+Hypermail write a daily `mail` summary (`{ day, inboxZeros, replies }`) into
+Flow's workspace, shown as a Life row. That is a change to another repository,
+opened when its phase comes.
+
+### Learning and creative skills
+
+A skill tree for guitar, a language or photography is **skill work**, not the
+Life layer: it has a unit of output and something that cannot be faked. It
+belongs as skills under **Arcana**, with tiers like every other tree.
+Portfolio levels are those tiers.
+
+## Open questions (2026-09-30)
+
+These were defaulted above so the section reads whole. Each needs the
+player's yes before its tests are written.
+
+1. **Current window for Grade.** The spec defines the baseline, not the
+   "current" side of pace. Default above: the most recent units, as many as
+   the baseline minimum (10 or 5), rolling.
+2. **"Minor" in the right-once call.** Default: one rework with fix minutes
+   at most 25% of the original.
+3. **Which hobby skills join Arcana**, and their units and tiers (guitar,
+   a language, photography…). `board.js` fixes the skill list today.
+4. **Season start** when the player sets none: the Monday of their first
+   review.
+5. **Sizes** that were picked, not decided: 3 units in 2 weeks for the
+   mid-season quest; the mystery treat at 80%; dread "before noon"; a round
+   at 25 minutes; style of 5 / 15 / 50 and +25%; a bingo cell at 5 days or
+   3 weeks.
+6. **The `flow.money` format** is owned by the budgeting app; the fields
+   above are what Flow needs from it.
+
+## Phases for this section
+
+1. Friction and Grade (1–2): the check-in rate, one-tap logging, the call,
+   `gradeOf`, the finish card.
+2. The Life layer's core: habits, ticks, the chain, Health ticks, mood,
+   gratitude, today's three, rounds, dread, speed runs.
+3. Unlocks, chance and the mid-season quest (3–5); quests, challenges,
+   collections, bingo.
+4. Money: the `flow.money` import, goals, no-spend, the jar.
+5. Hypermail's `mail` summary (a PR on Hypermail).
 
 ## Architecture
 
