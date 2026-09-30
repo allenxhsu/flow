@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="4 4 852 692" width="852" height="692"><style>
+text{font-family:Helvetica, Arial, sans-serif;font-size:12px;fill:#111418;dominant-baseline:auto}
+.d-mono{font-family:Menlo, Consolas, monospace;font-size:11px;fill:#2d343c}
+.d-name{font-family:Helvetica, Arial, sans-serif;font-size:12.5px;font-weight:600;letter-spacing:.04em}
+.d-italic{font-style:italic}
+.d-comp{font-size:10.5px;font-style:italic;fill:#5b6470}
+.d-frame{fill:none;stroke:#111418;stroke-width:1}
+.d-frame-tab{fill:#ffffff;stroke:#111418;stroke-width:1}
+.d-sym .d-shape{fill:#f4f8fd;stroke:#111418}
+.d-sym .d-rule,.d-sym .d-stick{stroke:#111418}
+.d-sym.c-b .d-shape{fill:#fdf8ee;stroke:#111418}
+.d-sym.c-b .d-rule,.d-sym.c-b .d-stick{stroke:#111418}
+.d-sym.c-c .d-shape{fill:#fbf3f6;stroke:#111418}
+.d-sym.c-c .d-rule,.d-sym.c-c .d-stick{stroke:#111418}
+.d-sym.c-n .d-shape{fill:#fffbe6;stroke:#5b6470}
+.d-sym.c-n .d-rule,.d-sym.c-n .d-stick{stroke:#5b6470}
+.d-shape{stroke-width:1.2}
+.d-shape.dashed{stroke-dasharray:6 4}
+.d-rule{stroke-width:.8;opacity:.55;fill:none}
+.d-stick{fill:none;stroke-width:1.5}
+.d-port{fill:#ffffff;stroke:#111418;stroke-width:1.2}
+.d-port-dir{fill:#111418;stroke:none}
+.d-line{fill:none;stroke:#2d343c;stroke-width:1.2}
+.d-line.dashed{stroke-dasharray:6 4}
+.d-head{fill:none;stroke:#2d343c;stroke-width:1.2}
+.d-head.filled{fill:#2d343c}
+.d-head.hollow{fill:#ffffff}
+.d-hit{fill:none;stroke:transparent;stroke-width:12}
+.d-label-bg{fill:#ffffff;opacity:.85}
+</style><rect x="4" y="4" width="852" height="692" fill="#fff"/><rect class="d-frame" x="20" y="20" width="820" height="660"/><path class="d-frame-tab" d="M20 20h344.8v14l-10 10H20z"/><text class="d-mono" x="30" y="36">ibd [block] Flow surfaces [Where the records go]</text><g class="d-symbols"><g class="d-sym " data-sym="sy_031" transform="translate(120 80)"><rect class="d-shape" width="200" height="110"/><text class="d-name" x="100" y="22" text-anchor="middle">page : Page</text></g><g class="d-sym " data-sym="sy_032" transform="translate(120 280)"><rect class="d-shape" width="200" height="140"/><text class="d-name" x="100" y="22" text-anchor="middle">terminal : Terminal</text></g><g class="d-sym " data-sym="sy_033" transform="translate(120 520)"><rect class="d-shape" width="200" height="110"/><text class="d-name" x="100" y="22" text-anchor="middle">iPhone : iPhone app</text></g><g class="d-sym " data-sym="sy_034" transform="translate(480 180)"><rect class="d-shape" width="200" height="140"/><text class="d-name" x="100" y="22" text-anchor="middle">sync : Sync</text></g><g class="d-sym " data-sym="sy_035" transform="translate(480 480)"><rect class="d-shape" width="200" height="110"/><text class="d-name" x="100" y="22" text-anchor="middle">cli : CLI</text></g></g><g class="d-paths"><g class="d-path" data-path="pa_029"><path class="d-hit" d="M120 378L102 378L102 575L120 575"/><path class="d-line" d="M120 378L102 378L102 575L120 575"/></g><g class="d-path" data-path="pa_030"><path class="d-hit" d="M320 135L400 135L400 250L480 250"/><path class="d-line" d="M320 135L400 135L400 250L480 250"/></g><g class="d-path" data-path="pa_031"><path class="d-hit" d="M320 322L400 322L400 250L480 250"/><path class="d-line" d="M320 322L400 322L400 250L480 250"/></g><g class="d-path" data-path="pa_032"><path class="d-hit" d="M680 250L760 250L760 350L840 350"/><path class="d-line" d="M680 250L760 250L760 350L840 350"/></g><g class="d-path" data-path="pa_033"><path class="d-hit" d="M680 535L760 535L760 350L840 350"/><path class="d-line" d="M680 535L760 535L760 350L840 350"/></g></g><g class="d-ports"><g class="d-portg" data-port="pr_011|po_004"><rect class="d-port" x="313" y="128" width="14" height="14"/><text class="d-mono" x="309" y="139" text-anchor="end">records</text></g><g class="d-portg" data-port="pr_013|po_007"><rect class="d-port" x="313" y="315" width="14" height="14"/><text class="d-mono" x="309" y="326" text-anchor="end">records</text></g><g class="d-portg" data-port="pr_013|po_008"><rect class="d-port" x="113" y="371" width="14" height="14"/><path class="d-port-dir" transform="translate(120 378) rotate(180)" d="M-3 -4L4 0L-3 4Z"/><text class="d-mono" x="131" y="382" text-anchor="start">snapshot</text></g><g class="d-portg" data-port="pr_010|po_003"><rect class="d-port" x="113" y="568" width="14" height="14"/><path class="d-port-dir" transform="translate(120 575) rotate(0)" d="M-3 -4L4 0L-3 4Z"/><text class="d-mono" x="131" y="579" text-anchor="start">app group</text></g><g class="d-portg" data-port="pr_012|po_005"><rect class="d-port" x="473" y="243" width="14" height="14"/><text class="d-mono" x="491" y="254" text-anchor="start">records</text></g><g class="d-portg" data-port="pr_012|po_006"><rect class="d-port" x="673" y="243" width="14" height="14"/><text class="d-mono" x="669" y="254" text-anchor="end">server</text></g><g class="d-portg" data-port="pr_009|po_001"><rect class="d-port" x="673" y="528" width="14" height="14"/><text class="d-mono" x="669" y="539" text-anchor="end">HttpTransport</text></g><g class="d-portg" data-port="|po_002"><rect class="d-port" x="833" y="343" width="14" height="14"/><text class="d-mono" x="829" y="354" text-anchor="end">sync server</text></g></g></svg>
