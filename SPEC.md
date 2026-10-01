@@ -349,7 +349,8 @@ being called.
 - **A perfect Augury score is a failure.** If every written claim comes true,
   the claims are too safe to be worth making. The target hit rate is about
   70%; 100% is a finding, not an achievement.
-- **A season is 12 weeks**, matching the horizon already in Purpose. It is
+- **A season is a calendar quarter** (January, April, July, October; decided
+  2026-09-30), about 13 weeks, close to the 12-week horizon in Purpose. It is
   scored on slope held above zero and on which plateaus were broken — not on
   levels reached.
 
@@ -644,6 +645,10 @@ Points arrive at once and are not the score. Grade is the score and, until
 now, nothing computed it. This wires it up and shows it the moment a unit is
 logged.
 
+**Pace now.** The current side of pace is the skill's most recent units,
+as many as the baseline minimum (10, or 5 for a one-shot skill), rolling:
+Grade reacts at the same speed however often the skill is done.
+
 **Baseline.** A graded skill's baseline starts with its first unit and closes
 when **both** four weeks have passed **and** it holds a minimum number of
 units: **10 for an iterable skill, 5 for a one-shot skill**, overridable per
@@ -724,9 +729,8 @@ opening the app again never re-rolls.
 
 ### 5. The mid-season quest
 
-A **season** starts on the date in Settings (`seasonStart`; default: the
-Monday of the player's first review) and lasts 12 weeks. On the first day of
-**week 6**, the skill that has gone longest without work — from the review's
+A **season** is a calendar quarter. On the first day of the quarter's
+**week 6** (the sixth Monday-to-Sunday week that starts inside it), the skill that has gone longest without work — from the review's
 cold list, leaving out locked skills, dormant skills out of season and Hearth —
 gets a **two-week side quest: three units of that skill**. Finishing it opens
 the treats marked `{ kind: 'event' }`. Ignoring it costs nothing.
@@ -819,15 +823,16 @@ opens the card's treats.
 
 ### Money
 
-The money comes from the player's own budgeting app (a Monarch clone, not yet
-on GitHub). **Flow never talks to a bank or a card.** The budgeting app
-exports a `flow.money` file (or serves it); Flow imports it in Settings, and
-later through the budgeting app writing into Flow's sync workspace.
+The money comes from the player's own budgeting app, a Monarch clone that
+the player will **incorporate into Flow** (decided 2026-09-30). How it comes
+in is decided when that work starts; this section waits for it. Until then
+the mechanics below are defined over one record, whatever writes it:
 
-**Flow stores day totals, not transactions**: a `money` event per day,
-`{ day, discretionary, balances: { accountId: amount } }`, keeping only the
-accounts that a goal names. Merchant names, categories and card numbers never
-enter Flow's records. Importing the same day again replaces that day.
+**A `money` event per day**: `{ day, discretionary, balances: { accountId: amount } }`,
+keeping only the accounts that a goal names. Writing the same day again
+replaces that day. Whether transactions themselves may enter Flow's records
+once the budgeting app lives inside it is a question for that work; until
+then they do not.
 
 - **Goals** (definition): `{ name, kind: 'save' | 'debt', account, start, target }`.
 - **Savings meter:** a `save` goal fills from its account's balance towards
@@ -851,33 +856,41 @@ Hypermail write a daily `mail` summary (`{ day, inboxZeros, replies }`) into
 Flow's workspace, shown as a Life row. That is a change to another repository,
 opened when its phase comes.
 
-### Learning and creative skills
+### Learning, creative and board-sport skills (decided 2026-09-30)
 
-A skill tree for guitar, a language or photography is **skill work**, not the
-Life layer: it has a unit of output and something that cannot be faked. It
-belongs as skills under **Arcana**, with tiers like every other tree.
-Portfolio levels are those tiers.
+A hobby with a unit of output and a meter that cannot be faked is **skill
+work**, not the Life layer. These join the board:
 
-## Open questions (2026-09-30)
+| tree | skill | plain | unit of output | the meter | shape |
+|---|---|---|---|---|---|
+| **ARCANA** | Cadence | guitar / music | a practice session on a set passage | **clean BPM** on that passage | iterable |
+| | Tongues | a language | a lesson or conversation | the external test score · words known | iterable |
+| | Limning | photography / drawing | a finished piece | **keeper rate**: pieces kept ÷ made | iterable |
+| | Quill | writing | 500 finished words | minutes per 500 finished words | iterable |
+| **SINEW** | Poise *(widened)* | board & balance sports: snowboarding, skiing, surf skating | a run | **falls per run** · terrain grade · *seasonal, per sport* | one-shot |
+| | Vigor *(widened)* | endurance, now including cycling | a session | pace at fixed HR · time over a benchmark | iterable |
 
-These were defaulted above so the section reads whole. Each needs the
-player's yes before its tests are written.
+The four Arcana skills are **tier 1**, open from the first day. Each one's
+own ladder (portfolio levels: a new medium or technique after the current
+one) is a later decision per skill. Poise keeps one Grade but logs which
+sport each run was, and is dormant per sport out of its season.
 
-1. **Current window for Grade.** The spec defines the baseline, not the
-   "current" side of pace. Default above: the most recent units, as many as
-   the baseline minimum (10 or 5), rolling.
-2. **"Minor" in the right-once call.** Default: one rework with fix minutes
-   at most 25% of the original.
-3. **Which hobby skills join Arcana**, and their units and tiers (guitar,
-   a language, photography…). `board.js` fixes the skill list today.
-4. **Season start** when the player sets none: the Monday of their first
-   review.
-5. **Sizes** that were picked, not decided: 3 units in 2 weeks for the
-   mid-season quest; the mystery treat at 80%; dread "before noon"; a round
-   at 25 minutes; style of 5 / 15 / 50 and +25%; a bingo cell at 5 days or
-   3 weeks.
-6. **The `flow.money` format** is owned by the budgeting app; the fields
-   above are what Flow needs from it.
+## Decided sizes (2026-09-30)
+
+Every number above that was first a default is now the player's answer:
+
+| what | value |
+|---|---|
+| current window for Grade | the last 10 units (5 one-shot), rolling |
+| "minor fixes" | one rework, fix minutes ≤ 25% of the original |
+| season | calendar quarter |
+| mid-season quest | 3 units in 2 weeks, from week 6 |
+| mystery treat | 80% of the treat's price |
+| dread | finished before noon: +25% style |
+| round | 25 unbroken timer minutes |
+| Life style | 5 a met habit period · 15 today's three · 50 a bingo line |
+| bingo cell | a daily habit met on 5 days, a weekly one in 3 weeks |
+| money | waits for the Monarch clone to be incorporated |
 
 ## Phases for this section
 
@@ -886,8 +899,8 @@ player's yes before its tests are written.
 2. The Life layer's core: habits, ticks, the chain, Health ticks, mood,
    gratitude, today's three, rounds, dread, speed runs.
 3. Unlocks, chance and the mid-season quest (3–5); quests, challenges,
-   collections, bingo.
-4. Money: the `flow.money` import, goals, no-spend, the jar.
+   collections, bingo; the four Arcana skills and the widened Poise and Vigor.
+4. Money: once the Monarch clone is incorporated — goals, no-spend, the jar.
 5. Hypermail's `mail` summary (a PR on Hypermail).
 
 ## Architecture
