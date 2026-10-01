@@ -851,13 +851,23 @@ then they do not.
 
 ### Project Planner (decided 2026-10-01)
 
-Project Planner's Game mode is a game about plans, not about the player
-(its `doc/game-mode.md`). When a plan's last task finishes it writes one
-`planner.result` record into Flow's workspace: `{ plan, name, finishedAt,
-baselineFinish, onTime, daysLate }`. Flow takes each as one **Deliverance**
-unit, on time or late against the baseline finish; with no baseline it is
-counted and not graded. Written once per plan, so a re-sync never counts it
-twice. Nothing else from the Planner's game reaches Flow.
+Project Planner's **Game mode** is another way to feed Flow: select today's
+task, start it, stop it, review it (its `doc/game-mode.md`). It keeps no score
+of its own; the game is Flow's. Planner writes only its plan, as before, and
+Flow reads it, as before, with two changes to "Done in Planner = logged in
+Flow":
+
+- **Minutes are what was spent.** A Planner completion's minutes are the
+  timesheet hours logged on that task for the run that finished it (lines
+  dated after the previous completion of that task, if any), × 60. Only when
+  there are none is the estimate used, as before.
+- **The finish answers come with it.** When the task carries
+  `finish: { quality, call, value }`, the completion takes its quality, its
+  right-once call and its count from there. Without it, quality 1 and no call,
+  as before.
+
+Planner's Review screen reads Flow's `done` records read-only to show each
+task's points and pace.
 
 ### Hypermail
 
