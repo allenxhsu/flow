@@ -868,7 +868,7 @@ work**, not the Life layer. These join the board:
 | | Limning | photography / drawing | a finished piece | **keeper rate**: pieces kept ÷ made | iterable |
 | | Quill | writing | 500 finished words | minutes per 500 finished words | iterable |
 | **SINEW** | Poise *(widened)* | board & balance sports: snowboarding, skiing, surf skating | a run | **falls per run** · terrain grade · *seasonal, per sport* | one-shot |
-| | Vigor *(widened)* | endurance, now including cycling | a session | pace at fixed HR · time over a benchmark | iterable |
+| | Vigor *(widened)* | stamina & endurance: running and **cycling** | a session | pace at fixed HR · time over a benchmark | iterable |
 
 The four Arcana skills are **tier 1**, open from the first day. Each one's
 own ladder (portfolio levels: a new medium or technique after the current
