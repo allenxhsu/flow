@@ -849,6 +849,16 @@ then they do not.
 - Inventory's **money saved** by skips stays where it is, shown beside the
   goals.
 
+### Project Planner (decided 2026-10-01)
+
+Project Planner's Game mode is a game about plans, not about the player
+(its `doc/game-mode.md`). When a plan's last task finishes it writes one
+`planner.result` record into Flow's workspace: `{ plan, name, finishedAt,
+baselineFinish, onTime, daysLate }`. Flow takes each as one **Deliverance**
+unit, on time or late against the baseline finish; with no baseline it is
+counted and not graded. Written once per plan, so a re-sync never counts it
+twice. Nothing else from the Planner's game reaches Flow.
+
 ### Hypermail
 
 Inbox zero week over week belongs to Hypermail. A later, separate change lets
