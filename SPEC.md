@@ -157,11 +157,107 @@ answer is a template that cannot be filled in wrongly — make the mistake
 impossible rather than get better at not making it. A Toil type that bounces
 twice has earned a checklist, and the checklist retires it.
 
-**Routing.** A task's skill comes from Planner's own skill for it where there
-is one, else a rule the player keeps in Settings (project → skill, or a title
-pattern → skill), else nothing. Classification is by unit of output, never by
+**Routing.** A task's skill comes from the player's choice, Planner's own
+skill for it, a rule, or confident similarity, else it waits in the Sort
+queue counted as Toil — see "Assigning skills" below. Classification is by unit of output, never by
 topic: "Talk to Jeffery about Alcon" is a **Parley** only if it had a decision
 to produce, and otherwise it is a moment with a duration.
+
+### Assigning skills (decided 2026-10-01)
+
+Routing by hand-written regex, a flat dropdown of every skill, and Planner
+tasks quietly falling to Toil made the board's most important fact — which
+skill a task belongs to — the hardest one to get right. Assignment is now one
+loop: **Flow suggests, the player confirms, Flow learns, and every task says
+why it has its skill.**
+
+#### The question is the unit
+
+Every place that asks for a skill asks **"What did it produce?"** and offers
+units, not skill names: *a released drawing · a modelled part · an assembly ·
+a project's BOM · a requisition · a dry-run machine · a FAT · a thread
+resolved · a conversation with a decision · a meeting · a handoff · a
+decision · a workout session · a run · a lesson · a finished piece · 500
+words …* — one per skill, each showing its skill as grey subtext. **Nothing I
+am getting better at** is the first choice, not a leftover, and means Toil.
+Locked skills are listed greyed with what opens them; a search box filters by
+unit, skill or tree; recently and often used units come first.
+
+#### Where a skill comes from, in order
+
+1. **The player's choice** on that task (always wins).
+2. **Planner's own skill** for it, when it names a board skill.
+3. **A rule** (below), the first that matches.
+4. **Similarity**, when it is sure: at least **5** already-assigned tasks are
+   similar to this one and at least **90%** of them share one skill (or
+   Toil). Similar means sharing the title's leading words after numbers and
+   names in quotes are dropped ("Release Drawing for Gantry" ~ "Release
+   Drawing for Frame"), or the same Planner project when the title says
+   nothing.
+5. Otherwise **unsorted** (below).
+
+Every task carries its source — `chosen · planner · rule · similar · unsorted`
+— and its evidence ("rule *Release Drawing…*", "10 of 10 similar tasks"),
+shown on the task row and the finish card. A wrong one is fixed in one tap
+from there, with the same picker.
+
+#### Suggestions
+
+Wherever the picker opens, its top three are **suggested units**, ranked from
+rules, similar tasks (with their share) and the project's own history ("72%
+of *Line 4 conveyor* was Shaping"). One tap takes a suggestion.
+
+#### Learning rules from corrections
+
+When the player assigns a skill by hand to **two** tasks that share the same
+leading words or the same Planner project, Flow offers once: *"Always send
+tasks starting 'Release Drawing' to Inscription?"* Yes writes a rule; No is
+remembered and that offer is never made again.
+
+**Rules are sentences, not regex.** A rule is `{ match: 'starts' | 'contains'
+| 'project', text, skill | 'toil' }`, shown as "Tasks starting *Release
+Drawing* → Inscription". Settings lists them in order, each editable,
+reorderable and deletable. The starter rules become sentences of the same
+shape; a starter pattern that cannot be one sentence becomes several.
+
+#### The Sort queue
+
+A task with no skill from 1–4 is **unsorted**. Its minutes count as **Toil**
+meanwhile, so nothing is lost and the Toil % stays honest about what is
+known. The **Sort** screen lists unsorted tasks **grouped by shared leading
+words** ("11 × Release Drawing for…"), each group with its suggestions; one
+tap sorts the whole group, and that is a correction for rule learning. Now
+shows "*N* to sort" while the queue is not empty. Sorting moves the minutes
+from Toil to the skill.
+
+#### Changing a skill moves the past
+
+Changing the skill of a task with finished runs **moves those runs**: their
+minutes, Depth, pace, Grade and Insight count under the new skill (or Toil)
+from then on, as if they had always been there. It is written as a
+`correction` of kind **`reskill`** on the task, naming the old and new skill,
+listed on the Fix screen and undoable there. Points are never repriced: a
+price once written stays, as everywhere else.
+
+#### Claude in the weekly review
+
+The review opens with the week's unsorted groups. Claude — in the review
+conversation, or `flow route --suggest` on the CLI — proposes a skill or Toil
+for each group with one line of why; the player approves, edits or rejects
+the batch, and each approval is a correction like any other. Claude never
+assigns without that approval.
+
+#### Contract
+
+- `skillFor(db, task)` → `{ skill: id | null, toil: boolean, source:
+  'chosen' | 'planner' | 'rule' | 'similar' | 'unsorted', evidence }`.
+- `suggestSkills(db, task, n = 3)` → `[{ skill | 'toil', share, why }]`.
+- `similarKey(title)` → the leading words used for similarity and grouping.
+- `ruleOffer(db, correction)` → `{ match, text, skill } | null`.
+- `sortQueue(db)` → `[{ key, tasks, suggestions }]`, largest group first.
+- `makeCorrection(db, { target: taskId, kind: 'reskill', patch: { skill },
+  reason })`; `index` applies it to the task's finished runs.
+- `SIMILAR_MIN = 5`, `SIMILAR_SHARE = 0.9`, `RULE_OFFER_AFTER = 2`.
 
 ### Tiers: the basics first (decided 2026-09-28)
 
