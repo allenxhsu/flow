@@ -13,6 +13,8 @@ const FUNCTIONS = {
   priceDone: 3, makeDone: 2, balanceOf: 1, chargeFor: 2, makePurchase: 2, makeRework: 3, makeEnergy: 1,
   energyOn: 2, makeReview: 2, latestPerWeek: 1, isDoneFor: 3, dailyStreak: 2, weeklyStreak: 2,
   pickNext: 2, reworkCandidate: 3, play: 1, replayDay: 2, makeTired: 2,
+  // SPEC.md › Engagement › 1–2
+  checkInRate: 2, gradeOf: 3, callOutcome: 3, finishCard: 2,
 };
 
 const CONSTANTS = {
@@ -24,6 +26,7 @@ const CONSTANTS = {
   PLAYER_STEP: 500, STAT_STEP: 300, SKILL_STEP: 100, ENERGY_MAX: 10, WEEK: 7, REWORK_ASK_DAYS: 14,
   ZONES: ['home', 'road', 'factory', 'town', 'elsewhere'], WALK_MIN: 5,
   TIRED_CAPS: { bit: 6, very: 3, wiped: 1 },
+  BASELINE_UNITS: { iterable: 10, oneShot: 5 }, RETURN_WINDOW_DAYS: 30, INSIGHT_WINDOW: 20,
 };
 
 const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish', 'world'];
