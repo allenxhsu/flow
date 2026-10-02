@@ -216,6 +216,55 @@ three lines — what it is in plain words, what **one unit** of it is, and what
 and reuse · one unit: a project's BOM · measured by unique parts per project"
 tells them everything.
 
+### Techniques: badges that can be taken away (decided 2026-10-01)
+
+Inside a skill sit three to seven named **techniques** — the things you either
+can or cannot currently do. Euro-carve. Tolerance stack-up. A message that
+ends the thread.
+
+**A badge here is a belt, not a sticker.** "You logged ten days" is a souvenir
+and means nothing; "I can hold a Euro-carve" is a claim about the present, and
+a claim is only worth making if it can be **taken away**:
+
+> **Held** while at least **3 of the last 5** attempts were clean. One bad day
+> does not strip it; a bad stretch does. It is won back the way it was lost.
+
+States: **locked → attempting → held → shaky → lost.** Shaky does not count
+toward the Ceiling, because the badge is a claim about now. Only the last five
+attempts count, so an old disaster is forgotten and a recent one is not.
+
+**A technique pays no points** — points are minutes. It does three things:
+
+1. It sets the skill's **Ceiling**, the highest technique currently held.
+2. It **unlocks the next one**: no Euro-carve before a clean carve.
+3. It **raises the difficulty of the units done with it**, so Grade is measured
+   against harder work. This is what stops the board rewarding the player for
+   getting steadily quicker at easy things — the one way the whole system
+   could otherwise lie to itself.
+
+A technique being attempted is the natural target of a **focus**: *Poise →
+Euro-carve* is a named target condition on a sub-skill, which is deliberate
+practice rather than "go snowboarding".
+
+**Ladders are deliberately sparse.** Seven techniques across twenty-two skills
+would be a hundred and fifty badges, which is wallpaper and is exactly the
+failure the badge critique is about. Three to seven per skill, and only on
+skills that matter yet. **An empty ladder is a decision, not an omission.**
+
+Attempts are `technique` events: write-once, one per attempt, carrying the
+skill, the technique and whether it was clean.
+
+### Speed is not a dimension
+
+A skill's dimensions are tempting to multiply — for the snowboard: speed, form,
+duration. They are not three new scores; they are one each of the families
+already on the board. **Duration** is volume, which is Depth. **Form** is the
+technique ladder, which is Ceiling. And **speed is a trap**: straightlining is
+the fastest and least skilled thing a rider can do, so scoring it rewards the
+riding nobody wants. Speed belongs as a **condition on form** — can the carve
+be held at pace, on chop, on ice — never as a score of its own. Conditions are
+modifiers on a technique, not rows of their own.
+
 ### One spine
 
 Every quality measure above is the same measure wearing different clothes:

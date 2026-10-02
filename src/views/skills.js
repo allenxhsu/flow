@@ -3,6 +3,7 @@
 
 import { makeSkill, newId, dayOf } from '../model.js';
 import { TREES, SKILLS, treeSkills, treeDepth, unlockState, depthFor, rankFor, statId, skillRecordId } from '../board.js';
+import { techniquesOf, techniqueState, ceilingOf, STATES } from '../techniques.js';
 import { esc, fmtPts, materialize } from '../util.js';
 
 const MIN_STATS = 4;
@@ -65,6 +66,36 @@ function minutesBySkill(db) {
   return m;
 }
 
+/** Attempts per technique for one skill, oldest first, from the records. */
+function attemptsFor(db, skillId) {
+  const m = new Map();
+  for (const t of db.techniques || []) {
+    if (t.skill !== skillId) continue;
+    m.set(t.technique, [...(m.get(t.technique) || []), { at: t.at, clean: !!t.clean }]);
+  }
+  return m;
+}
+
+/**
+ * The ladder as pips: one per technique, lit when held. A badge is a claim
+ * about what the player can do now, so shaky and lost read differently from
+ * held, and the next one is always named — there is always something to chase.
+ */
+function ladder(db, s) {
+  const list = techniquesOf(s.id);
+  if (!list.length) return { html: '', rank: 0 };
+  const attempts = attemptsFor(db, s.id);
+  const c = ceilingOf(s.id, attempts);
+  const pips = list.map((t) => {
+    const st = techniqueState(attempts.get(t.id) || []);
+    return `<span class="tech-pip tech-${st.state}" title="${esc(`${t.name} — ${t.note}. Held: ${t.held}.`)}" aria-label="${esc(`${t.name}: ${st.state}`)}"></span>`;
+  }).join('');
+  const line = c.technique
+    ? `${esc(c.technique.name)}${c.next ? ` · next: ${esc(c.next.name)}` : ' · the top of the ladder'}`
+    : `next: ${esc(c.next?.name || '')}`;
+  return { html: `<div class="tech"><div class="tech-pips">${pips}</div><div class="tech-line">${line}</div></div>`, rank: c.rank };
+}
+
 function skillNode(ctx, s, mins, live) {
   const worked = mins.get(s.id) || 0;
   const depth = depthFor(worked);
@@ -74,7 +105,8 @@ function skillNode(ctx, s, mins, live) {
     s.oneShot ? '<span class="sc-pill" style="--tint: var(--sc-warning)">right once</span>' : '',
     s.dormant ? '<span class="sc-pill">seasonal</span>' : '',
   ].join('');
-  return `<div data-skill="${esc(s.id)}"${s.tier ? ` data-tier="${s.tier}"` : ''} class="${cls}">
+  const lad = ladder(ctx.db, s);
+  return `<div data-skill="${esc(s.id)}"${s.tier ? ` data-tier="${s.tier}"` : ''}${lad.html ? ` data-ceiling="${lad.rank}"` : ''} class="${cls}">
     <div class="tree-head">
       <span class="tree-icon" aria-hidden="true">${esc(s.icon)}</span>
       <span class="tree-name">${esc(s.name)}</span>
@@ -83,6 +115,7 @@ function skillNode(ctx, s, mins, live) {
     <div class="tree-plain">${esc(s.plain)}</div>
     ${s.unit ? `<div class="tree-line"><span class="tree-label">one unit</span> ${esc(s.unit)}</div>` : ''}
     <div class="tree-line"><span class="tree-label">measured by</span> ${esc(s.meter)}</div>
+    ${lad.html}
     ${tags ? `<div class="pills">${tags}</div>` : ''}
     ${state.unlocked ? '' : `<div class="tree-lock"><span class="tree-lock-mark" aria-hidden="true">🔒</span> ${state.reasons.map((r) => esc(r)).join(' ')}</div>`}
   </div>`;

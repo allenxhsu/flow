@@ -27,7 +27,7 @@ const CONSTANTS = {
 };
 
 const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish', 'world'];
-const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit', 'correction'];
+const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit', 'correction', 'technique'];
 const D = '2026-09-28';
 
 test('contract: every function in docs/API.md is exported with its arity', () => {
@@ -386,4 +386,22 @@ test('contract: routing — the six types and what the screens call', async () =
   for (const k of ['total', 'minutes', 'weighted', 'units', 'bounces', 'share', 'bounceRate']) {
     assert.ok(k in toil, `toilOf().${k}`);
   }
+});
+
+test('contract: techniques — the ladder, the hold rule and the ceiling', async () => {
+  const Tk = await import('../src/techniques.js');
+  assert.equal(Tk.HOLD_WINDOW, 5);
+  assert.equal(Tk.HOLD_CLEAN, 3);
+  assert.deepEqual(Object.keys(Tk.STATES).sort(), ['attempting', 'held', 'locked', 'lost', 'shaky']);
+  for (const fn of ['techniquesOf', 'techniqueById', 'techniqueState', 'ceilingOf']) {
+    assert.equal(typeof Tk[fn], 'function', `techniques.${fn}`);
+  }
+  for (const t of Tk.techniquesOf('poise')) {
+    for (const k of ['id', 'name', 'note', 'held', 'rank', 'skill']) assert.ok(k in t, `technique.${k}`);
+  }
+  const c = Tk.ceilingOf('poise', new Map());
+  for (const k of ['rank', 'technique', 'next', 'of']) assert.ok(k in c, `ceilingOf().${k}`);
+  // A technique attempt is an event the store writes once, like any other.
+  assert.ok(M.RECORD_TYPES.includes('technique'));
+  assert.ok(Array.isArray(M.index([]).techniques));
 });

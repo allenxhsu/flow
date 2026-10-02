@@ -141,7 +141,7 @@ export const GEAR_MAX = 0.10;
 export const SLOTS = ['head', 'body', 'legs', 'feet', 'hands', 'bag', 'tech', 'vehicle'];
 
 const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish', 'world'];
-export const EVENT_TYPES = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit', 'correction'];
+export const EVENT_TYPES = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit', 'correction', 'technique'];
 /** The fields a correction may amend (SPEC.md › Corrections); everything else is derived. */
 export const AMENDABLE = ['minutes', 'points', 'note'];
 export const CORRECTION_KINDS = ['void', 'amend'];
@@ -280,6 +280,7 @@ export function index(records) {
     world: worldRecord(records),
     visits: by.visit.sort((a, b) => a.leave - b.leave || a.id.localeCompare(b.id)),
     corrections: by.correction.sort((a, b) => (a.at ?? 0) - (b.at ?? 0) || a.id.localeCompare(b.id)),
+    techniques: by.technique.sort((a, b) => (a.at ?? 0) - (b.at ?? 0) || a.id.localeCompare(b.id)),
     correction: fixes,
   };
 }

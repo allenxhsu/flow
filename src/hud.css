@@ -357,3 +357,14 @@
 :root[data-mode='hud'] .tree-head .tree-icon { font-size: 1.15rem; line-height: 1; color: var(--sc-app); width: 1.4em; text-align: center; }
 :root[data-mode='hud'] .tree-head .tree-name { flex: 1; min-width: 0; }
 :root[data-mode='hud'] .tree-node.is-locked .tree-icon { color: var(--sc-text-3); }
+
+/* Technique badges (SPEC.md › The board › Techniques): a pip per technique,
+   lit when held. A badge is a claim about now, so shaky reads differently. */
+:root[data-mode='hud'] .tech { display: grid; gap: 3px; margin-top: 2px; }
+:root[data-mode='hud'] .tech-pips { display: flex; gap: 3px; }
+:root[data-mode='hud'] .tech-pip { width: 10px; height: 10px; border: 1px solid var(--sc-line-strong); transform: rotate(45deg); }
+:root[data-mode='hud'] .tech-pip.tech-held { background: var(--sc-app); border-color: var(--sc-app); }
+:root[data-mode='hud'] .tech-pip.tech-shaky { background: var(--sc-warning); border-color: var(--sc-warning); opacity: .7; }
+:root[data-mode='hud'] .tech-pip.tech-attempting { background: var(--sc-text-3); }
+:root[data-mode='hud'] .tech-pip.tech-lost { border-color: var(--sc-danger); }
+:root[data-mode='hud'] .tech-line { font-size: var(--sc-text-sm); color: var(--sc-text-2); overflow-wrap: anywhere; }

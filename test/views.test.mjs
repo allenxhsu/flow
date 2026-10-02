@@ -886,3 +886,37 @@ test('Now: a capped run says the day is spent', () => {
   const html = bonusPills({ points: 20, style: 0, capped: true, uncapped: 60, bonuses: {} });
   assert.match(html, /capped|720/i);
 });
+
+// ─── technique badges on the node (SPEC.md › The board › Techniques) ──────
+import { techniquesOf } from '../src/techniques.js';
+
+test('Skills: a skill with a ladder shows its ceiling and what is next', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const row = node(html, 'poise');
+  assert.match(row, /data-ceiling="0"/, 'nothing held yet');
+  assert.match(row, /Linked turns/, 'and it names the next one to chase');
+});
+
+test('Skills: the ladder renders as pips, one per technique', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const row = node(html, 'poise');
+  const pips = [...row.matchAll(/class="tech-pip tech-\w+"/g)];
+  assert.equal(pips.length, techniquesOf('poise').length);
+});
+
+test('Skills: a skill with no ladder shows no pips at all', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  assert.doesNotMatch(node(html, 'bloodline'), /tech-pip/);
+  assert.doesNotMatch(node(html, 'tutelage'), /tech-pip/);
+});
+
+test('Skills: a held technique reads as held, and sets the ceiling', () => {
+  const g = boarded();
+  g.add({ id: 'tech_1', type: 'technique', skill: 'poise', technique: 'linked', at: T('2026-09-21T10:00:00'), day: '2026-09-21', clean: true });
+  g.add({ id: 'tech_2', type: 'technique', skill: 'poise', technique: 'linked', at: T('2026-09-21T11:00:00'), day: '2026-09-21', clean: true });
+  g.add({ id: 'tech_3', type: 'technique', skill: 'poise', technique: 'linked', at: T('2026-09-21T12:00:00'), day: '2026-09-21', clean: true });
+  const row = node(skillsView.render(ctxOf(g)), 'poise');
+  assert.match(row, /data-ceiling="1"/);
+  assert.match(row, /tech-pip tech-held/);
+  assert.match(row, /Clean carve/, 'the next one is named');
+});
