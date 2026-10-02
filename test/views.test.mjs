@@ -725,6 +725,20 @@ test('Settings stops offering the starter rules once there are rules', () => {
   assert.doesNotMatch(settingsView.render(settingsCtx(g)), /data-action="starter-rules"/);
 });
 
+test('Settings carries the Connections panel, pointed at the sync server Flow uses', () => {
+  const g = game([...boardRecords()]);
+  const html = settingsView.render({ ...settingsCtx(g), store: { ...settingsCtx(g).store, serverOrigin: () => 'https://sync.example' } });
+  assert.match(html, /<sc-connections features="calendar">/);
+  assert.match(html, /sync\.example/);
+  const el = { refreshed: 0, refresh() { this.refreshed++; } };
+  const store = { serverOrigin: () => 'https://sync.example', serverFetch: async (path) => path };
+  settingsView.wireConnections(el, { store, native: null });
+  assert.equal(el.origin, 'https://sync.example');
+  assert.equal(el.refreshed, 1, 'read once the server is known');
+  assert.equal(typeof el.open, 'function');
+  return el.request('/connect').then((got) => assert.equal(got, '/connect', 'requests go the way Flow syncs'));
+});
+
 test('taking the starter rules writes them all, in order', async () => {
   const g = game([...boardRecords()]);
   const written = [];

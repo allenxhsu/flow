@@ -93,6 +93,28 @@ export function deviceId() {
 }
 
 export const getSettings = () => ({ ...settings });
+
+/**
+ * The sync server this page talks to — the Portal's own origin, or the one
+ * the Sync form names — for what only a server can do: hold a connection to
+ * Strava or Google on the player's behalf. Null when there is none.
+ */
+export function serverOrigin() {
+  const base = portal ? portal.baseUrl : (settings.url && settings.enabled ? settings.url : '');
+  if (!base) return null;
+  try { return new URL(base).origin; } catch { return null; }
+}
+
+/** A request to the sync server, with the credential this page syncs with. */
+export async function serverFetch(path, init = {}) {
+  const origin = serverOrigin();
+  if (!origin) throw new Error('Connections live on your sync server: turn sync on (Settings ▸ Sync, or pair this Mac) first.');
+  return fetch(`${origin}${path}`, {
+    ...init,
+    credentials: portal ? 'include' : 'omit',
+    headers: { ...(init.headers || {}), ...(settings.token && !portal ? { Authorization: `Bearer ${settings.token}` } : {}) },
+  });
+}
 export const inPortal = () => !!portal;
 export const syncConfigured = () => !!(portal || (settings.url && settings.enabled));
 export const syncStatus = () => (engine ? engine.status : lastStatus);

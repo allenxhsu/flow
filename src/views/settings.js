@@ -6,6 +6,7 @@ import { TREES, SKILLS, boardRecords, statId } from '../board.js';
 import { STARTER_RULES } from '../board-routing.js';
 import { validateWorld, worldRecord, worldFor } from '../game/world.js';
 import { modeSwitch } from '../mode.js';
+import { hosted, post } from '../host.js';
 
 /** Starting colours for the hero sprite — data for the replay, not page styling. */
 export const HERO_DEFAULTS = { hair: '#4a3222', skin: '#e0b48c', shirt: '#2f7fd0', trousers: '#34405a' };
@@ -36,6 +37,21 @@ function syncSection(ctx) {
     <sc-sync-status></sc-sync-status>
     ${st.lastError ? `<div class="sc-alert sc-alert--danger small"><strong>Last error</strong> ${esc(st.lastError)}</div>` : ''}
   </form>`;
+}
+
+/**
+ * Connections: Strava and Google, held on the sync server for every app at
+ * once. The panel is ui-kit's; Flow only hands it the server and the way
+ * to open a consent screen (the shell's browser when hosted). What Flow
+ * reads through them comes later; this is where they are made.
+ */
+function connectionsSection(ctx) {
+  const origin = ctx.store.serverOrigin?.() || null;
+  return `<section class="sc-panel pad stack" id="connections">
+    <h2>Connections</h2>
+    <p class="small sc-muted" style="margin:0">Strava and Google, connected once on your sync server${origin ? ` (<span class="sc-mono">${esc(origin)}</span>)` : ''} and shared by every app: the Planner, Skills and Flow read the same accounts.</p>
+    <sc-connections features="calendar"></sc-connections>
+  </section>`;
 }
 
 /** Project Planner, read-only: where its workspace is read from, and how the last read went. */
@@ -208,6 +224,7 @@ export function render(ctx) {
         <button class="sc-button sc-button--primary" type="submit">Save hero</button></div>
     </form>
     ${plannerSection(ctx)}
+    ${connectionsSection(ctx)}
     ${placesSection(ctx)}
     ${geofenceSection(ctx)}
     ${kindsSection(ctx)}
@@ -388,4 +405,19 @@ export const forms = {
 
 export function mounted(view, ctx) {
   for (const el of view.querySelectorAll('sc-sync-status')) { try { el.status = ctx.store.syncStatus(); } catch { /* older widget */ } }
+  for (const el of view.querySelectorAll('sc-connections')) wireConnections(el, ctx);
+}
+
+/** The panel reaches the server the way Flow does, and opens consent screens the way the shell can. */
+export function wireConnections(el, ctx) {
+  const store = ctx.store;
+  el.origin = store.serverOrigin?.() || '';
+  if (store.serverFetch) el.request = (path, init) => store.serverFetch(path, init);
+  // A shell opens the consent screen in the default browser (the message the
+  // Planner's shell already answers); a browser page gets a small window.
+  el.open = (url) => {
+    if (hosted) { post({ type: 'openURL', url }); return true; }
+    try { return !!globalThis.open?.(url, 'sc-connect', 'width=560,height=760'); } catch { return false; }
+  };
+  if (typeof el.refresh === 'function') void el.refresh();
 }
