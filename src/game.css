@@ -410,6 +410,14 @@
 :root[data-mode='game'] .cell.low::after { content: 'LOW'; position: absolute; right: 4px; top: 4px; padding: 0 3px; background: var(--danger); color: #fff; line-height: 1.2; }
 :root[data-mode='game'] .cell.sel { background: var(--screen); border-color: var(--ink); }
 
+/* The house inventory: an item's photos and receipts. */
+:root[data-mode='game'] .bag-photos { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+:root[data-mode='game'] .bag-photos figure { margin: 0; display: grid; gap: 2px; justify-items: center; }
+:root[data-mode='game'] .bag-photos img { width: 96px; height: 96px; object-fit: cover; border: 2px solid var(--ink); image-rendering: auto; }
+:root[data-mode='game'] .bag-receipts { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+:root[data-mode='game'] .bag-receipts li { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+:root[data-mode='game'] .bag-add { cursor: pointer; justify-self: start; }
+
 :root[data-mode='game'] .money { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 8px; }
 :root[data-mode='game'] .money-cell { display: grid; gap: 2px; padding: 8px 10px; background: var(--panel-2); border: 2px solid var(--line); }
 :root[data-mode='game'] .money-cell.saved .big { color: var(--success); }

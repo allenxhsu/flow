@@ -1,6 +1,6 @@
 // Settings: sync, the hero, places, moment kinds, sound, backup.
 
-import { makePlace, newId, ZONES } from '../model.js';
+import { makePlace, newId, placeRemoval, ZONES } from '../model.js';
 import { esc, materialize } from '../util.js';
 import { TREES, SKILLS, boardRecords, statId } from '../board.js';
 import { STARTER_RULES } from '../board-routing.js';
@@ -301,9 +301,13 @@ export const actions = {
   },
   'remove-place': async (el, ctx) => {
     const id = el.dataset.id;
-    if (ctx.db.tasks.some((t) => t.place === id) || ctx.db.skills.some((s) => s.place === id)) throw new Error('A skill or task is at that place.');
-    if (!(await ctx.confirm('Remove place?', 'Past moments keep it by id.', 'Remove', 'danger'))) return;
+    // Nothing goes with it: its items, the places inside it, and tasks and skills set there move up (SPEC.md › House inventory).
+    const moved = placeRemoval(ctx.db, id);
+    if (!(await ctx.confirm('Remove place?', `Past moments keep it by id.${moved.length ? ` ${moved.length} thing${moved.length === 1 ? '' : 's'} there move up a level.` : ''}`, 'Remove', 'danger'))) return;
     await saveList(ctx, 'place', { id });
+    for (const p of moved.filter((r) => r.type === 'place')) await saveList(ctx, 'place', p);
+    const others = moved.filter((r) => r.type !== 'place');
+    if (others.length) await ctx.store.save(others);
     await ctx.store.remove(ctx.store.getRecord(id));
   },
   'world-remove': async (el, ctx) => {

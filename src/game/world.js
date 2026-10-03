@@ -139,6 +139,8 @@ function level(l, i, models) {
       return {
         model, ...rect(f, F, w, h), name: str(f.name, `${F} name`, { optional: true, max: 60 }) || model,
         text: str(f.text, `${F} text`, { optional: true }) || '', walk: !!f.walk, under: !!f.under, car: !!f.car,
+        // The Flow place this furniture stands for (a bookcase): an id, or a place's name.
+        ...(f.place === undefined ? {} : { place: str(f.place, `${F} place`, { max: 80 }) }),
         rot: f.rot === undefined ? 0 : [0, 90, 180, 270].includes(f.rot) ? f.rot : fail(`${F} rot is 0, 90, 180 or 270`),
       };
     }),

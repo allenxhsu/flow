@@ -2,8 +2,14 @@
 // The paper doll of a loadout and the gear bonus, a stash per storage place,
 // the "have it" lookup with its skip, buying anyway, the shopping list, and
 // money saved vs spent — what the CLI's inventory, have, loadout and skip do.
+// For the house inventory (SPEC.md › House inventory) an item carries its
+// details, photos and receipts, and the place picker shows the nesting;
+// browsing the bookcases and reshelving happen at the bookshelf in Play.
 
-import { inventory, findItems, makeItem, makeSkip, makeSpend, restockFor, makeWish, makeLoadout, gearBonus, SLOTS, SKIP_DAILY_CAP, SKIP_POINTS_PER_DOLLAR } from '../model.js';
+import {
+  inventory, findItems, makeItem, makeSkip, makeSpend, restockFor, makeWish, makeLoadout, gearBonus, SLOTS, SKIP_DAILY_CAP, SKIP_POINTS_PER_DOLLAR,
+  placeTree, makeFile, filesOf, PHOTO_MAX_PX, FILE_MAX_BYTES,
+} from '../model.js';
 import { esc } from '../util.js';
 import { pixelIcon, heroSprite, textBox } from '../ds.js';
 
@@ -146,7 +152,7 @@ function itemForm(ctx, item) {
     <div class="form-grid">
       <label class="sc-field"><span>Name</span><input class="sc-input" name="name" required value="${esc(i.name || '')}" placeholder="e.g. HDMI cable"></label>
       <label class="sc-field"><span>Category</span><input class="sc-input" name="category" value="${esc(i.category || '')}" placeholder="e.g. Cables"></label>
-      <label class="sc-field"><span>Kept at</span><select class="sc-select" name="place">${opt('', 'Unfiled', !i.place)}${db.places.map((p) => opt(p.id, p.name, p.id === i.place)).join('')}</select></label>
+      <label class="sc-field"><span>Kept at</span><select class="sc-select" name="place">${placeOptions(db, i.place, 'Unfiled')}</select></label>
       <label class="sc-field"><span>How many</span><input class="sc-input" type="number" name="qty" min="0" step="1" value="${esc(i.qty)}"></label>
       <label class="sc-field"><span>Rough price $</span><input class="sc-input" type="number" name="price" min="0" step="0.01" value="${esc(i.price)}"></label>
       <label class="sc-field"><span>Worn in slot</span><select class="sc-select" name="slot">${opt('', '—', !i.slot)}${SLOTS.map((s) => opt(s, SLOT_LABEL[s], s === i.slot)).join('')}</select></label>
@@ -154,10 +160,22 @@ function itemForm(ctx, item) {
       <label class="sc-field"><span>Aliases</span><input class="sc-input" name="aliases" value="${esc((i.aliases || []).join(', '))}" placeholder="other names, comma-separated"></label>
       <label class="check-field"><input class="sc-check" type="checkbox" name="consumable" ${i.consumable ? 'checked' : ''}> Consumable</label>
       <label class="sc-field"><span>Low at</span><input class="sc-input" type="number" name="lowStock" min="0" step="1" value="${esc(i.lowStock ?? 0)}"></label>
+      ${item ? `<label class="sc-field"><span>Brand</span><input class="sc-input" name="brand" value="${esc(i.brand || '')}"></label>
+      <label class="sc-field"><span>Model</span><input class="sc-input" name="model" value="${esc(i.model || '')}"></label>
+      <label class="sc-field"><span>Serial number</span><input class="sc-input" name="serial" value="${esc(i.serial || '')}"></label>
+      <label class="sc-field"><span>Bought</span><input class="sc-input" type="date" name="bought" value="${esc(i.bought || '')}"></label>
+      <label class="sc-field"><span>Warranty until</span><input class="sc-input" type="date" name="warranty" value="${esc(i.warranty || '')}"></label>
+      <label class="sc-field wide"><span>Notes</span><textarea class="sc-textarea" name="notes" rows="2">${esc(i.notes || '')}</textarea></label>` : ''}
     </div>
+    ${item ? filesBlock(ctx, item) : ''}
     <div class="row"><button class="sc-button sc-button--primary" type="submit">${item ? 'Save item' : 'Add to stash'}</button>
       ${item ? `<button class="sc-button sc-button--ghost" type="button" data-action="item-close">Close</button><button class="sc-button sc-button--danger" type="button" data-action="item-remove" data-item="${esc(item.id)}">Remove</button>` : ''}</div>
   </form>`;
+}
+
+/** Places as <option>s, indented by depth. */
+function placeOptions(db, selected, none) {
+  return `${none ? opt('', none, !selected) : ''}${placeTree(db).map(({ place, depth }) => opt(place.id, `${' '.repeat(depth)}${place.name}`, place.id === selected)).join('')}`;
 }
 
 function stashSection(ctx, inv) {
@@ -168,11 +186,31 @@ function stashSection(ctx, inv) {
     <div class="row-between"><h2 id="stash-h">Stash</h2><span class="small sc-muted">${inv.items.length} item${inv.items.length === 1 ? '' : 's'} · ${inv.inUse.size} in use</span></div>
     ${inv.stashes.length ? inv.stashes.map((s) => `
       <section class="stash" data-place="${esc(s.place || 'unfiled')}" aria-label="${esc(s.name)}">
-        <h3 class="stash-tab">${esc(s.name)} <span class="num">${s.items.length}</span></h3>
+        <h3 class="stash-tab">${esc(s.path?.length ? s.path.join(' › ') : s.name)} <span class="num">${s.items.length}</span></h3>
         <div class="cells">${s.items.map((i) => cell(ctx, inv, i, left)).join('')}</div>
       </section>`).join('') : '<div class="muted-box">Nothing stashed yet. Add what you own below — one room at a time.</div>'}
     ${shown ? `<section class="sc-panel pad stack item-detail" id="item-detail"><h3>${esc(shown.name)}</h3>${itemForm(ctx, shown)}</section>` : ''}
   </section>`;
+}
+
+// ─── photos and receipts ────────────────────────────────────────────────────
+
+const src = (f) => `data:${f.mime};base64,${f.data}`;
+const kb = (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+
+function filesBlock(ctx, item) {
+  const f = filesOf(ctx.db, item);
+  return `<div class="stack bag-files">
+    <span class="sc-label">Photos</span>
+    <div class="bag-photos">${f.photos.map((p) => `<figure><img src="${esc(src(p))}" alt="${esc(p.name)}">
+      <button type="button" class="sc-button sc-button--ghost sc-button--sm" data-action="bag-unlink" data-kind="photos" data-item="${esc(item.id)}" data-file="${esc(p.id)}" aria-label="Remove photo">✕</button></figure>`).join('')}
+      <label class="sc-button sc-button--sm bag-add">Add photos…<input type="file" accept="image/*" multiple hidden data-upload="photo" data-item="${esc(item.id)}"></label></div>
+    <span class="sc-label">Receipts</span>
+    ${f.receipts.length ? `<ul class="bag-receipts">${f.receipts.map((r) => `<li><button type="button" class="sc-button sc-button--ghost sc-button--sm" data-action="bag-save-file" data-file="${esc(r.id)}">${esc(r.name || 'receipt')}</button><span class="small sc-muted">${kb(r.size)}</span>
+      <button type="button" class="sc-button sc-button--ghost sc-button--sm" data-action="bag-unlink" data-kind="receipts" data-item="${esc(item.id)}" data-file="${esc(r.id)}" aria-label="Remove receipt">✕</button></li>`).join('')}</ul>` : ''}
+    <label class="sc-button sc-button--sm bag-add">Attach receipt…<input type="file" accept="image/*,application/pdf" multiple hidden data-upload="receipt" data-item="${esc(item.id)}"></label>
+    <p class="small sc-muted" style="margin:0">Photos are resized to ${PHOTO_MAX_PX} px; a file is at most ${FILE_MAX_BYTES / 1024 / 1024} MB. They sync with everything else.</p>
+  </div>`;
 }
 
 // ─── money and the shopping list ────────────────────────────────────────────
@@ -228,6 +266,43 @@ export function render(ctx) {
 
 const rerender = (ctx) => ctx.render?.({ force: true });
 
+// ─── the house inventory's writes ───────────────────────────────────────────
+
+function download(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name;
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function readAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
+
+/** Any image the browser can decode → a JPEG at most PHOTO_MAX_PX on its long side, as base64. */
+async function photoData(file) {
+  const img = new Image();
+  img.src = await readAsDataURL(file);
+  await img.decode();
+  const scale = Math.min(1, PHOTO_MAX_PX / Math.max(img.naturalWidth, img.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#fff'; // a transparent PNG flattens onto white, not black
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return { mime: 'image/jpeg', data: canvas.toDataURL('image/jpeg', 0.85).split(',')[1] };
+}
+
 export const actions = {
   skip: async (el, ctx) => {
     const h = ctx.ui.have;
@@ -278,12 +353,15 @@ export const actions = {
   'loadout-cancel': (el, ctx) => { ctx.ui.editLoadout = null; rerender(ctx); },
   'item-show': (el, ctx) => { ctx.ui.itemShow = ctx.ui.itemShow === el.dataset.item ? null : el.dataset.item; rerender(ctx); document.getElementById('item-detail')?.scrollIntoView({ block: 'nearest' }); },
   'item-close': (el, ctx) => { ctx.ui.itemShow = null; rerender(ctx); },
-  'item-remove': async (el, ctx) => {
+  'bag-unlink': async (el, ctx) => {
     const item = ctx.db.item.get(el.dataset.item);
     if (!item) return;
-    if (!(await ctx.confirm('Remove item?', `Take <b>${esc(item.name)}</b> out of the stash? Loadouts that wear it show the slot empty.`, 'Remove', 'danger'))) return;
-    ctx.ui.itemShow = null;
-    await ctx.store.save({ ...item, archived: true });
+    const kind = el.dataset.kind === 'receipts' ? 'receipts' : 'photos';
+    await ctx.store.save({ ...item, [kind]: (item[kind] || []).filter((id) => id !== el.dataset.file) });
+  },
+  'bag-save-file': async (el, ctx) => {
+    const f = ctx.db.file.get(el.dataset.file);
+    if (f) download(await (await fetch(src(f))).blob(), f.name || 'receipt');
   },
 };
 
@@ -304,6 +382,8 @@ export const forms = {
       slot: d.slot || null, skills: d.skill ? [d.skill] : [], aliases: list(d.aliases),
       consumable: d.consumable === 'on' || d.consumable === true, lowStock,
     };
+    // The house-inventory details, when the form has them (the detail panel does; quick add does not).
+    for (const k of ['brand', 'model', 'serial', 'bought', 'warranty', 'notes']) if (k in d) fields[k] = k === 'bought' || k === 'warranty' ? (d[k] || null) : String(d[k] ?? '');
     if (existing) {
       const usual = lowStock === existing.lowStock ? existing.usual : lowStock + 1;
       const rec = makeItem(ctx.db, { ...existing, ...fields, usual, skills: d.skill ? [d.skill] : [] });
@@ -332,3 +412,32 @@ export const forms = {
     ctx.toast(own.length ? `${rec.name} added — you already own ${own.map((x) => x.item.name).join(', ')}.` : `${rec.name} added.`, own.length ? 'warning' : 'success');
   },
 };
+
+/** Photos and receipts: each file is written once, then listed on the item. */
+export async function onChange(ev, ctx) {
+  const input = ev.target;
+  if (!input.matches?.('[data-upload]') || !input.files?.length) return;
+  const kind = input.dataset.upload;
+  const key = kind === 'photo' ? 'photos' : 'receipts';
+  const files = [];
+  const problems = [];
+  for (const file of [...input.files]) {
+    try {
+      let mime = file.type || 'application/octet-stream';
+      let data;
+      if (mime.startsWith('image/')) ({ mime, data } = await photoData(file));
+      else if (kind === 'receipt') data = (await readAsDataURL(file)).split(',')[1];
+      else { problems.push(`${file.name} is not an image`); continue; }
+      files.push(makeFile(ctx.db, { item: input.dataset.item, kind, name: file.name, mime, data, at: nowOf(ctx) }));
+    } catch (err) {
+      problems.push(err?.message || `${file.name} could not be read`);
+    }
+  }
+  input.value = '';
+  if (files.length) {
+    await ctx.store.add(...files);
+    const item = ctx.store.getRecord(input.dataset.item) || ctx.db.item.get(input.dataset.item);
+    await ctx.store.save({ ...item, [key]: [...(item[key] || []), ...files.map((f) => f.id)] });
+  }
+  if (problems.length) ctx.toast(problems.join('; '), 'danger');
+}

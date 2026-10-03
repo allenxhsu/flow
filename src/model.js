@@ -139,9 +139,13 @@ export const GEAR_STEP = 0.01;
 export const GEAR_MAX = 0.10;
 /** A loadout's slots, in paper-doll order. */
 export const SLOTS = ['head', 'body', 'legs', 'feet', 'hands', 'bag', 'tech', 'vehicle'];
+/** A photo or receipt (a `file` record) is at most this many bytes… */
+export const FILE_MAX_BYTES = 2 * 1024 * 1024;
+/** …and the page resizes photos to at most this many pixels on the long side first. */
+export const PHOTO_MAX_PX = 1024;
 
-const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish', 'world'];
-export const EVENT_TYPES = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit', 'correction', 'technique'];
+const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish', 'world', 'reshelve'];
+export const EVENT_TYPES = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit', 'correction', 'technique', 'file'];
 /** The fields a correction may amend (SPEC.md › Corrections); everything else is derived. */
 export const AMENDABLE = ['minutes', 'points', 'note'];
 export const CORRECTION_KINDS = ['void', 'amend'];
@@ -275,6 +279,9 @@ export function index(records) {
     item: new Map(items.map((i) => [i.id, i])),
     loadouts,
     wishes: lastWrites(by.wish),
+    reshelves: lastWrites(by.reshelve),
+    files: by.file,
+    file: new Map(by.file.map((f) => [f.id, f])),
     skips: by.skip.sort(byStart),
     spends: by.spend.sort(byStart),
     world: worldRecord(records),
@@ -317,10 +324,93 @@ export function makeSkill(db, { name, stat, place = null, now = Date.now() }) {
   return { id: newId('skill', now), type: 'skill', name, stat, place };
 }
 
-export function makePlace(db, { name, zone = 'elsewhere', now = Date.now() }) {
+/** A place. Inside another (`parent`) it takes that place's zone unless given one. */
+export function makePlace(db, { name, zone, parent = null, now = Date.now() }) {
   if (!name) throw new Error('a place needs a name');
+  if (parent && !db.place.has(parent)) throw new Error(`no place "${parent}"`);
+  zone = zone || (parent && db.place.get(parent).zone) || 'elsewhere';
   if (!ZONES.includes(zone)) throw new Error(`zone is ${ZONES.join(', ')}, not "${zone}"`);
-  return { id: newId('place', now), type: 'place', name, zone };
+  return { id: newId('place', now), type: 'place', name, zone, parent: parent || null };
+}
+
+// ─── nested places (the house inventory) ────────────────────────────────────
+// A place may sit inside another: Garage › Shelf B › Box 3. Only the Bag
+// cares; tasks, skills, moments and the replay use a place as they always did.
+
+/** The parent a place really has: null when it names no place, or a place that is gone. */
+const parentOf = (db, p) => (p?.parent && p.parent !== p.id && db.place.has(p.parent) ? p.parent : null);
+
+/** [place, …] from the top level down to the place itself; [] for none or an unknown id. */
+export function placePath(db, placeId) {
+  const out = [];
+  const seen = new Set();
+  for (let p = db.place.get(placeId); p && !seen.has(p.id); p = db.place.get(parentOf(db, p))) {
+    seen.add(p.id);
+    out.unshift(p);
+  }
+  return out;
+}
+
+/** The place and every place inside it, at any depth. */
+export function placesWithin(db, placeId) {
+  const out = new Set(db.place.has(placeId) ? [placeId] : []);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const p of db.places) if (!out.has(p.id) && out.has(parentOf(db, p))) { out.add(p.id); grew = true; }
+  }
+  return out;
+}
+
+const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+
+/** Every place depth first, siblings by name: [{ place, depth }]. A cycle is cut where it closes. */
+export function placeTree(db) {
+  const kids = new Map();
+  for (const p of db.places) {
+    // A parent chain that loops back has no top: treat the place as top level.
+    const top = placePath(db, p.id)[0];
+    const parent = top && parentOf(db, top) ? null : parentOf(db, p);
+    kids.set(parent, [...(kids.get(parent) || []), p]);
+  }
+  const out = [];
+  const seen = new Set();
+  const walk = (parent, depth) => {
+    for (const place of (kids.get(parent) || []).sort(byName)) {
+      if (seen.has(place.id)) continue;
+      seen.add(place.id);
+      out.push({ place, depth });
+      walk(place.id, depth + 1);
+    }
+  };
+  walk(null, 0);
+  for (const place of db.places) if (!seen.has(place.id)) out.push({ place, depth: 0 });
+  return out;
+}
+
+/** The place record with a new parent (null = top level). Never into itself or its own insides. */
+export function movePlace(db, placeId, parent) {
+  const place = db.place.get(placeId);
+  if (!place) throw new Error(`no place "${placeId}"`);
+  if (parent && !db.place.has(parent)) throw new Error(`no place "${parent}"`);
+  if (parent && placesWithin(db, placeId).has(parent)) throw new Error(`${place.name} cannot go inside itself`);
+  return { ...place, parent: parent || null };
+}
+
+/**
+ * What deleting a place changes, besides its tombstone: the items, places,
+ * tasks and skills that were in it, moved up to its parent (Unfiled / top
+ * level when it had none). Nothing is deleted with it. Moments keep their place.
+ */
+export function placeRemoval(db, placeId) {
+  const place = db.place.get(placeId);
+  if (!place) throw new Error(`no place "${placeId}"`);
+  const up = parentOf(db, place);
+  const out = [];
+  for (const i of db.items) if (i.place === placeId) out.push({ ...i, place: up });
+  for (const p of db.places) if (p.id !== placeId && p.parent === placeId) out.push({ ...p, parent: up });
+  for (const t of db.tasks) if (t.place === placeId) out.push({ ...t, place: up });
+  for (const k of db.skills) if (k.place === placeId) out.push({ ...k, place: up });
+  return out;
 }
 
 /** Where a task happens: its own place, else its skill's, else nowhere in particular. */
@@ -790,7 +880,9 @@ export function undoCorrection(record, { now = Date.now(), device = 'local' } = 
 
 
 export function makeItem(db, { name, category = '', aliases = [], place = null, qty = 1, price = 0,
-  consumable = false, lowStock = 0, usual = lowStock + 1, skills = [], slot = null, photo = null, color = null, id = null, now = Date.now() }) {
+  consumable = false, lowStock = 0, usual = lowStock + 1, skills = [], slot = null, photo = null, color = null,
+  brand = '', model = '', serial = '', bought = null, warranty = null, notes = '', photos = [], receipts = [],
+  id = null, now = Date.now() }) {
   name = String(name ?? '').trim();
   if (!name) throw new Error('an item needs a name');
   if (slot !== null && slot !== undefined && slot !== '' && !SLOTS.includes(slot)) throw new Error(`slot is ${SLOTS.join(', ')}, not "${slot}"`);
@@ -799,11 +891,21 @@ export function makeItem(db, { name, category = '', aliases = [], place = null, 
   if (typeof lowStock === 'string' && usual === lowStock + 1) usual = null; // "2" + 1 is not 3
   lowStock = countOf(lowStock, 'lowStock');
   usual = usual === undefined || usual === null ? lowStock + 1 : countOf(usual, 'usual');
+  const dayField = (v, what) => {
+    if (v === null || v === undefined || v === '') return null;
+    if (!isDay(v)) throw new Error(`${what} is a day, YYYY-MM-DD, not "${v}"`);
+    return v;
+  };
+  const ids = (v) => (Array.isArray(v) ? v : []).map(String).filter(Boolean);
+  const text = (v) => String(v ?? '').trim();
   return {
     id: id || newId('item', now), type: 'item', name, category: String(category || ''),
     aliases: (Array.isArray(aliases) ? aliases : [aliases]).map((a) => String(a).trim()).filter(Boolean),
     place: place || null, qty: countOf(qty, 'qty'), price: moneyOf(price, 'price'), consumable: !!consumable,
     lowStock, usual, skills: [...skills], slot: slot || null, photo: photo || null, color: color || null,
+    brand: text(brand), model: text(model), serial: text(serial),
+    bought: dayField(bought, 'bought'), warranty: dayField(warranty, 'warranty'), notes: String(notes ?? ''),
+    photos: ids(photos), receipts: ids(receipts),
   };
 }
 
@@ -993,7 +1095,10 @@ export function inventory(records, now = Date.now()) {
   const byPlace = new Map();
   for (const i of items) byPlace.set(i.place || null, [...(byPlace.get(i.place || null) || []), i]);
   const order = new Map(db.places.map((p, n) => [p.id, n]));
-  const stashes = [...byPlace].map(([place, list]) => ({ place, name: place ? db.place.get(place)?.name || place : 'Unfiled', items: list }))
+  const stashes = [...byPlace].map(([place, list]) => ({
+    place, name: place ? db.place.get(place)?.name || place : 'Unfiled', items: list,
+    path: place ? placePath(db, place).map((p) => p.name) : [],
+  }))
     .sort((a, b) => (a.place === null) - (b.place === null) || (order.get(a.place) ?? 1e9) - (order.get(b.place) ?? 1e9));
   const inUse = new Set();
   for (const l of db.loadouts) for (const id of Object.values(l.slots || {})) if (db.item.has(id)) inUse.add(id);
@@ -1009,6 +1114,192 @@ export function inventory(records, now = Date.now()) {
     skipsToday: skips.filter((s) => s.day === day),
     shopping: shoppingList(db),
   };
+}
+
+// ─── the house inventory: files, finding, CSV, labels ───────────────────────
+
+/** The bytes a base64 string holds. */
+const base64Bytes = (b64) => {
+  const s = String(b64).replace(/\s+/g, '');
+  const pad = s.endsWith('==') ? 2 : s.endsWith('=') ? 1 : 0;
+  return Math.floor((s.length * 3) / 4) - pad;
+};
+
+/**
+ * A photo or receipt: the file itself, as base64, in a write-once record.
+ * The item lists the ids it shows (`photos`, `receipts`), in order.
+ */
+export function makeFile(db, { item, kind, name = '', mime = '', data, at = Date.now() }) {
+  if (!db.item.has(item)) throw new Error(`no item "${item}"`);
+  if (kind !== 'photo' && kind !== 'receipt') throw new Error(`kind is photo or receipt, not "${kind}"`);
+  if (typeof data !== 'string' || !data) throw new Error('a file needs its data, as base64');
+  const size = base64Bytes(data);
+  if (size > FILE_MAX_BYTES) throw new Error(`${name || 'that file'} is ${Math.ceil(size / 1024)} KB; the most is ${FILE_MAX_BYTES / 1024 / 1024} MB`);
+  return { id: newId('file', at), type: 'file', item, kind, name: String(name), mime: String(mime || 'application/octet-stream'), data, size, day: dayOf(at), at };
+}
+
+/** An item's photos and receipts, in its order. An id whose record has not synced yet is skipped. */
+export function filesOf(db, item) {
+  const it = typeof item === 'string' ? db.item.get(item) : item;
+  const pick = (ids) => (ids || []).map((id) => db.file.get(id)).filter(Boolean);
+  return { photos: pick(it?.photos), receipts: pick(it?.receipts) };
+}
+
+const fold = (s) => String(s ?? '').normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+/** Place paths in tree order: name by name, a place before the places inside it. */
+function byPath(a, b) {
+  for (let k = 0; k < Math.min(a.length, b.length); k++) {
+    const c = byName(a[k], b[k]);
+    if (c) return c;
+  }
+  return a.length - b.length;
+}
+
+/**
+ * Where things are: items whose name, aliases, category, brand, model,
+ * serial, notes or place names hold every word of the query — so "garage
+ * drill" finds the drill in the garage. Only inside `placeId` (any depth)
+ * when given. By place path, then name. Not the "I have it" match: that is findItems.
+ */
+export function searchItems(db, query, placeId = null) {
+  const qWords = fold(query).split(/\s+/).filter(Boolean);
+  const within = placeId ? placesWithin(db, placeId) : null;
+  const out = [];
+  for (const item of db.items) {
+    if (item.archived) continue;
+    if (within && !within.has(item.place)) continue;
+    const path = placePath(db, item.place);
+    const hay = fold([item.name, ...(item.aliases || []), item.category, item.brand, item.model, item.serial, item.notes, ...path.map((p) => p.name)].join(' \u0000 '));
+    if (qWords.every((w) => hay.includes(w))) out.push({ item, path });
+  }
+  return out.sort((a, b) => byPath(a.path, b.path) || byName(a.item, b.item));
+}
+
+const CSV_COLUMNS = [
+  ['Name', (i) => i.name],
+  ['Place', (i, db) => placePath(db, i.place).map((p) => p.name).join(' › ')],
+  ['Quantity', (i) => i.qty],
+  ['Category', (i) => i.category],
+  ['Brand', (i) => i.brand],
+  ['Model', (i) => i.model],
+  ['Serial', (i) => i.serial],
+  ['Bought', (i) => i.bought],
+  ['Price', (i) => i.price],
+  ['Warranty', (i) => i.warranty],
+  ['Photos', (i) => (i.photos || []).length],
+  ['Receipts', (i) => (i.receipts || []).length],
+  ['Notes', (i) => i.notes],
+];
+
+function csvCell(v) {
+  let s = String(v ?? '');
+  if (/^[=+\-@]/.test(s)) s = `'${s}`; // a spreadsheet would run it as a formula
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** The items as CSV, by place path then name; photos and receipts are counted, not embedded. */
+export function inventoryCSV(db, items) {
+  const rows = searchItems(db, '').filter(({ item }) => items.some((i) => i.id === item.id)).map(({ item }) => item);
+  const lines = [CSV_COLUMNS.map(([h]) => h).join(',')];
+  for (const i of rows) lines.push(CSV_COLUMNS.map(([, get]) => csvCell(get(i, db))).join(','));
+  return `${lines.join('\r\n')}\r\n`;
+}
+
+/**
+ * A box label: what is in a place, its own items first, then each place
+ * inside it (depth first) under its path from this place.
+ */
+export function labelSheet(db, placeId) {
+  const place = db.place.get(placeId);
+  if (!place) throw new Error(`no place "${placeId}"`);
+  const depth = placePath(db, placeId).length;
+  const within = placesWithin(db, placeId);
+  const lines = [];
+  const direct = (id) => db.items.filter((i) => !i.archived && i.place === id).sort(byName);
+  for (const { place: p } of [{ place }, ...placeTree(db).filter((x) => x.place.id !== placeId && within.has(x.place.id))]) {
+    const list = direct(p.id);
+    if (!list.length) continue;
+    if (p.id !== placeId) lines.push({ heading: placePath(db, p.id).slice(depth).map((x) => x.name).join(' › ') });
+    for (const i of list) lines.push({ item: i.id, name: i.name, qty: i.qty });
+  }
+  return { place, path: placePath(db, placeId).map((p) => p.name), lines };
+}
+
+// ─── reshelving ─────────────────────────────────────────────────────────────
+// A plan puts a collection in a new order: moves in their final order, walked
+// through twice — pull each shelf empty, then shelve each new shelf in order.
+// Shelving a book moves the item, so the inventory stays true as you go.
+
+/** A reshelve plan. `from` defaults to where the item is now; n counts from 1. */
+export function makeReshelve(db, { name, moves, now = Date.now() }) {
+  name = String(name ?? '').trim();
+  if (!name) throw new Error('a reshelve plan needs a name');
+  const out = (moves || []).map((m, k) => {
+    const item = db.item.get(m.item);
+    if (!item) throw new Error(`no item "${m.item}"`);
+    if (!db.place.has(m.to)) throw new Error(`no place "${m.to}"`);
+    const from = m.from ?? item.place ?? null;
+    if (from && !db.place.has(from)) throw new Error(`no place "${from}"`);
+    return { item: item.id, from, to: m.to, n: k + 1, call: String(m.call ?? '') };
+  });
+  return { id: newId('reshelve', now), type: 'reshelve', name, moves: out, pulled: [], shelved: [], done: false };
+}
+
+/** The latest-written plan that is not done, or null. */
+export function activeReshelve(db) {
+  let best = null;
+  for (const p of db.reshelves || []) if (!p.done && (!best || (p.updatedAt ?? 0) >= (best.updatedAt ?? 0))) best = p;
+  return best;
+}
+
+/**
+ * The plan as the Bag draws it: the new shelves in the order of their first
+ * move, and the shelves the books come from in tree order, each with its
+ * moves. A book already at its new place counts as shelved.
+ */
+export function reshelveView(db, plan) {
+  const pulled = new Set(plan.pulled || []);
+  const shelved = new Set(plan.shelved || []);
+  const moves = (plan.moves || [])
+    .filter((m) => db.item.has(m.item) && !db.item.get(m.item).archived && db.place.has(m.to))
+    .map((m) => {
+      const item = db.item.get(m.item);
+      return { ...m, item, isPulled: pulled.has(m.item), isShelved: shelved.has(m.item) || item.place === m.to };
+    })
+    .sort((a, b) => a.n - b.n);
+  const group = (key, order) => {
+    const by = new Map();
+    for (const m of moves) by.set(m[key], [...(by.get(m[key]) || []), m]);
+    return [...by].sort(order).map(([place, list]) => ({
+      place: db.place.get(place) || null, path: placePath(db, place).map((p) => p.name), moves: list,
+    }));
+  };
+  const tree = new Map(placeTree(db).map((x, k) => [x.place.id, k]));
+  return {
+    total: moves.length,
+    pulled: moves.filter((m) => m.isPulled).length,
+    shelved: moves.filter((m) => m.isShelved).length,
+    shelves: group('to', (a, b) => a[1][0].n - b[1][0].n),
+    sources: group('from', (a, b) => (tree.get(a[0]) ?? 1e9) - (tree.get(b[0]) ?? 1e9)),
+  };
+}
+
+const toggle = (list, id, on) => (on ? [...new Set([...(list || []), id])] : (list || []).filter((x) => x !== id));
+
+/** Mark a book pulled off its shelf (or not). Nothing moves. */
+export function markPulled(plan, itemId, on = true) {
+  return { ...plan, pulled: toggle(plan.pulled, itemId, on) };
+}
+
+/** Shelve a book: the item at its new place and the plan with it marked. Off only unmarks. */
+export function shelveMove(db, plan, itemId, on = true) {
+  const move = (plan.moves || []).find((m) => m.item === itemId);
+  if (!move) throw new Error(`"${itemId}" is not in ${plan.name}`);
+  const next = { ...plan, shelved: toggle(plan.shelved, itemId, on) };
+  if (!on) return { plan: next, item: null };
+  const item = db.item.get(itemId);
+  if (!item) throw new Error(`no item "${itemId}"`);
+  return { plan: next, item: { ...item, place: move.to } };
 }
 
 // ─── energy ─────────────────────────────────────────────────────────────────

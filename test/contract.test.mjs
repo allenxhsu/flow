@@ -26,8 +26,8 @@ const CONSTANTS = {
   TIRED_CAPS: { bit: 6, very: 3, wiped: 1 },
 };
 
-const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish', 'world'];
-const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit', 'correction', 'technique'];
+const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish', 'world', 'reshelve'];
+const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit', 'correction', 'technique', 'file'];
 const D = '2026-09-28';
 
 test('contract: every function in docs/API.md is exported with its arity', () => {
@@ -333,6 +333,67 @@ test('contract (terminal): makeTired(db, { body, mind, level, at }) → an energ
   for (const k of ['id', 'type', 'day', 'at', 'stamina', 'mana', 'feeling', 'tired']) assert.ok(k in r, `tired.${k}`);
   assert.equal(r.type, 'energy');
   assert.deepEqual(r.tired, { body: true, mind: false, level: 'bit' });
+});
+
+// House inventory (SPEC.md "House inventory"): nested places, item details, file records.
+const HOUSE_FUNCTIONS = {
+  placePath: 2, placesWithin: 2, placeTree: 1, movePlace: 3, placeRemoval: 2,
+  makeFile: 2, filesOf: 2, searchItems: 2, inventoryCSV: 2, labelSheet: 2,
+  // Reshelving (SPEC.md "Reshelving")
+  makeReshelve: 2, activeReshelve: 1, reshelveView: 2, markPulled: 2, shelveMove: 3,
+};
+
+test('contract (house inventory): new functions are exported with their arity', () => {
+  for (const [name, arity] of Object.entries(HOUSE_FUNCTIONS)) {
+    assert.equal(typeof M[name], 'function', name);
+    assert.equal(M[name].length, arity, `${name}.length`);
+  }
+});
+
+test('contract (house inventory): constants, and file is the last event', () => {
+  assert.equal(M.FILE_MAX_BYTES, 2 * 1024 * 1024);
+  assert.equal(M.PHOTO_MAX_PX, 1024);
+  assert.equal(M.RECORD_TYPES.at(-1), 'file');
+  assert.equal(M.RECORD_TYPES[M.RECORD_TYPES.indexOf('done') - 1], 'reshelve', 'reshelve is the last definition');
+});
+
+test('contract (reshelving): the plan and the view the Bag draws', () => {
+  const g = game();
+  const a = g.add(M.makePlace(g.db(), { name: 'Shelf A', zone: 'home' }));
+  const b = g.add(M.makePlace(g.db(), { name: 'Shelf B', zone: 'home' }));
+  const it = g.add(M.makeItem(g.db(), { name: 'Book', place: a.id }));
+  const plan = g.add(M.makeReshelve(g.db(), { name: 'Dewey', moves: [{ item: it.id, to: b.id, call: '001' }] }));
+  for (const k of ['id', 'type', 'name', 'moves', 'pulled', 'shelved', 'done']) assert.ok(k in plan, `plan.${k}`);
+  assert.deepEqual(Object.keys(plan.moves[0]).sort(), ['call', 'from', 'item', 'n', 'to']);
+  assert.equal(M.activeReshelve(g.db()).id, plan.id);
+  const v = M.reshelveView(g.db(), plan);
+  for (const k of ['total', 'pulled', 'shelved', 'shelves', 'sources']) assert.ok(k in v, `view.${k}`);
+  for (const k of ['place', 'path', 'moves']) assert.ok(k in v.shelves[0] && k in v.sources[0]);
+  for (const k of ['item', 'isPulled', 'isShelved']) assert.ok(k in v.shelves[0].moves[0], `move.${k}`);
+  const r = M.shelveMove(g.db(), plan, it.id);
+  assert.ok(r.plan && r.item);
+  assert.ok(Array.isArray(M.markPulled(plan, it.id).pulled));
+});
+
+test('contract (house inventory): shapes the Bag relies on', () => {
+  const g = game();
+  const garage = g.add(M.makePlace(g.db(), { name: 'Garage', zone: 'home' }));
+  const box = g.add(M.makePlace(g.db(), { name: 'Box', parent: garage.id }));
+  assert.equal(box.parent, garage.id);
+  const it = g.add(M.makeItem(g.db(), { name: 'Drill', place: box.id }));
+  for (const k of ['brand', 'model', 'serial', 'bought', 'warranty', 'notes', 'photos', 'receipts']) assert.ok(k in it, `item.${k}`);
+  const db = g.db();
+  assert.ok(Array.isArray(db.files) && db.file instanceof Map, 'index().files / .file');
+  const tree = M.placeTree(db);
+  assert.ok(tree.every((x) => x.place && Number.isInteger(x.depth)));
+  const [hit] = M.searchItems(db, 'drill');
+  assert.equal(hit.item.id, it.id);
+  assert.ok(Array.isArray(hit.path) && hit.path.every((p) => p.type === 'place'));
+  assert.deepEqual(Object.keys(M.filesOf(db, it.id)).sort(), ['photos', 'receipts']);
+  assert.equal(typeof M.inventoryCSV(db, db.items), 'string');
+  const sheet = M.labelSheet(db, garage.id);
+  assert.ok(sheet.place && Array.isArray(sheet.path) && Array.isArray(sheet.lines));
+  assert.ok(Array.isArray(M.inventory(g.records, T(`${D}T12:00:00`)).stashes[0].path));
 });
 
 test('contract: corrections — makeCorrection, undoCorrection and what index() hands the screens', () => {

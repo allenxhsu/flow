@@ -190,6 +190,14 @@
 :root[data-mode='hud'] .cell.low::after { content: 'LOW'; position: absolute; right: 4px; top: 4px; padding: 0 3px; font-family: var(--sc-font-mono); font-size: var(--sc-text-xs); background: var(--sc-danger); color: #fff; line-height: 1.3; }
 :root[data-mode='hud'] .cell.sel { background: rgb(var(--sc-accent-rgb) / 0.12); border-color: var(--sc-accent); }
 
+/* The house inventory: an item's photos and receipts. */
+:root[data-mode='hud'] .bag-photos { display: flex; flex-wrap: wrap; gap: var(--sc-space-2); align-items: center; }
+:root[data-mode='hud'] .bag-photos figure { margin: 0; display: grid; gap: 2px; justify-items: center; }
+:root[data-mode='hud'] .bag-photos img { width: 96px; height: 96px; object-fit: cover; border: 1px solid var(--sc-line-strong); }
+:root[data-mode='hud'] .bag-receipts { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+:root[data-mode='hud'] .bag-receipts li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sc-space-2); }
+:root[data-mode='hud'] .bag-add { cursor: pointer; justify-self: start; }
+
 :root[data-mode='hud'] .money { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: var(--sc-space-2); }
 :root[data-mode='hud'] .money-cell { display: grid; gap: 2px; padding: var(--sc-space-2) var(--sc-space-3); background: var(--sc-panel-2); border: 1px solid var(--sc-line); }
 :root[data-mode='hud'] .money-cell.saved .big { color: var(--sc-success); }
