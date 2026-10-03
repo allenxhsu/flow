@@ -2,8 +2,11 @@
 
 import { makePlace, newId, placeRemoval, ZONES } from '../model.js';
 import { esc, materialize } from '../util.js';
+import { TREES, SKILLS, boardRecords, statId } from '../board.js';
+import { STARTER_RULES } from '../board-routing.js';
 import { validateWorld, worldRecord, worldFor } from '../game/world.js';
 import { modeSwitch } from '../mode.js';
+import { hosted, post } from '../host.js';
 
 /** Starting colours for the hero sprite — data for the replay, not page styling. */
 export const HERO_DEFAULTS = { hair: '#4a3222', skin: '#e0b48c', shirt: '#2f7fd0', trousers: '#34405a' };
@@ -34,6 +37,21 @@ function syncSection(ctx) {
     <sc-sync-status></sc-sync-status>
     ${st.lastError ? `<div class="sc-alert sc-alert--danger small"><strong>Last error</strong> ${esc(st.lastError)}</div>` : ''}
   </form>`;
+}
+
+/**
+ * Connections: Strava and Google, held on the sync server for every app at
+ * once. The panel is ui-kit's; Flow only hands it the server and the way
+ * to open a consent screen (the shell's browser when hosted). What Flow
+ * reads through them comes later; this is where they are made.
+ */
+function connectionsSection(ctx) {
+  const origin = ctx.store.serverOrigin?.() || null;
+  return `<section class="sc-panel pad stack" id="connections">
+    <h2>Connections</h2>
+    <p class="small sc-muted" style="margin:0">Strava and Google, connected once on your sync server${origin ? ` (<span class="sc-mono">${esc(origin)}</span>)` : ''} and shared by every app: the Planner, Skills and Flow read the same accounts.</p>
+    <sc-connections features="calendar"></sc-connections>
+  </section>`;
 }
 
 /** Project Planner, read-only: where its workspace is read from, and how the last read went. */
@@ -144,11 +162,52 @@ function appearanceSection(ctx) {
   </section>`;
 }
 
+
+/**
+ * The board (SPEC.md › The board: seven trees) and the rules that route tasks
+ * onto it. Adopting is a write the player makes deliberately — it seeds seven
+ * stats and their skills — and without routing the whole week reads as one
+ * skill called Work, so the two live together.
+ */
+function boardSection(ctx) {
+  const { db } = ctx;
+  const adopted = TREES.every((t) => db.stat.get(statId(t.id)));
+  const rules = Array.isArray(db.settings.routing) ? db.settings.routing : [];
+  const options = SKILLS.filter((k) => k.graded)
+    .map((k) => `<option value="${esc(k.id)}">${esc(k.name)} · ${esc(k.plain)}</option>`).join('');
+  const rows = rules.map((r, i) => `<li class="rule-row">
+    <span class="rule-match">${r.project ? `project <b>${esc(r.project)}</b>` : ''}${r.project && r.pattern ? ' and ' : ''}${r.pattern ? `title matches <code>${esc(r.pattern)}</code>` : ''}</span>
+    <span class="rule-arrow" aria-hidden="true">→</span>
+    <span class="rule-skill">${esc(SKILLS.find((k) => k.id === r.skill)?.name || r.skill)}</span>
+    <button class="sc-button sc-button--ghost sc-button--sm" type="button" data-action="drop-rule" data-index="${i}">Remove</button>
+  </li>`).join('');
+  return `<section class="sc-panel pad stack" id="board">
+    <div class="row-between"><h2>The board</h2><span class="small sc-faint">${adopted ? `${TREES.length} trees · ${SKILLS.length} skills` : 'not adopted yet'}</span></div>
+    ${adopted ? '' : `<div class="muted-box"><p>Seven trees — ${TREES.map((t) => esc(t.name)).join(' · ')} — and the skills under them. Adopting writes them as your stats and skills; nothing already logged is touched.</p>
+      <div class="row"><button class="sc-button sc-button--primary" type="button" data-action="adopt-board">Adopt the board</button></div></div>`}
+    <div class="stack">
+      <h3>Routing</h3>
+      <p class="small sc-faint" style="margin:0">A task joins a skill only when it is an instance of that skill's unit of output. Everything else is Toil, and Toil is the number to drive down. Planner's own skill wins where it has one; otherwise the first rule that matches, in this order.</p>
+      ${rows ? `<ul class="list rule-list">${rows}</ul>` : `<div class="muted-box"><p>No rules yet, so every Planner task is Toil until Planner names a skill for it.</p>${
+        adopted ? `<div class="row"><button class="sc-button" type="button" data-action="starter-rules">Take the ${STARTER_RULES.length} starter rules</button></div>` : ''}</div>`}
+      <form class="stack" data-form="routing">
+        <div class="form-grid">
+          <label class="sc-field"><span>Project is</span><input class="sc-input" name="project" placeholder="e.g. Swagelok Bellows Project"></label>
+          <label class="sc-field"><span>or title matches</span><input class="sc-input" name="pattern" placeholder="e.g. ^Release Drawing"></label>
+          <label class="sc-field"><span>route to</span><select class="sc-select" name="skill" required>${options}</select></label>
+          <button class="sc-button" type="submit">Add rule</button>
+        </div>
+      </form>
+    </div>
+  </section>`;
+}
+
 export function render(ctx) {
   const set = ctx.db.settings;
   const hero = { ...HERO_DEFAULTS, ...(set.hero || {}) };
   return `<div class="view">
     ${syncSection(ctx)}
+    ${boardSection(ctx)}
     <form class="sc-panel pad stack" data-form="player" id="player">
       <h2>Player</h2>
       <div class="form-grid">
@@ -165,6 +224,7 @@ export function render(ctx) {
         <button class="sc-button sc-button--primary" type="submit">Save hero</button></div>
     </form>
     ${plannerSection(ctx)}
+    ${connectionsSection(ctx)}
     ${placesSection(ctx)}
     ${geofenceSection(ctx)}
     ${kindsSection(ctx)}
@@ -197,6 +257,29 @@ async function saveList(ctx, type, rec) {
 }
 
 export const actions = {
+  /** Seed the seven trees and their skills. Deliberate: it is a write to definitions. */
+  'adopt-board': async (el, ctx) => {
+    await ctx.store.save(boardRecords());
+    ctx.toast(`The board is yours: ${TREES.length} trees, ${SKILLS.length} skills.`, 'success');
+    ctx.render?.({ force: true });
+  },
+
+  /** The starter set, written in order. Offered only while there are no rules. */
+  'starter-rules': async (el, ctx) => {
+    await ctx.store.save({ ...ctx.store.getRecord('settings'), id: 'settings', type: 'settings', routing: [...STARTER_RULES] });
+    ctx.toast(`${STARTER_RULES.length} rules added. Edit or remove any of them.`, 'success');
+    ctx.render?.({ force: true });
+  },
+
+  'drop-rule': async (el, ctx) => {
+    const i = Number(el.dataset.index);
+    const rules = [...(ctx.db.settings.routing || [])];
+    if (!(i >= 0 && i < rules.length)) return;
+    rules.splice(i, 1);
+    await ctx.store.save({ ...ctx.store.getRecord('settings'), id: 'settings', type: 'settings', routing: rules });
+    ctx.render?.({ force: true });
+  },
+
   'sync-now': async (el, ctx) => { await ctx.store.syncNow(); ctx.render({ force: true }); },
   'planner-pull': async (el, ctx) => {
     await ctx.store.pullPlanner();
@@ -277,6 +360,17 @@ export async function onChange(ev, ctx) {
 }
 
 export const forms = {
+  routing: async (d, form, ctx) => {
+    const project = String(d.project || '').trim();
+    const pattern = String(d.pattern || '').trim();
+    if (!project && !pattern) throw new Error('A rule needs a project or a title pattern.');
+    if (pattern) { try { new RegExp(pattern, 'i'); } catch { throw new Error(`"${pattern}" is not a pattern I can read.`); } }
+    if (!SKILLS.some((k) => k.id === d.skill)) throw new Error('Pick a skill on the board.');
+    const rules = [...(ctx.db.settings.routing || []), { ...(project ? { project } : {}), ...(pattern ? { pattern } : {}), skill: d.skill }];
+    await ctx.store.save({ ...ctx.store.getRecord('settings'), id: 'settings', type: 'settings', routing: rules });
+    ctx.toast('Rule added.', 'success');
+  },
+
   sync: async (d, form, ctx) => {
     await ctx.store.applySettings({ url: d.url, token: d.token, enabled: d.enabled === 'on' });
     const st = ctx.store.syncStatus();
@@ -315,4 +409,19 @@ export const forms = {
 
 export function mounted(view, ctx) {
   for (const el of view.querySelectorAll('sc-sync-status')) { try { el.status = ctx.store.syncStatus(); } catch { /* older widget */ } }
+  for (const el of view.querySelectorAll('sc-connections')) wireConnections(el, ctx);
+}
+
+/** The panel reaches the server the way Flow does, and opens consent screens the way the shell can. */
+export function wireConnections(el, ctx) {
+  const store = ctx.store;
+  el.origin = store.serverOrigin?.() || '';
+  if (store.serverFetch) el.request = (path, init) => store.serverFetch(path, init);
+  // A shell opens the consent screen in the default browser (the message the
+  // Planner's shell already answers); a browser page gets a small window.
+  el.open = (url) => {
+    if (hosted) { post({ type: 'openURL', url }); return true; }
+    try { return !!globalThis.open?.(url, 'sc-connect', 'width=560,height=760'); } catch { return false; }
+  };
+  if (typeof el.refresh === 'function') void el.refresh();
 }

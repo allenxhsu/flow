@@ -2,8 +2,8 @@
 // one change, and the difficulty for next week) and how satisfaction has
 // moved. XP cannot buy this number. Difficulty is set only here.
 
-import { makeReview, DIFFICULTY, addDays } from '../model.js';
-import { esc, chartGeometry, nearestPoint } from '../util.js';
+import { makeReview, weekInSkills, weekToil, DIFFICULTY, addDays } from '../model.js';
+import { esc, fmtMin, fmtPts, chartGeometry, nearestPoint } from '../util.js';
 
 function chart(reviews, width = 640) {
   if (!reviews.length) return '<div class="muted-box">The line starts with your first review.</div>';
@@ -93,12 +93,66 @@ function difficultySection(ctx) {
     </section>`;
 }
 
+
+// ─── the week in skills ─────────────────────────────────────────────────────
+// SPEC.md › The week in skills. The hours in a week are fixed, so the reading
+// that matters is not how many there were but which skill sets they went into,
+// how much of them was spent doing something a second time, and which skill
+// keeps not being chosen.
+
+const pct = (x) => `${Math.round(x * 100)}%`;
+const delta = (n) => (n === 0 ? 'same as last week' : `${n > 0 ? '+' : '−'}${fmtMin(Math.abs(n))} on last week`);
+
+function skillRow(k) {
+  const tasks = k.tasks.map((t) => `<li><span class="wk-task">${esc(t.title)}</span><span class="small sc-faint num">${t.runs > 1 ? `×${t.runs} · ` : ''}${fmtMin(t.minutes)}</span></li>`).join('');
+  return `<div class="item wk-skill" data-week-skill="${esc(k.id)}">
+    <div class="item-head">
+      <span class="item-title">${esc(k.name)}</span>
+      <span class="pills"><span class="sc-pill">${esc(k.statName)}</span>${k.rework.count ? `<span class="sc-pill" style="--tint: var(--sc-danger)">rework ${pct(k.reworkShare)}</span>` : ''}</span>
+      <span class="sc-spacer"></span>
+      <span class="num wk-minutes">${fmtMin(k.minutes)}</span><span class="num wk-share">${pct(k.share)}</span>
+    </div>
+    <div class="sc-meter meter-app" role="meter" aria-label="${esc(k.name)} share of the week" aria-valuenow="${Math.round(k.share * 100)}"><span style="--value: ${Math.round(k.share * 100)}%"></span></div>
+    <div class="row small sc-muted"><span class="num">${fmtPts(k.points)} pts</span><span class="num">${k.runs} run${k.runs === 1 ? '' : 's'}</span><span>${esc(delta(k.change))}</span>${k.rework.count ? `<span class="num">${fmtMin(k.rework.minutes)} redone</span>` : ''}</div>
+    <ul class="wk-tasks">${tasks}</ul>
+  </div>`;
+}
+
+function weekSection(ctx) {
+  if (!ctx.db) return ''; // rendered from play() alone, as the replay and the tests do
+  const w = weekInSkills(ctx.db, ctx.g.day);
+  if (!w.skills.length) {
+    return `<section class="sc-panel pad stack" id="week-skills">
+      <h2>Where the week went · ${esc(w.week)}</h2>
+      <div class="muted-box">Nothing logged this week yet, so there is no work this week to group.</div>
+    </section>`;
+  }
+  const cold = w.untouched.slice(0, 6);
+  // Toil: the share of the week that made the player better at nothing. Shown
+  // only when there is some — a zero would be a row of noise every week.
+  const toil = weekToil(ctx.db, ctx.g.day);
+  return `<section class="sc-panel pad stack" id="week-skills">
+    <div class="row-between"><h2>Where the week went · ${esc(w.week)}</h2>
+      <span class="small sc-faint num">${fmtMin(w.minutes)} over ${w.days} day${w.days === 1 ? '' : 's'} · ${fmtPts(w.points)} pts</span></div>
+    <div class="row wk-stats">${w.stats.map((s) => `<span class="sc-pill wk-stat" data-week-stat="${esc(s.id)}">${esc(s.name)} <b class="num">${pct(s.share)}</b></span>`).join('')}${
+      toil.minutes ? `<span class="sc-pill wk-stat wk-toil" data-week-toil title="Work that belongs to no skill — the one number meant to go down">Toil <b class="num">${pct(toil.share)}</b></span>` : ''}</div>
+    ${toil.minutes ? `<p class="small sc-faint" style="margin:0">${fmtMin(toil.minutes)} of the week made you better at nothing${toil.bounces ? `, and ${toil.bounces} of it came back` : ''}. This is the number to drive down.</p>` : ''}
+    <div class="list">${w.skills.map(skillRow).join('')}</div>
+    ${cold.length ? `<div class="stack wk-cold">
+      <h3>Not worked this week</h3>
+      <div class="row">${cold.map((k) => `<span class="sc-pill" data-week-cold="${esc(k.id)}">${esc(k.name)} <span class="small sc-faint">${k.days === null ? 'never' : `${k.days}d`}</span></span>`).join('')}</div>
+      <p class="small sc-faint" style="margin:0">A skill you keep not choosing is the one worth noticing.</p>
+    </div>` : ''}
+  </section>`;
+}
+
 export function render(ctx) {
   const { g } = ctx;
   const s = g.satisfaction;
   const reviews = s.history;
   const field = (name, label) => `<label class="sc-field"><span>${esc(label)} <output class="num" data-for="${name}">–</output></span><input type="range" name="${name}" min="0" max="10" step="0.5" value="5" data-unset="1"></label>`;
   return `<div class="view">
+    ${weekSection(ctx)}
     <form class="sc-panel sc-panel--lit pad stack" data-form="review" id="review-form">
       <div class="row-between"><h2>Weekly review · ${esc(g.week)}</h2>${s.due ? '<span class="sc-pill" style="--tint: var(--sc-warning)">due</span>' : `<span class="small sc-faint">${s.latest ? `last ${esc(s.latest.day)}` : 'first review due Sunday'}</span>`}</div>
       <div class="form-grid">

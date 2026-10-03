@@ -21,9 +21,10 @@ take their look from it. See "## Play".
 
 ## Shape
 
-- **Stats → skills → tasks.** 4–6 stats of the player's choosing (defaults
-  Body, Mind, Craft, Work, Bonds). Skills sit under stats and level up.
-  Life satisfaction is a separate weekly 0–10 score XP cannot buy.
+- **Stats → skills → tasks.** Up to **seven** stats of the player's choosing;
+  theirs are the seven trees of "The board" below, which supersede the old
+  Body / Mind / Craft / Work / Bonds defaults. Skills sit under stats and
+  level up. Life satisfaction is a separate weekly 0–10 score XP cannot buy.
 - **Task:** a measure (`time` | `count` | `quality`), a cadence (`daily` |
   `weekly` | `once` | `anytime`), an estimate in minutes, stamina/mana cost
   (negative restores), optional deadline, place, batch type, `critical`,
@@ -31,7 +32,442 @@ take their look from it. See "## Play".
 - **Critical** = flagged, or has a deadline, or is for someone else, or the
   planner marks it urgent (phase 2).
 
+## The board: seven trees (decided 2026-09-28)
+
+The default stats (Body, Mind, Craft, Work, Bonds) were a placeholder. This is
+the real board, cut from 403 of the player's own Planner tasks across 39
+projects. Seven trees — four professional, three private — each with at least
+three skills. It raises the stat cap from six to seven.
+
+Every skill declares a **unit of output**, because the player's *tasks* are
+nearly all one-offs but their *units* repeat: eleven "Release Drawing for…",
+sixty reqs, fifty threads. Pace is measured per unit, never per task.
+
+| tree | skill | unit of output | the meter (what cannot be faked) |
+|---|---|---|---|
+| **ARTIFICE** | Shaping | a modelled part | true minutes per part |
+| | Interlock | an assembly | minutes per assembly · mates that break on edit |
+| | Inscription | a released drawing | minutes per sheet · **revisions per release** |
+| | Sundering | a project's BOM | unique parts per project · reuse across projects |
+| **CAMPAIGN** | Summoning | a requisition | req→on-dock days · **% needing a second req** |
+| | Quickening | a machine to dry-run | defects at dry run · kit-complete→pass days |
+| | Trial | a FAT | **first-time pass rate** |
+| | Deliverance | a project | on-time vs deadline · estimate accuracy |
+| **RHETORIC** | Scribing | a thread to resolution | **round-trips to resolution** |
+| | Parley | a conversation with a purpose | did it produce the decision it was for |
+| | Council | a meeting | **say-back rate** |
+| | Augury | a written claim with a check date | **calibration** (see below) |
+| **COMMAND** | Battle Orders | a handoff | **chase count** before delivery |
+| | Decree | a decision | stood vs relitigated |
+| | Bulwark | an escalation | closed here vs passed up |
+| | Tutelage | a person coached | did *their* meter move |
+| **SINEW** | Might | a session | total load · estimated 1RM |
+| | Vigor | a session | pace at fixed HR · time over a benchmark |
+| | Poise | a run (snowboard) | **falls per run** · terrain grade · *seasonal* |
+| **ARCANA** | Alacrity | a reaction test | median reaction time |
+| | Concentration | a timer run | longest unbroken run · % cancelled |
+| | Lore | a course unit | the external grade · time per unit |
+| **HEARTH** | Covenant · Bloodline · Fellowship | — | hours only. **Never graded** |
+
+The display name is the tree's; the plain meaning is the grey subtitle beside
+it — *Summoning · procurement* — so the character sheet does not become a
+crossword.
+
+### What lands in Flow: six types
+
+Everything the day produces is one of six things, and **only one of them is a
+choice the player makes.** The rest are decided by facts — whether the work is
+an instance of a unit of output, whether the world sent it back — which is
+what keeps the board from becoming a set of self-selected labels.
+
+| type | what it is | what it earns |
+|---|---|---|
+| **Skill work** | an instance of a skill's unit of output | points · Depth · Grade · Insight |
+| **Toil** | real work that is an instance of nothing the player is improving at | points · counts toward **Toil %** · has a **bounce rate** |
+| **Moment** | life, not work: a drive, a meal, rest, a chat | energy only, never points |
+| **Rework** | a redo of something already done | **never a new unit.** Folds into the original's true minutes and takes its points back |
+| **Claim** | a written prediction with a check date (Augury) | nothing when written; **Insight** when it resolves |
+| **Boss** | a scheduled external audit: a certification, a FAT, a course grade | confirms the meters were not lying; moves no meter itself |
+
+What decides which:
+
+- **Skill work or Toil** — whether the task is an instance of a declared unit
+  of output. Not how it felt, not a dropdown.
+- **One-shot or iterable** is a property of the **skill**, fixed once, never
+  of the individual task (see "Right once").
+- **Rework** is decided by the world: something came back.
+- **Focus** is the only free choice — one skill per task, declared before
+  starting. It does **not** change which meter the task feeds. A released
+  drawing scores as Inscription whatever the player was thinking about; a
+  focus of Sundering only changes the question asked afterwards ("how many
+  library parts did you reuse?"), and that answer is the experiment.
+
+Focus is optional. A task with nothing to get better at — *Reimbursement*,
+*PO Receipt* — takes no focus and Toil absorbs it. Forcing a focus onto
+filing an expense report is how a good mechanic becomes a tax.
+
+### Most tasks belong to no skill, and that is the point
+
+A task joins a skill **only when it is an instance of that skill's unit of
+output** — a modelled part, a released drawing, a req, a thread with a
+question in it, a handoff. Everything else is left unclassified. Not
+"miscellaneous": unclassified.
+
+Forcing every task into a tree would be the worst thing the board could do to
+itself. *Reimbursement*, *PO Receipt*, *Deliver to the room*, *Clear Tickets*,
+*25G* are real work and real minutes, and none of them is an instance of
+anything the player is getting better at. Filed under Summoning they would
+poison minutes-per-req with things that are not reqs, and the meter would
+drift while the player did nothing differently. A measure is only as good as
+its denominator.
+
+So the three numbers count different things, deliberately:
+
+- **Points (fuel)** count *every* minute. The 720 cap is a budget of hours in
+  a day and every hour spends from it, classified or not.
+- **Depth** counts only the hours inside a skill.
+- **Grade** counts only completed units of that skill.
+
+**Toil** is the share of the week that belongs to no skill — work that pays
+fuel and makes the player better at nothing. It is shown on the week's
+grouping beside the trees, as a percentage, and it is the one number on the
+board that is meant to go **down**. Driving it down is the whole operational
+thesis in a single figure: the same output from fewer hours that teach nothing.
+
+**Toil is measured once, and it is not pace.** Administrative work is where
+doing it twice hurts most: a reimbursement filed wrong, a PO with the wrong
+part number, a bounced requisition. The cost of the error is high *and* the
+redo teaches nothing — a drawing redone at least leaves the player better at
+drawings; a refiled expense report leaves them exactly where they were, minus
+an hour. So Toil carries no Depth and no Grade, because nobody is trying to
+become a master of expense reports, and exactly one number: **bounce rate**,
+how often administrative work comes back. Its minutes count double when it
+does.
+
+Two scoreboards, wanting opposite things:
+
+| | hours | quality meter | target |
+|---|---|---|---|
+| a skill | up or steady | pace on clean units | Grade climbing |
+| Toil | **down** | bounce rate | **zero**, on fewer hours |
+
+**The intervention for Toil is a checklist, not practice.** Deliberate
+practice is for work with a craft in it. For a routine one-shot procedure the
+answer is a template that cannot be filled in wrongly — make the mistake
+impossible rather than get better at not making it. A Toil type that bounces
+twice has earned a checklist, and the checklist retires it.
+
+**Routing.** A task's skill comes from Planner's own skill for it where there
+is one, else a rule the player keeps in Settings (project → skill, or a title
+pattern → skill), else nothing. Classification is by unit of output, never by
+topic: "Talk to Jeffery about Alcon" is a **Parley** only if it had a decision
+to produce, and otherwise it is a moment with a duration.
+
+### Tiers: the basics first (decided 2026-09-28)
+
+The trees are Diablo's shape, not just its names. A skill sits at a **tier**
+and stands on the one below it, and a tier opens on two conditions at once —
+the tree deep enough, and the prerequisite actually worked. Pouring a thousand
+hours into one root never opens what sits on a sibling.
+
+```
+ARTIFICE                    CAMPAIGN
+T1  Shaping                 T1  Summoning
+     ├── Interlock  T2      T2   └── Quickening
+     └── Inscription T2     T3        └── Trial
+          └── Sundering T3  T4             └── Deliverance
+
+RHETORIC                    COMMAND
+T1  Scribing                T1  Battle Orders
+     ├── Parley     T2      T2   └── Bulwark
+     │    └── Council T3    T3        └── Decree
+     └── Augury     T2      T4             └── Tutelage
+
+SINEW                       ARCANA              HEARTH
+T1  Might   Vigor           T1  Concentration   (flat — not a ladder)
+T2   └── Poise              T2   ├── Alacrity
+                            T2   └── Lore
+```
+
+Each chain is a real dependency: modularity stands on assemblies, running a
+room stands on holding one conversation to a decision, and Campaign is the
+strictest because it is literally sequential — material, build, test, ship.
+
+| tier | tree depth | prerequisite depth |
+|---|---|---|
+| 1 | 0 — open from the first day | — |
+| 2 | 4 *(8 h in the tree)* | 2 *(2 h)* |
+| 3 | 7 *(75 h)* | 3 *(4 h)* |
+| 4 | 10 *(600 h)* | 4 *(8 h)* |
+
+**Tree depth** is log₂ of every hour spent anywhere in that tree: the character
+level for that tree.
+
+**What a lock means.** Flow cannot refuse to log a drawing, so a lock never
+means "you may not do this work". It means the skill **cannot be focused** and
+carries no Grade yet — deliberate practice on it is premature, which is the
+true thing to say about modularity before you can model fluently. The hours
+still count, and they are exactly what opens it. This also makes focus
+properly scarce: one per task, and the tree decides what is even eligible.
+
+**Every node says what it is.** A name alone is a crossword. Each carries
+three lines — what it is in plain words, what **one unit** of it is, and what
+**measures** it — because "Sundering" tells the player nothing and "modularity
+and reuse · one unit: a project's BOM · measured by unique parts per project"
+tells them everything.
+
+### Techniques: badges that can be taken away (decided 2026-10-01)
+
+Inside a skill sit three to seven named **techniques** — the things you either
+can or cannot currently do. Euro-carve. Tolerance stack-up. A message that
+ends the thread.
+
+**A badge here is a belt, not a sticker.** "You logged ten days" is a souvenir
+and means nothing; "I can hold a Euro-carve" is a claim about the present, and
+a claim is only worth making if it can be **taken away**:
+
+> **Held** while at least **3 of the last 5** attempts were clean. One bad day
+> does not strip it; a bad stretch does. It is won back the way it was lost.
+
+States: **locked → attempting → held → shaky → lost.** Shaky does not count
+toward the Ceiling, because the badge is a claim about now. Only the last five
+attempts count, so an old disaster is forgotten and a recent one is not.
+
+**A technique pays no points** — points are minutes. It does three things:
+
+1. It sets the skill's **Ceiling**, the highest technique currently held.
+2. It **unlocks the next one**: no Euro-carve before a clean carve.
+3. It **raises the difficulty of the units done with it**, so Grade is measured
+   against harder work. This is what stops the board rewarding the player for
+   getting steadily quicker at easy things — the one way the whole system
+   could otherwise lie to itself.
+
+A technique being attempted is the natural target of a **focus**: *Poise →
+Euro-carve* is a named target condition on a sub-skill, which is deliberate
+practice rather than "go snowboarding".
+
+**Ladders are deliberately sparse.** Seven techniques across twenty-two skills
+would be a hundred and fifty badges, which is wallpaper and is exactly the
+failure the badge critique is about. Three to seven per skill, and only on
+skills that matter yet. **An empty ladder is a decision, not an omission.**
+
+Attempts are `technique` events: write-once, one per attempt, carrying the
+skill, the technique and whether it was clean.
+
+### Speed is not a dimension
+
+A skill's dimensions are tempting to multiply — for the snowboard: speed, form,
+duration. They are not three new scores; they are one each of the families
+already on the board. **Duration** is volume, which is Depth. **Form** is the
+technique ladder, which is Ceiling. And **speed is a trap**: straightlining is
+the fastest and least skilled thing a rider can do, so scoring it rewards the
+riding nobody wants. Speed belongs as a **condition on form** — can the carve
+be held at pace, on chop, on ice — never as a score of its own. Conditions are
+modifiers on a technique, not rows of their own.
+
+### One spine
+
+Every quality measure above is the same measure wearing different clothes:
+**did it come back?** A revision, a second req, a failed FAT, another
+round-trip, another chase, a reopened decision, a fall. Rework is not a
+feature of one tree; it is the only honest quality signal the game has, and it
+generalises to all seven.
+
+### What a level is
+
+Points are **fuel**, capped at 720 a day, and are not the score. A skill
+carries three numbers doing different jobs: **Depth** and **Grade**, both
+logarithmic, below — and **Insight**, defined under "Complexity, and grading
+yourself". Toil carries none of them; it has a bounce rate and nothing else.
+
+**Depth** = `1 + ⌊log₂(hours)⌋` — the logbook. Never falls. Each level costs
+double the last, so a lifetime in a skill is about fourteen levels rather than
+the two hundred the old square-root curve would hand out.
+
+| hours | 8 | 75 | 300 | 1,000 | 10,000 |
+|---|---|---|---|---|---|
+| Depth | 4 | 7 | 9 | 10 | 14 |
+
+Depth is **grey subtext on the skill row and never in the header**. It is the
+only thing that gates difficulty tiers and the mastery discount: a tier cannot
+be chosen on a skill the player has three hours in. Ranks by band — Initiate
+1–3, Journeyman 4–6, Adept 7–9, Master 10–12, Grandmaster 13+.
+
+**Grade** = `round(10 × log₂(pace))`, where `pace` = baseline minutes-per-unit
+÷ current minutes-per-unit, with rework folded into true minutes so that fast
+and sloppy cannot move it. For a **one-shot** skill the unit counts only if it
+did not come back (see "Right once"), which is what stops the score punishing
+the player for slowing down to get it right. **This is the score, and it can
+fall.**
+
+| you are | at your baseline | 15% faster | 50% faster | twice as fast |
+|---|---|---|---|---|
+| Grade | 0 | 2 | 6 | 10 |
+
+At a sustained 1% a day, Grade ticks **one level every seven days** — a
+straight line, which is the whole point of a log scale: constant *percentage*
+improvement becomes constant progress. A plateau stops the ticking on its own.
+No rule enforces that; it is what the curve does.
+
+### Right once (decided 2026-09-28)
+
+Half the board is work you do not get to do twice. A released drawing becomes
+cut metal; a wrong requisition costs weeks of lead time; a FAT fails in front
+of the customer; a thing said in a meeting cannot be unsaid. The other half —
+modelling a part, an internal draft, a training session — is cheap to redo.
+
+The two halves reward opposite instincts, and scoring both on minutes-per-unit
+would punish the right behaviour on the first half: slowing down to check a
+drawing would read as getting worse.
+
+**So for a one-shot skill the unit of output is a unit that did not come
+back.** Nothing else changes — the same minutes-per-unit formula, with a
+denominator that only counts what was right the first time.
+
+| | minutes | first-time-right | per clean unit |
+|---|---|---|---|
+| ten drawings at 60 min, none returned | 600 | 10 | **60** |
+| ten at 50 min, four returned needing 40 | 660 | 6 | **110** |
+
+Rushing nearly doubles the real cost, and the formula has a true optimum:
+120 minutes a drawing to get all ten clean is 120, worse than both. That is
+"more with a limited amount of time" written as arithmetic.
+
+**One-shot:** Inscription · Summoning · Trial · Deliverance · Parley ·
+Council · Decree · Poise.
+**Iterable:** Shaping · Interlock · Sundering · Quickening · Scribing ·
+Might · Vigor · Alacrity · Concentration · Lore · Battle Orders · Bulwark ·
+Tutelage.
+
+**Focus belongs on the one-shot skills.** Expected cost is frequency × cost of
+error, and on that side the cost of error is scrapped parts, a lost month, or
+a customer watching. Deliberate practice on Shaping buys minutes; on
+Inscription it buys a month.
+
+### Complexity, and grading yourself (decided 2026-09-28)
+
+**Minutes per drawing means nothing until drawings are comparable.** The
+normalizer must be countable off the artifact and independent of how long the
+work took — **time can never be a complexity factor**, because it is the thing
+being measured and pace would collapse to 1.0. What counts: feature-tree
+count, dimension count, sheets and views, part count, GD&T callouts — all
+readable through the SOLIDWORKS API, which matters because a normalizer typed
+in by hand will not survive three weeks. **New and revised are different
+units**, not a multiplier on one.
+
+Complexity **bins** rather than scales — Simple / Standard / Complex — and
+like is compared with like. A continuous normalizer invites thirty redundant
+dimensions; a bin boundary is not worth gaming, and over-dimensioning comes
+back as a revision anyway.
+
+**The player grades their own work at completion, and the grade is not the
+score — the error is.** A three-point call, made before the world answers:
+*clean · minor fixes expected · this will come back*, resolved against what
+actually happened within 30 days.
+
+| called it | what happened | reading |
+|---|---|---|
+| clean | three revisions | overconfident |
+| will come back | nothing | underconfident |
+| minor fixes | one minor fix | calibrated |
+
+This is what makes self-assessment safe. If a high self-grade were the score,
+inflating it would win; because **accuracy** is the score, inflating it loses
+mechanically, and the honest call becomes the winning move without a rule
+enforcing it. It also measures something worth having: whether the player can
+tell good work from bad at the moment they finish it — the judgement they have
+to rely on every day nobody gives them feedback.
+
+Every skill therefore carries a third small figure beside Depth and Grade:
+**Insight** — how close the call at completion lands to what the world says
+after. Same shape as Augury: perfect calibration means only the easy ones are
+being called.
+
+### Rules the board needs
+
+- **Season 0 is a baseline.** Grade is meaningless until a skill has a
+  baseline, so the first four weeks of any skill are measured and not graded.
+  A skill shows `Grade —` until its baseline closes.
+- **Hearth is never graded.** No Grade, no pace, no trajectory, no streak.
+  Hours are logged and the weekly satisfaction score is the only number near
+  it. Scoring a relationship changes what the relationship is for.
+- **Dormant skills do not go cold.** Poise is ridden twenty days a year in one
+  quarter. Out of season it is not "not worked this week" — a nag that is
+  always wrong teaches the player to ignore the list.
+- **A perfect Augury score is a failure.** If every written claim comes true,
+  the claims are too safe to be worth making. The target hit rate is about
+  70%; 100% is a finding, not an achievement.
+- **A season is 12 weeks**, matching the horizon already in Purpose. It is
+  scored on slope held above zero and on which plateaus were broken — not on
+  levels reached.
+
+### Objectives
+
+Each skill carries a **target condition** stated before the season, and each
+tree has a **boss**: an external audit that can fail, sat on a schedule.
+Objectives are the player's to set each season; these are season one.
+
+| skill | target condition, season one |
+|---|---|
+| Shaping | baseline over 20 parts, then −10% true minutes |
+| Interlock | zero rebuild errors on any released assembly |
+| Inscription | revisions per released drawing below 0.5 |
+| Sundering | 30% of parts on the next machine are reused library parts |
+| Summoning | second-req rate below 10% |
+| Quickening | dry-run defect list under five |
+| Trial | every FAT passes first time |
+| Deliverance | 80% of projects land on the date given at kickoff |
+| Scribing | median round-trips to resolution ≤ 2 |
+| Parley | 80% of purposed conversations produce their decision |
+| Council | a say-back asked for in every customer meeting; ≥80% correct |
+| Augury | five claims a week with check dates; hit rate near 70% |
+| Battle Orders | median chases per handoff ≤ 1 |
+| Decree | under 20% of decisions reopened |
+| Bulwark | escalations closed here, not forwarded |
+| Tutelage | one person, one measurable improvement |
+| Might | +5% estimated 1RM on the main lifts |
+| Vigor | −3% on a benchmark distance |
+| Poise | ride switch on a named grade, in season |
+| Alacrity | −5% median reaction time |
+| Concentration | median unbroken timer run ≥ 50 minutes |
+| Lore | the course grade |
+
+**Bosses**, in the order they are worth sitting:
+
+| tree | boss | note |
+|---|---|---|
+| ARTIFICE | **CSWA** → **CSWP** → CSWPA Sheet Metal · Weldments · Drawing Tools → **CSWE** | CSWA has no prerequisite, 3h, 70%; CSWP is three segments, ~3.5h, 75%; each CSWPA needs a current CSWP; CSWE needs CSWP + four CSWPA at 85% |
+| ARTIFICE (Sundering) | DFMA, or ASME GDTP for interface definition | no certification exists for modularity itself; the BOM is the instrument |
+| CAMPAIGN | **Six Sigma Green Belt** — ASQ (3 years' experience, expects a real project) or IASSC (no prerequisite, exam only) | ASQ certifies what you have done, IASSC what you know |
+| CAMPAIGN (Deliverance) | PMP / CAPM | |
+| RHETORIC | STC CPTC · Toastmasters Pathways | thin, and the only tree whose boss is weaker than its meter |
+| COMMAND | none credible | measured by chase count and decision durability alone |
+| SINEW | the bar and the clock | the most honest audit on the board |
+| ARCANA | the course grade | an external grader already attached |
+| HEARTH | none, by design | |
+
+**A boss is an audit, not a score.** Two or three a year cannot move a daily
+trajectory — they can only confirm that the weekly meter was not lying. The
+game runs on the meters; the certificate says the meters were honest.
+
 ## Points (= XP)
+
+**Points are fuel, not the score** (decided 2026-09-28). The score is the
+board's Grade; points say only that the day happened, and they buy treats.
+
+- **Points = base × difficulty**, and nothing else multiplies them. A day is
+  capped at **720**: twelve hours at a point a minute, eight of work and four
+  of everything else. Sixteen hours would be 960 and is no longer quality
+  work, so the day stops. A run that crosses the cap takes what is left of it
+  rather than nothing, and says it was capped; a price once written is never
+  rewritten, so the cap cannot reach back into the morning.
+- **The bonuses became their own score, called style.** Flow, personal best,
+  underdog, combo and batch are still computed, still capped at 2.5×, still
+  what unlocks achievements — but they no longer touch points. A chain of
+  tasks is not more work than the same tasks apart, and while combo paid 2.5×
+  a twelve-minute expense report was worth eighteen points and a forty-five
+  minute conversation ninety. Style is shown beside the points and totted up
+  for the day.
 
 - Base = **estimated minutes × quality × 1 point/min**. Estimates: a repeated
   task (≥ 3 runs) uses its flow target in minutes (recent average − 5%), so it
@@ -39,7 +475,8 @@ take their look from it. See "## Play".
   planned duration (phase 2). Benchmark calibration of the scale and of your
   estimates is phase 2; recalibration affects future tasks only.
 - **Target** = recent average (last 5 runs) 5% better. Needs ≥ 3 runs.
-- **Bonuses add up, capped at 2.5× base:** flow (hit target) +20%, personal
+- **Bonuses add up, capped at 2.5× base — as style, never as points:** flow
+  (hit target) +20%, personal
   best +25%, underdog (stat with least XP in the previous 7 days) +50%, combo
   +10% per chained task (next start ≤ 30 min after last end) up to +100%,
   **batch** +15% × position (same batch type, gap ≤ 10 min): the 1st task of
@@ -149,6 +586,33 @@ Sunday** (end of the Monday–Sunday week) when this week has no review yet, and
 still due on the days after a week that was missed, until one is done. A new
 player's first review is due on their first Sunday. One review per week; a
 second in the same week replaces the first.
+
+### The week in skills (decided 2026-09-28)
+
+A week of completions is a pile of task names, and what it does not say is the
+thing worth knowing: **which skill sets the week actually went into.** So the
+review opens with the week grouped by skill, not by task.
+
+- One row per skill worked this week, **longest first**: the true minutes
+  spent (a completion's minutes plus any fix minutes logged against it), the
+  points earned, how many runs, the share of the week, and the tasks inside it
+  with their own runs and minutes.
+- Skills roll up into their stat, so the week also reads as four to six
+  numbers: where the week went at the level the player thinks in.
+- Beside each, **the week before**: the change in minutes, so a skill being
+  picked up or dropped is visible without doing arithmetic. Nothing else is
+  inferred from one week — a week is too short to call a trend.
+- A skill with no work this week is not a row. Moments are not work and are
+  not counted. Rework minutes belong to the skill they were spent on.
+- **What needs improving, not only where the time went.** Each row carries its
+  **rework share** — fix minutes over true minutes — because that is where the
+  week went wrong rather than merely where it went. And below the rows, the
+  skills **not** worked this week, longest-cold first, with how long since each
+  last was: a skill you keep not choosing is the one worth noticing.
+
+Points are the fuel and the level is the receipt; neither says what is
+improving. That is the trajectory (see below), and this grouping is what it is
+measured over.
 
 ## Moments and places
 
@@ -672,10 +1136,12 @@ plan. Flow's own tasks (dailies, habits, chores) stay alongside.
   offered anywhere: not on Now, not in Tasks, not in Play's Start menu, not in
   the Terminal, and the picker never suggests it. It stays in the index, so a
   stored completion keeps its title and skill. Flow's own tasks are not
-  Planner's to schedule and are never hidden by this. When Planner has not
-  published the day, or published one naming nothing, nothing is hidden: an
-  empty list is far likelier to be a failure to compute the day than a day
-  with no work on it.
+  Planner's to schedule and are never hidden by this. A day published with
+  nothing on it is a real answer — by the evening Planner has rolled what is
+  left to tomorrow — so the Planner list is then empty and the screen says the
+  day is clear, with everything Planner has one toggle away. Only a day
+  Planner has **never** published hides nothing and offers the backlog as
+  today's list.
 - **Shape:** each becomes a derived Flow task — never stored — with id
   `task_pl_<planId>_<taskId>`, title the task's name, project name shown,
   measure `time`, cadence `once`, `source: { app: 'project', plan, task }`:
@@ -699,6 +1165,16 @@ plan. Flow's own tasks (dailies, habits, chores) stay alongside.
   A Flow completion covers it when it is for that task and either carries that
   same `planner` time or ended no more than 24 h before `doneAt` with no later
   Planner completion covered by it (the timer or Log done got there first).
+- **Planner changed its mind** (decided 2026-09-28): a Planner completion's
+  minutes are the estimate at the moment it was logged, and an event is never
+  rewritten — so correcting the plan afterwards cannot reach back into Flow.
+  Instead Flow **notices and offers**: when the plan's expected work for a task
+  no longer matches the minutes Flow logged, the Fix screen lists it — what
+  Flow logged, what Planner says now — and one press writes the amendment, with
+  Planner's own numbers as the reason. Never automatic: a completion the player
+  timed is what really happened whatever the plan says, so only completions
+  priced from the estimate are offered, and one already corrected by hand is
+  left alone.
 - **Reopen = rework.** A Planner task finished again (a new `doneAt` later than
   24 h after the completion that covered the previous one) is rework of that
   completion. Fix minutes = Planner timesheet hours on that task dated after

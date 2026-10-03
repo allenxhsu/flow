@@ -27,7 +27,7 @@ const CONSTANTS = {
 };
 
 const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish', 'world', 'reshelve'];
-const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit', 'correction', 'file'];
+const EVENTS = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit', 'correction', 'technique', 'file'];
 const D = '2026-09-28';
 
 test('contract: every function in docs/API.md is exported with its arity', () => {
@@ -84,7 +84,7 @@ test('contract: event records carry id, type, day and their fields', () => {
   }
   const { done, rework, purchase, moment, energy, review } = events;
   for (const f of ['task', 'start', 'end', 'minutes', 'quality']) assert.ok(f in done, `done.${f}`);
-  for (const f of ['base', 'points', 'bonuses', 'multiplier', 'energy']) assert.ok(f in done.price, `done.price.${f}`);
+  for (const f of ['base', 'points', 'style', 'bonuses', 'multiplier', 'energy']) assert.ok(f in done.price, `done.price.${f}`);
   assert.deepEqual(Object.keys(done.price.bonuses).sort(), ['batch', 'combo', 'flow', 'gear', 'pb', 'underdog']);
   for (const f of ['done', 'minutes', 'multiplier', 'penalty', 'charged']) assert.ok(f in rework, `rework.${f}`);
   for (const f of ['reward', 'price', 'charged']) assert.ok(f in purchase, `purchase.${f}`);
@@ -412,4 +412,57 @@ test('contract: corrections — makeCorrection, undoCorrection and what index() 
   assert.equal(typeof M.undoCorrection, 'function');
   assert.equal(M.undoCorrection(c, { now: T(`${D}T12:00:00`), device: 'dev1' }).deletedAt, T(`${D}T12:00:00`));
   assert.throws(() => M.undoCorrection({ id: 'done_x', type: 'done' }), /correction/);
+});
+
+test('contract: the board — trees, skills and the two curves the screens read', async () => {
+  const B = await import('../src/board.js');
+  assert.equal(B.MAX_STATS, 7);
+  assert.equal(B.TREES.length, 7);
+  for (const t of B.TREES) for (const k of ['id', 'name', 'plain', 'icon', 'side', 'graded']) {
+    assert.ok(k in t, `tree.${k}`);
+  }
+  for (const s of B.SKILLS) for (const k of ['id', 'tree', 'name', 'plain', 'unit', 'oneShot', 'dormant', 'graded']) {
+    assert.ok(k in s, `skill ${s.id}.${k}`);
+  }
+  assert.equal(typeof B.depthFor, 'function');
+  assert.equal(typeof B.gradeFor, 'function');
+  assert.equal(typeof B.paceFor, 'function');
+  assert.equal(typeof B.rankFor, 'function');
+  // boardRecords must produce records index() accepts without complaint.
+  const db = M.index(B.boardRecords());
+  assert.equal(db.stats.length, 7);
+  assert.equal(db.skills.length, B.SKILLS.length);
+  for (const s of db.skills) assert.ok(db.stat.get(s.stat), `${s.id} has a stat`);
+});
+
+test('contract: routing — the six types and what the screens call', async () => {
+  const R = await import('../src/routing.js');
+  assert.deepEqual(Object.keys(R.TYPES).sort(), ['boss', 'claim', 'moment', 'rework', 'skill', 'toil']);
+  for (const fn of ['routeTask', 'routeAll', 'typeOf', 'toilOf', 'compileRules']) {
+    assert.equal(typeof R[fn], 'function', `routing.${fn}`);
+  }
+  const r = R.routeTask({ title: 'Reimbursement' }, { rules: [] });
+  for (const k of ['skill', 'type']) assert.ok(k in r, `routeTask().${k}`);
+  const toil = R.toilOf([], () => null, { rules: [] });
+  for (const k of ['total', 'minutes', 'weighted', 'units', 'bounces', 'share', 'bounceRate']) {
+    assert.ok(k in toil, `toilOf().${k}`);
+  }
+});
+
+test('contract: techniques — the ladder, the hold rule and the ceiling', async () => {
+  const Tk = await import('../src/techniques.js');
+  assert.equal(Tk.HOLD_WINDOW, 5);
+  assert.equal(Tk.HOLD_CLEAN, 3);
+  assert.deepEqual(Object.keys(Tk.STATES).sort(), ['attempting', 'held', 'locked', 'lost', 'shaky']);
+  for (const fn of ['techniquesOf', 'techniqueById', 'techniqueState', 'ceilingOf']) {
+    assert.equal(typeof Tk[fn], 'function', `techniques.${fn}`);
+  }
+  for (const t of Tk.techniquesOf('poise')) {
+    for (const k of ['id', 'name', 'note', 'held', 'rank', 'skill']) assert.ok(k in t, `technique.${k}`);
+  }
+  const c = Tk.ceilingOf('poise', new Map());
+  for (const k of ['rank', 'technique', 'next', 'of']) assert.ok(k in c, `ceilingOf().${k}`);
+  // A technique attempt is an event the store writes once, like any other.
+  assert.ok(M.RECORD_TYPES.includes('technique'));
+  assert.ok(Array.isArray(M.index([]).techniques));
 });

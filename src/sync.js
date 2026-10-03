@@ -30,8 +30,10 @@ import {
   portalApp, portalSession, portalRemote, requestPersistentStorage, storageStatus, mergeRecord,
 } from '../sync-kit/js/index.js';
 import { index, stamp, tombstone, undoCorrection as undo, dayOf, RECORD_TYPES, EVENT_TYPES } from './model.js';
-import { plannerTasks, plannerEvents, plannerHistory, plannerSinceStamp, expiredOps, plannerDay } from './planner.js';
+import { plannerTasks, plannerEvents, plannerHistory, plannerSinceStamp, expiredOps, plannerDay, plannerDrift as drift } from './planner.js';
 import { pushOps, opsToWrite, plannerUrlFrom, isOp } from './planops.js';
+import { applyRouting } from './board-routing.js';
+import { compileRules } from './routing.js';
 
 export const WORKSPACE = 'flow';
 export const APP_ID = 'flow';
@@ -91,6 +93,28 @@ export function deviceId() {
 }
 
 export const getSettings = () => ({ ...settings });
+
+/**
+ * The sync server this page talks to — the Portal's own origin, or the one
+ * the Sync form names — for what only a server can do: hold a connection to
+ * Strava or Google on the player's behalf. Null when there is none.
+ */
+export function serverOrigin() {
+  const base = portal ? portal.baseUrl : (settings.url && settings.enabled ? settings.url : '');
+  if (!base) return null;
+  try { return new URL(base).origin; } catch { return null; }
+}
+
+/** A request to the sync server, with the credential this page syncs with. */
+export async function serverFetch(path, init = {}) {
+  const origin = serverOrigin();
+  if (!origin) throw new Error('Connections live on your sync server: turn sync on (Settings ▸ Sync, or pair this Mac) first.');
+  return fetch(`${origin}${path}`, {
+    ...init,
+    credentials: portal ? 'include' : 'omit',
+    headers: { ...(init.headers || {}), ...(settings.token && !portal ? { Authorization: `Bearer ${settings.token}` } : {}) },
+  });
+}
 export const inPortal = () => !!portal;
 export const syncConfigured = () => !!(portal || (settings.url && settings.enabled));
 export const syncStatus = () => (engine ? engine.status : lastStatus);
@@ -111,7 +135,11 @@ export function db() {
   if (!cachedDb) {
     const base = index(allRecords());
     const opts = { me: plannerName(base), skills: base.skills, stats: base.stats, now: Date.now() };
-    const d = plannerById.size ? plannerTasks(plannerRecords(), opts) : { tasks: [], skills: [] };
+    let d = plannerById.size ? plannerTasks(plannerRecords(), opts) : { tasks: [], skills: [] };
+    // Once the board is adopted, Planner's folder names ("Work", "AMADA
+    // WORKSPACE") stop standing in for skills: a task routes onto the board
+    // or belongs to no skill at all (SPEC.md › Most tasks belong to no skill).
+    d = applyRouting(base, d, { rules: compileRules(base.settings.routing || []) });
     // What Planner laid on today, if it has said. A Planner task that is not
     // on it is not today's work — it is somewhere in a backlog that, on a real
     // planner, runs to hundreds of tasks going back years. It stays in the
@@ -119,12 +147,15 @@ export function db() {
     // `offToday` so the screens can leave it out. Null means Planner has not
     // published the day, and then nothing is hidden.
     const laid = plannerById.size ? plannerDay(plannerRecords(), dayOf(opts.now), opts) : null;
-    // `laid.length` and not just `laid`: a published day naming nothing empties
-    // the whole list, which is indistinguishable from a bug and is the worst
-    // outcome available — it is far likelier to mean Planner failed to compute
-    // the day than that there is genuinely nothing on it. An empty day falls
-    // back to the backlog, same as no day at all.
-    if (laid && laid.length) {
+    // An empty published day is a real answer, not a missing one: by the
+    // evening Planner has rolled what is left to tomorrow and publishes a
+    // today with nothing on it. This used to fall back to the backlog, and at
+    // 8 pm 403 Planner tasks going back to 2024 came back. Only `null` — a day
+    // Planner has never published — means "I do not know", and only that
+    // falls back. The Tasks screen says when the day is clear and keeps the
+    // backlog one toggle away (play().backlog), so an empty list is never
+    // just an empty list.
+    if (laid) {
       const on = new Map(laid.map((t) => [t.id, t]));
       d.tasks = d.tasks.map((t) => {
         const row = on.get(t.id);
@@ -453,6 +484,17 @@ export async function pullPlanner() {
     }
   })();
   return pulling;
+}
+
+/**
+ * What Planner now disagrees with (SPEC.md › Planner changed its mind): the
+ * amendments the Fix screen offers for completions whose plan has changed
+ * since Flow logged them. Read-only — the player presses, or nothing happens.
+ */
+export function plannerDrift(now = Date.now()) {
+  if (!plannerById.size) return [];
+  const base = db();
+  return drift(base, plannerRecords(), { me: plannerName(base), now });
 }
 
 /** The fix-minutes questions for tasks reopened in Planner with no hours logged there. */

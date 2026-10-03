@@ -96,6 +96,34 @@ function made(ctx) {
   </section>`;
 }
 
+
+/** Minutes as the offer reads them: "2h", "1h 30m", "15m", "nothing". */
+const mins = (m) => {
+  if (!(m > 0)) return 'nothing';
+  const h = Math.floor(m / 60); const r = Math.round(m % 60);
+  return h && r ? `${h}h ${r}m` : h ? `${h}h` : `${r}m`;
+};
+
+/**
+ * What Planner now disagrees with (SPEC.md › Planner changed its mind).
+ * Correcting a plan cannot reach back into a write-once event, so Flow shows
+ * the disagreement and the player decides. Nothing here is applied by itself.
+ */
+function drift(ctx) {
+  const list = ctx.store?.plannerDrift?.(ctx.now) || [];
+  if (!list.length) return '';
+  const rows = list.map((o) => `<li class="fix-row sc-card" data-drift="${esc(o.done)}">
+    <span class="fix-what"><span class="fix-title">${esc(o.title)}</span>${o.project ? `<span class="fix-kind sc-pill">${esc(o.project)}</span>` : ''}</span>
+    <span class="fix-why">Flow logged <b class="num">${esc(mins(o.logged))}</b> · Planner now says <b class="num">${esc(mins(o.minutes))}</b></span>
+    <button class="sc-button sc-button--sm" type="button" data-action="accept-drift" data-done="${esc(o.done)}">Use Planner's</button>
+  </li>`).join('');
+  return `<section class="sc-panel pad stack" id="drift">
+    <div class="row-between"><h2>Planner now says otherwise · ${list.length}</h2><span class="small sc-faint">nothing here changes until you say so</span></div>
+    <p class="small sc-muted" style="margin:0">A completion keeps the minutes the plan said when it was logged, because an event is never rewritten. Where the plan has changed since, the amendment is one press — it is written as a correction, with Planner's numbers as the reason, and it can be undone like any other.</p>
+    <ul class="list fix-list">${rows}</ul>
+  </section>`;
+}
+
 export function render(ctx) {
   const { db, ui } = ctx;
   const list = rows(db);
@@ -108,6 +136,7 @@ export function render(ctx) {
       <div class="row-between"><h2>Fix</h2><span class="small sc-faint">for a record that should never have counted</span></div>
       <p class="small sc-muted" style="margin:0">Work really done and then redone is <strong>rework</strong>, on Now. This screen withdraws a record instead: it stops counting anywhere — points, level, balance, streaks, bests — and stays in the store with the reason beside it, so nothing is rewritten and every fix can be undone.</p>
     </div>
+    ${drift(ctx)}
     ${picked ? amendForm(ctx, picked) : ''}
     ${list.length ? `<form class="sc-panel pad stack" data-form="withdraw-many" id="withdraw-form">
       <div class="row-between"><h2>Events · ${list.length}</h2><span class="small sc-faint" id="fix-count" data-count="0">none picked</span></div>
@@ -147,6 +176,15 @@ export const actions = {
     why?.scrollIntoView({ block: 'center' });
     why?.focus();
   },
+  'accept-drift': async (el, ctx) => {
+    const o = (ctx.store.plannerDrift(ctx.now) || []).find((x) => x.done === el.dataset.done);
+    if (!o) return;
+    const rec = makeCorrection(ctx.db, { target: o.done, kind: 'amend', patch: { minutes: o.minutes, points: o.minutes }, reason: o.reason, at: ctx.now ?? Date.now() });
+    await ctx.store.add(rec);
+    ctx.toast(`${o.title}: ${mins(o.minutes)}, as Planner has it.`, 'success');
+    ctx.render({ force: true });
+  },
+
   undo: async (el, ctx) => {
     await ctx.store.undoCorrection(el.dataset.correction);
     ctx.toast('Put back.', 'success');

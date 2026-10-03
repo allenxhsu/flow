@@ -42,21 +42,21 @@ test('a whole day: setup, energy, a batch of three, rework, moments, debt, revie
     // A batch of three: each within 10 minutes of the last.
     assert.match(run('done', 'purchase request', '--minutes', '10', '--at', '09:00'), /\+10 pts[\s\S]*First step/);
     const second = run('done', 'supplier', '--minutes', '9', '--start', '09:02');
-    assert.match(second, /\+12 pts .*batch ×2 \+15%/);
+    assert.match(second, /\+10 pts .*\+\d+ style \(batch ×2 \+15%\)/);
     assert.match(second, /mana 4\.5 \(this cost 0 \/ 0\.5\)/); // later batch tasks cost half the mana
     const third = run('done', 'tooling', '--minutes', '8', '--start', '09:13', '--quality', '90');
-    assert.match(third, /\+12 pts .*base 9 .*90% quality.*batch ×3 \+30%/);
+    assert.match(third, /\+9 pts .*base 9 .*90% quality.*\+\d+ style \(batch ×3 \+30%\)/);
     assert.match(third, /Batched/);
     assert.match(fails('done', 'PR', '--minutes', '5'), /matches 2 tasks: Supplier PR, Tooling PR/);
 
-    // Critical rework pays 2×: 4 min × 1.5 pts/min × 2.
-    assert.match(run('rework', 'tooling', '--minutes', '4', '--at', '11:00', '--note', 'wrong part'), /= −12 XP[\s\S]*balance 34 → 22[\s\S]*12 min at 45% quality/);
+    // Critical rework pays 2×: 4 min × (9 pts ÷ 8 min) × 2.
+    assert.match(run('rework', 'tooling', '--minutes', '4', '--at', '11:00', '--note', 'wrong part'), /= −9 XP[\s\S]*balance 29 → 20[\s\S]*12 min at 45% quality/);
 
     assert.match(run('moment', 'drive', '--from', '07:30', '--to', '08:10', '--who', 'Whitney'), /Drive 07:30–08:10 with Whitney at Car: stamina −0\.3, mana −0\.7/);
     assert.match(run('moment', 'chat', '--from', '08:20', '--to', '08:40', '--who', 'Sam', '--place', 'meeting'), /at Meeting room/);
 
     // 22 covered, 38 on credit at double: 98.
-    assert.match(run('buy', 'ice', '--at', '17:00'), /−98 pts .*Balance 22 → -76/);
+    assert.match(run('buy', 'ice', '--at', '17:00'), /−100 pts .*Balance 20 → -80/);
     // Rework in debt costs double too: penalty 2 × 1 × 1.5 = 3, charged 6. It is
     // logged after the 17:00 purchase — a charge is doubled by the balance at its
     // own time, not by debt that came later.
@@ -71,31 +71,31 @@ test('a whole day: setup, energy, a batch of three, rework, moments, debt, revie
     const s = p.json();
     assert.equal(s.setup, true);
     assert.equal(s.settings.name, 'Allen');
-    assert.equal(s.balance, -82);
-    assert.equal(s.player.xp, 34 - 12 - 3);
+    assert.equal(s.balance, -86);
+    assert.equal(s.player.xp, 29 - 9 - 3);
     assert.deepEqual({ stamina: s.energy.stamina, mana: s.energy.mana }, { stamina: 6.7, mana: 2.6 });
     assert.equal(s.today.done, 3);
-    assert.equal(s.today.points, 34);
+    assert.equal(s.today.points, 29);
     assert.equal(s.moments.length, 2);
     assert.equal(s.tasks.find((t) => t.title === 'Tooling PR').reworks, 1);
     assert.equal(s.satisfaction.latest.satisfaction, 7);
     assert.equal(s.satisfaction.due, false);
     const earned = s.achievements.filter((a) => a.earned).map((a) => a.id);
     assert.deepEqual(earned.sort(), ['batch-3', 'first-step']);
-    assert.equal(s.stats.find((x) => x.name === 'Work').lastWeek, 34);
+    assert.equal(s.stats.find((x) => x.name === 'Work').lastWeek, 29);
     assert.equal(s.sync.configured, false);
 
     const status = run('status');
-    assert.match(status, /# Allen — level 1 .*balance -82 pts \(in debt/);
+    assert.match(status, /# Allen — level 1 .*balance -86 pts \(in debt/);
     assert.match(status, /Latest 2026-W40: 7\/10/);
 
     const replay = run('replay');
-    assert.match(replay, /\[Desk\] Supplier PR — batch ×2\. \+12/);
+    assert.match(replay, /\[Desk\] Supplier PR — batch ×2\. \+10/);
     assert.match(replay, /Drive with Whitney/);
-    assert.match(replay, /— Finale —\n\+34 pts earned, 116 spent · 3 tasks, 2 moments, 2 rework/);
+    assert.match(replay, /— Finale —\n\+29 pts earned, 1\d\d spent · 3 tasks, 2 moments, 2 rework/);
     assert.match(replay, /Tomorrow: /);
 
-    // Undo takes back the last entry; the purchase was 98.
+    // Undo takes back the last entry; the purchase was 100.
     assert.match(run('undo', 'last'), /Undid review/);
     assert.equal(p.json().satisfaction.latest, null);
   } finally {

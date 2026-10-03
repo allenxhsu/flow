@@ -89,7 +89,10 @@ test('personal best bonus +25% for beating the best', () => {
   g.done(t, '2026-09-10T10:00:00', 40);
   const pb = makeDone(g.db(), t.id, { end: T(`${D}T10:00:00`), minutes: 35 });
   assert.equal(pb.price.bonuses.pb, 0.25);
-  near(pb.price.points, 75);
+  // The bonus is unchanged; what changed is where it lands. Points are the
+  // minutes (SPEC.md › Points), and the bonus is style beside them.
+  near(pb.price.points, pb.price.base);
+  near(pb.price.style, pb.price.base * 0.25);
   const slower = makeDone(g.db(), t.id, { end: T(`${D}T10:00:00`), minutes: 45 });
   assert.equal(slower.price.bonuses.pb, 0);
 });
@@ -100,7 +103,8 @@ test('underdog bonus +50% for the stat with least XP in the previous 7 days', ()
   const mail = g.task({ title: 'Mail', skill: 'sk_mail', estimate: 30 });
   const j = makeDone(g.db(), jog.id, { end: T(`${D}T08:00:00`), minutes: 30 });
   assert.equal(j.price.bonuses.underdog, 0.5, 'Body had 0 XP in the last 7 days');
-  near(j.price.points, 45);
+  near(j.price.points, j.price.base);
+  near(j.price.style, j.price.base * 0.5);
   const m = makeDone(g.db(), mail.id, { end: T(`${D}T08:00:00`), minutes: 30 });
   assert.equal(m.price.bonuses.underdog, 0, 'Work had the most XP');
 });
@@ -181,7 +185,8 @@ test('in a batch the batch bonus replaces the combo bonus', () => {
   const c = g.done(po, `${D}T09:40:00`, 10);
   near(c.price.bonuses.batch, 0.30, 1e-9);
   assert.equal(c.price.bonuses.combo, 0);
-  near(c.price.points, 13);
+  assert.equal(c.price.points, c.price.base, 'the batch is style, not points');
+  near(c.price.style, Math.round(c.price.base * 0.30));
 });
 
 test('bonuses add up, capped at 2.5× base', () => {
@@ -195,8 +200,9 @@ test('bonuses add up, capped at 2.5× base', () => {
   const d = makeDone(g.db(), jog.id, { end: T(at9(D, 70 + 30)), minutes: 30 });
   assert.equal(BONUS_CAP, 2.5);
   assert.ok(d.price.bonuses.flow > 0 && d.price.bonuses.pb > 0 && d.price.bonuses.underdog > 0 && d.price.bonuses.combo > 0);
-  assert.equal(d.price.multiplier, 2.5);
-  near(d.price.points, d.price.base * 2.5);
+  assert.equal(d.price.multiplier, 2.5, 'the bonuses still cap at 2.5x');
+  assert.equal(d.price.points, d.price.base, 'but they buy style now, not points');
+  near(d.price.style, Math.round(d.price.base * 1.5));
 });
 
 test('every completion stores the price it earned; points never change later', () => {

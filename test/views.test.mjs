@@ -572,3 +572,351 @@ test('Now: a deep link to Log done opens the form for that task with the minutes
   await now.openLink({ ...ctx, toast: (m) => warned.push(m) }, { action: 'done', task: 'task_gone', minutes: 5 });
   assert.equal(warned.length, 1, 'a task that is gone is said, not thrown');
 });
+
+// ─── the day is clear (SPEC.md › Planner tasks › Today is Planner's Today) ──
+
+/** Two Planner tasks, neither laid on today: the evening, everything rolled on. */
+function clearDay() {
+  const g = game();
+  const skill = { id: 'sk_pl', type: 'skill', name: 'Work', stat: 'stat_work' };
+  const of = (id, title) => ({ id, type: 'task', title, skill: 'sk_pl', measure: 'time', cadence: 'once', estimate: 30, stamina: 0, mana: 0, source: { app: 'project', plan: 'p', task: id }, project: 'Amada', offToday: true });
+  g.add(skill, of('task_pl_p_a', 'Visit Burger King for Lunch'), of('task_pl_p_b', 'Global Security Training'));
+  return g;
+}
+
+test('Tasks: a clear day says so and does not fall back to the backlog', () => {
+  const g = clearDay();
+  const html = tasksView.render(ctxOf(g));
+  assert.doesNotMatch(html, /Burger King/, 'nothing Planner left off today');
+  assert.match(html, /clear|nothing on today/i, 'it says why the list is empty');
+  assert.match(html, /data-toggle="backlog"/, 'and offers the backlog');
+  assert.match(html, /\b2\b/, 'saying how many are in it');
+});
+
+test('Tasks: the backlog toggle shows what Planner has, marked as not today', () => {
+  const g = clearDay();
+  const ctx = { ...ctxOf(g), ui: { showBacklog: true } };
+  const html = tasksView.render(ctx);
+  assert.match(html, /Burger King/);
+  assert.match(html, /Global Security Training/);
+});
+
+// ─── the week in skills (SPEC.md › Streaks, reviews, achievements) ─────────
+
+/** Mail twice and Run once this week, Read never; one rework on Mail. */
+function workedWeek() {
+  const g = game();
+  g.task({ id: 'task_mail', title: 'Mail', skill: 'sk_mail', measure: 'time', cadence: 'anytime', estimate: 30 });
+  g.task({ id: 'task_pr', title: 'Purchase request', skill: 'sk_mail', measure: 'time', cadence: 'anytime', estimate: 20 });
+  g.task({ id: 'task_run', title: 'Run 5k', skill: 'sk_run', measure: 'time', cadence: 'daily', estimate: 30 });
+  const d = g.done('task_mail', '2026-09-21T10:00:00', 30);
+  g.done('task_pr', '2026-09-23T10:00:00', 20);
+  g.done('task_run', '2026-09-23T18:00:00', 45);
+  g.rework(d, '2026-09-23T09:00:00', 20);
+  return g;
+}
+
+test('Review: the week opens with the skills it went into, longest first', () => {
+  const html = review.render(ctxOf(workedWeek(), '2026-09-27T12:00:00'));
+  const order = [...html.matchAll(/data-week-skill="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(order, ['sk_mail', 'sk_run'], '70 minutes of Mail before 45 of Run');
+  assert.match(html, /Purchase request/, 'the tasks inside the skill');
+});
+
+test('Review: each skill shows its share, its rework and the change on last week', () => {
+  const html = review.render(ctxOf(workedWeek(), '2026-09-27T12:00:00'));
+  const row = /data-week-skill="sk_mail"[\s\S]*?<\/section>|data-week-skill="sk_mail"[\s\S]*?<\/div>\s*<\/div>/.exec(html)[0];
+  assert.match(row, /61%|61 %/, '70 of 115 minutes');
+  assert.match(row, /rework/i);
+});
+
+test('Review: the skills not worked this week are named, so a gap is visible', () => {
+  const html = review.render(ctxOf(workedWeek(), '2026-09-27T12:00:00'));
+  assert.match(html, /Read/, 'never worked at all');
+  assert.match(html, /not worked|untouched|no work/i);
+});
+
+test('Review: a week with no work says so rather than showing an empty table', () => {
+  const html = review.render(ctxOf(game(), '2026-09-27T12:00:00'));
+  assert.match(html, /nothing logged|no work this week/i);
+});
+
+test('Review: Toil is shown beside the trees as the number meant to go down', () => {
+  const g = workedWeek();
+  g.add({ id: 'task_reimb', type: 'task', title: 'Reimbursement', measure: 'time', cadence: 'anytime', estimate: 20, skill: null, stamina: 0, mana: 0 });
+  g.add({ id: 'done_toil', type: 'done', task: 'task_reimb', day: '2026-09-23', start: T('2026-09-23T14:00:00') - 24e5,
+    end: T('2026-09-23T14:00:00'), minutes: 40, measure: 'time', value: 40, quality: 1, price: { points: 40, energy: {} } });
+  const html = review.render(ctxOf(g, '2026-09-27T12:00:00'));
+  assert.match(html, /data-week-toil/, 'Toil has its own readout');
+  assert.match(html, /toil/i);
+});
+
+test('Review: a week with no Toil says nothing about Toil', () => {
+  const html = review.render(ctxOf(workedWeek(), '2026-09-27T12:00:00'));
+  assert.doesNotMatch(html, /data-week-toil/);
+});
+
+// ─── Settings: adopting the board and routing tasks to it ─────────────────
+import { boardRecords, SKILLS } from '../src/board.js';
+import { STARTER_RULES } from '../src/board-routing.js';
+
+const settingsCtx = (g, over = {}) => ({
+  ...ctxOf(g), ui: {},
+  store: {
+    getSettings: () => ({ url: '', token: '', enabled: false }),
+    plannerSettingsNow: () => ({ url: '', token: '' }),
+    plannerStatus: () => ({ phase: 'idle', lastError: null, lastSyncAt: null }),
+    syncStatus: () => ({ phase: 'idle', lastError: null, lastSyncAt: null }),
+    deviceId: () => 'dev', persistence: () => 'indexeddb', storeKind: () => 'IndexedDbStore',
+    inPortal: () => false, plannerInPortal: () => false,
+    syncConfigured: () => false, plannerConfigured: () => false,
+    allRecords: () => [], getRecord: () => null, ...over,
+  },
+});
+
+test('Settings offers the board when it has not been adopted', () => {
+  const html = settingsView.render(settingsCtx(game()));
+  assert.match(html, /data-action="adopt-board"/);
+  assert.match(html, /seven|board/i);
+});
+
+test('Settings does not offer to adopt a board that is already there', () => {
+  const g = game([...boardRecords()]);
+  const html = settingsView.render(settingsCtx(g));
+  assert.doesNotMatch(html, /data-action="adopt-board"/);
+});
+
+test('Settings has a routing rules editor listing the board\'s skills', () => {
+  const g = game([...boardRecords()]);
+  const html = settingsView.render(settingsCtx(g));
+  assert.match(html, /data-form="routing"/);
+  assert.match(html, /Summoning/, 'the skills are choosable by name');
+  assert.match(html, /name="pattern"/);
+  assert.match(html, /name="project"/);
+});
+
+test('Settings shows the rules already set, each removable', () => {
+  const g = game([...boardRecords(), { id: 'settings', type: 'settings', name: 'Allen Xu',
+    routing: [{ pattern: '^Release Drawing', skill: 'inscription' }] }]);
+  const html = settingsView.render(settingsCtx(g));
+  assert.match(html, /\^Release Drawing/);
+  assert.match(html, /data-action="drop-rule"/);
+});
+
+test('adopting the board writes seven stats and every skill, once', async () => {
+  const written = [];
+  const g = game();
+  const ctx = { ...settingsCtx(g), toast: () => {}, render: () => {} };
+  ctx.store.save = async (...r) => { written.push(...r.flat()); };
+  await settingsView.actions['adopt-board'](null, ctx);
+  assert.equal(written.filter((r) => r.type === 'stat').length, 7);
+  assert.equal(written.filter((r) => r.type === 'skill').length, SKILLS.length);
+});
+
+test('Settings offers the starter rules once the board is adopted and there are none', () => {
+  const g = game([...boardRecords()]);
+  const html = settingsView.render(settingsCtx(g));
+  assert.match(html, /data-action="starter-rules"/);
+});
+
+test('Settings stops offering the starter rules once there are rules', () => {
+  const g = game([...boardRecords(), { id: 'settings', type: 'settings', name: 'A',
+    routing: [{ pattern: 'x', skill: 'shaping' }] }]);
+  assert.doesNotMatch(settingsView.render(settingsCtx(g)), /data-action="starter-rules"/);
+});
+
+test('Settings carries the Connections panel, pointed at the sync server Flow uses', () => {
+  const g = game([...boardRecords()]);
+  const html = settingsView.render({ ...settingsCtx(g), store: { ...settingsCtx(g).store, serverOrigin: () => 'https://sync.example' } });
+  assert.match(html, /<sc-connections features="calendar">/);
+  assert.match(html, /sync\.example/);
+  const el = { refreshed: 0, refresh() { this.refreshed++; } };
+  const store = { serverOrigin: () => 'https://sync.example', serverFetch: async (path) => path };
+  settingsView.wireConnections(el, { store, native: null });
+  assert.equal(el.origin, 'https://sync.example');
+  assert.equal(el.refreshed, 1, 'read once the server is known');
+  assert.equal(typeof el.open, 'function');
+  return el.request('/connect').then((got) => assert.equal(got, '/connect', 'requests go the way Flow syncs'));
+});
+
+test('taking the starter rules writes them all, in order', async () => {
+  const g = game([...boardRecords()]);
+  const written = [];
+  const ctx = { ...settingsCtx(g), toast: () => {}, render: () => {} };
+  ctx.store.save = async (...r) => { written.push(...r.flat()); };
+  ctx.store.getRecord = () => ({ id: 'settings', type: 'settings', name: 'A' });
+  await settingsView.actions['starter-rules'](null, ctx);
+  assert.equal(written.length, 1);
+  assert.equal(written[0].routing.length, STARTER_RULES.length);
+  assert.deepEqual(written[0].routing, STARTER_RULES);
+});
+
+// ─── the Skills screen as a tree (SPEC.md › The board › Tiers) ────────────
+import { TIERS, skillById as boardSkill } from '../src/board.js';
+import * as skillsView from '../src/views/skills.js';
+
+/** The board adopted, with some hours in Artifice. */
+function boarded(minutes = {}) {
+  const g = game(boardRecords());
+  let n = 0;
+  for (const [skill, mins] of Object.entries(minutes)) {
+    g.add({ id: `task_${skill}`, type: 'task', title: `Work on ${skill}`, skill: `skill_${skill}`,
+      measure: 'time', cadence: 'anytime', estimate: 30, stamina: 0, mana: 0 });
+    g.add({ id: `done_${skill}_${n++}`, type: 'done', task: `task_${skill}`, day: '2026-09-21',
+      start: T('2026-09-21T09:00:00'), end: T('2026-09-21T10:00:00'), minutes: mins,
+      measure: 'time', value: mins, quality: 1, price: { points: mins, energy: {} } });
+  }
+  return g;
+}
+
+/** One skill node's HTML: from its id up to where the next node begins. */
+const node = (html, id) => {
+  const i = html.indexOf(`data-skill="${id}"`);
+  assert.ok(i >= 0, `no node for ${id}`);
+  const next = html.indexOf('data-skill="', i + 20);
+  return html.slice(i, next === -1 ? html.length : next);
+};
+
+test('Skills draws each tree in tiers, deepest last', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const panels = [...html.matchAll(/data-tree="([a-z]+)"([\s\S]*?)<\/section>/g)];
+  assert.ok(panels.length >= 7, 'a panel per tree');
+  for (const [, tree, body] of panels) {
+    const tiers = [...body.matchAll(/data-tier="(\d)"/g)].map((m) => Number(m[1]));
+    if (!tiers.length) continue; // Hearth is not a ladder
+    assert.deepEqual(tiers, [...tiers].sort((a, b) => a - b), `${tree} renders its tiers in order`);
+    assert.equal(Math.min(...tiers), 1, `${tree} starts at tier 1`);
+  }
+});
+
+test('Skills says what every skill is, what one unit is and what measures it', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const s = boardSkill('inscription');
+  assert.match(html, new RegExp(s.plain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), 'the plain line');
+  assert.match(html, /released drawing/i, 'what one unit is');
+  assert.match(html, /revisions per released drawing/i, 'what measures it');
+});
+
+test('a locked skill is marked locked and says what is missing', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const row = node(html, 'sundering');
+  assert.match(row, /is-locked/);
+  assert.match(row, /Needs/);
+  assert.match(row, /Interlock/, 'it names the prerequisite');
+});
+
+test('a tier-1 skill is open on day one and is not marked locked', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const row = node(html, 'shaping');
+  assert.doesNotMatch(row, /is-locked/);
+});
+
+test('working the tree unlocks what sits on it', () => {
+  const html = skillsView.render(ctxOf(boarded({ shaping: 60 * 60, interlock: 30 * 60 })));
+  const row = node(html, 'sundering');
+  assert.doesNotMatch(row, /is-locked/, 'both conditions met, so it opens');
+});
+
+test('a one-shot skill says so, and a seasonal one says so', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  assert.match(html, /right once/i);
+  assert.match(html, /seasonal|in season/i);
+});
+
+test('Hearth is drawn without tiers, locks or meters', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const row = node(html, 'covenant');
+  assert.doesNotMatch(row, /is-locked/);
+  assert.doesNotMatch(row, /data-tier/);
+  assert.match(row, /never graded|not measured/i);
+});
+
+test("the tree shows each tree's depth, so the gate is legible", () => {
+  const html = skillsView.render(ctxOf(boarded({ shaping: 600 })));
+  assert.match(html, /data-tree-depth/);
+});
+
+test('Skills: the board replaces the old stat panels rather than doubling them', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const named = (name) => (html.match(new RegExp(`>${name}<`, 'g')) || []).length;
+  assert.equal(named('Sundering'), 1, 'each skill is drawn once, not once per layout');
+  assert.doesNotMatch(html, /<section class="sc-panel pad stack" data-stat=/, 'the old stat panel is gone when the board is there');
+});
+
+test('Skills: without the board, the old stat panels are still the screen', () => {
+  const html = skillsView.render(ctxOf(game()));
+  assert.match(html, /data-stat=/);
+});
+
+test('Skills: a tree panel carries its own level and XP, so nothing is lost', () => {
+  const html = skillsView.render(ctxOf(boarded({ shaping: 600 })));
+  const panel = /data-tree="artifice"([\s\S]*?)<\/section>/.exec(html)[1];
+  assert.match(panel, /LV \d/);
+  assert.match(panel, /XP/);
+  assert.match(panel, /data-tree-depth/);
+});
+
+test('Skills: every node carries an icon, and they differ', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const icons = [...html.matchAll(/class="tree-icon"[^>]*>([^<]+)</g)].map((m) => m[1]);
+  assert.ok(icons.length >= 20, `only ${icons.length} icons`);
+  assert.ok(new Set(icons).size >= 15, 'the icons are not all the same');
+});
+
+test('Skills: renaming a stat is still reachable once the board is adopted', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  assert.match(html, /data-action="edit-stat"/);
+});
+
+// ─── points are fuel, and the bonuses are style (SPEC.md › Points) ────────
+import { bonusPills } from '../src/views/now.js';
+
+test('Now: a chained run shows its style, not a percentage on its points', () => {
+  const html = bonusPills({ points: 30, style: 21, bonuses: { combo: 0.7, flow: 0, pb: 0, underdog: 0, batch: 0, gear: 0 } });
+  assert.match(html, /\+21 style/, 'what the bonuses were worth');
+  assert.match(html, /combo/);
+  assert.doesNotMatch(html, /combo \+70%/, 'not a multiplier on the points, because it is not one');
+});
+
+test('Now: no bonuses, no pills', () => {
+  assert.equal(bonusPills({ points: 30, style: 0, bonuses: { combo: 0, flow: 0 } }), '');
+});
+
+test('Now: a capped run says the day is spent', () => {
+  const html = bonusPills({ points: 20, style: 0, capped: true, uncapped: 60, bonuses: {} });
+  assert.match(html, /capped|720/i);
+});
+
+// ─── technique badges on the node (SPEC.md › The board › Techniques) ──────
+import { techniquesOf } from '../src/techniques.js';
+
+test('Skills: a skill with a ladder shows its ceiling and what is next', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const row = node(html, 'poise');
+  assert.match(row, /data-ceiling="0"/, 'nothing held yet');
+  assert.match(row, /Linked turns/, 'and it names the next one to chase');
+});
+
+test('Skills: the ladder renders as pips, one per technique', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  const row = node(html, 'poise');
+  const pips = [...row.matchAll(/class="tech-pip tech-\w+"/g)];
+  assert.equal(pips.length, techniquesOf('poise').length);
+});
+
+test('Skills: a skill with no ladder shows no pips at all', () => {
+  const html = skillsView.render(ctxOf(boarded()));
+  assert.doesNotMatch(node(html, 'bloodline'), /tech-pip/);
+  assert.doesNotMatch(node(html, 'tutelage'), /tech-pip/);
+});
+
+test('Skills: a held technique reads as held, and sets the ceiling', () => {
+  const g = boarded();
+  g.add({ id: 'tech_1', type: 'technique', skill: 'poise', technique: 'linked', at: T('2026-09-21T10:00:00'), day: '2026-09-21', clean: true });
+  g.add({ id: 'tech_2', type: 'technique', skill: 'poise', technique: 'linked', at: T('2026-09-21T11:00:00'), day: '2026-09-21', clean: true });
+  g.add({ id: 'tech_3', type: 'technique', skill: 'poise', technique: 'linked', at: T('2026-09-21T12:00:00'), day: '2026-09-21', clean: true });
+  const row = node(skillsView.render(ctxOf(g)), 'poise');
+  assert.match(row, /data-ceiling="1"/);
+  assert.match(row, /tech-pip tech-held/);
+  assert.match(row, /Clean carve/, 'the next one is named');
+});

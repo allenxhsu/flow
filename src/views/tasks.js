@@ -74,18 +74,31 @@ export function render(ctx) {
   // spoken about.
   const list = g.tasks
     .filter((t) => !(t.source && t.archived))
-    .filter((t) => !(t.source && t.offToday))
     .filter((t) => ui.showArchived || !t.archived)
     .sort((a, b) => Number(a.archived) - Number(b.archived)
       || (a.laidAt ?? Infinity) - (b.laidAt ?? Infinity)
       || a.title.localeCompare(b.title));
   const archived = g.tasks.filter((t) => t.archived && !t.source).length;
+  // Everything Planner has that it did not lay on today. Normally it is
+  // simply not here; in the evening, when Planner has rolled the rest of the
+  // day to tomorrow, it is the whole list, and an unexplained empty screen
+  // would read as a bug. So the screen says the day is clear and keeps the
+  // backlog behind a toggle.
+  const backlog = g.backlog || [];
+  const clear = !list.length && backlog.length > 0;
   return `<div class="view">
     <div class="row-between"><h2>Tasks · ${list.filter((t) => !t.archived).length}</h2>
       <div class="row">${archived ? `<label class="check-field small"><input class="sc-check" type="checkbox" data-toggle="archived" ${ui.showArchived ? 'checked' : ''}> archived (${archived})</label>` : ''}
+      ${backlog.length ? `<label class="check-field small"><input class="sc-check" type="checkbox" data-toggle="backlog" ${ui.showBacklog ? 'checked' : ''}> not today (${backlog.length})</label>` : ''}
       <button class="sc-button sc-button--primary" data-action="new">+ New task</button></div></div>
     ${editing && !db.task.get(editing)?.source ? form(ctx, editing === 'new' ? null : db.task.get(editing)) : ''}
-    ${list.length ? `<div class="list">${list.map((t) => row(ctx, t)).join('')}</div>` : '<div class="muted-box">No tasks yet.</div>'}
+    ${list.length ? `<div class="list">${list.map((t) => row(ctx, t)).join('')}</div>`
+      : clear ? `<div class="muted-box"><p><strong>Planner's day is clear.</strong> Nothing is laid on today — by this hour Planner has usually rolled what is left to tomorrow. ${backlog.length} task${backlog.length === 1 ? '' : 's'} sit in its backlog; tick "not today" to see them.</p></div>`
+      : '<div class="muted-box">No tasks yet.</div>'}
+    ${ui.showBacklog && backlog.length ? `<section class="stack">
+      <div class="row-between"><h3>Not today · ${backlog.length}</h3><span class="small sc-faint">Planner did not lay these on today; they earn nothing until it does</span></div>
+      <div class="list">${backlog.map((t) => row(ctx, { ...t, runs: t.runs ?? 0, best: t.best ?? null, target: t.target ?? null, reworks: t.reworks ?? 0 })).join('')}</div>
+    </section>` : ''}
   </div>`;
 }
 
@@ -99,6 +112,7 @@ export const actions = {
 
 export function onChange(ev, ctx) {
   if (ev.target.dataset.toggle === 'archived') { ctx.ui.showArchived = ev.target.checked; ctx.render({ force: true }); }
+  if (ev.target.dataset.toggle === 'backlog') { ctx.ui.showBacklog = ev.target.checked; ctx.render({ force: true }); }
 }
 
 export const forms = {

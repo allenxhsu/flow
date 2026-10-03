@@ -32,6 +32,12 @@
 
 /** 1 point per estimated minute, until benchmark calibration (phase 2) says otherwise. */
 export const POINTS_PER_MINUTE = 1;
+/**
+ * Points are fuel, and a day holds twelve hours of them: eight of work and
+ * four of everything else, at a point a minute (SPEC.md › Points). Sixteen
+ * hours would be 960 and is no longer quality work, so the day stops here.
+ */
+export const DAILY_POINTS_CAP = 720;
 export const BONUS = { flow: 0.2, pb: 0.25, underdog: 0.5, comboStep: 0.1, comboMax: 1, batchStep: 0.15 };
 /** Bonuses add up; the total never passes this multiple of the base. */
 export const BONUS_CAP = 2.5;
@@ -139,7 +145,7 @@ export const FILE_MAX_BYTES = 2 * 1024 * 1024;
 export const PHOTO_MAX_PX = 1024;
 
 const DEFINITIONS = ['settings', 'stat', 'skill', 'task', 'reward', 'place', 'kind', 'item', 'loadout', 'wish', 'world', 'reshelve'];
-export const EVENT_TYPES = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit', 'correction', 'file'];
+export const EVENT_TYPES = ['done', 'rework', 'purchase', 'energy', 'review', 'moment', 'skip', 'spend', 'visit', 'correction', 'technique', 'file'];
 /** The fields a correction may amend (SPEC.md › Corrections); everything else is derived. */
 export const AMENDABLE = ['minutes', 'points', 'note'];
 export const CORRECTION_KINDS = ['void', 'amend'];
@@ -281,6 +287,7 @@ export function index(records) {
     world: worldRecord(records),
     visits: by.visit.sort((a, b) => a.leave - b.leave || a.id.localeCompare(b.id)),
     corrections: by.correction.sort((a, b) => (a.at ?? 0) - (b.at ?? 0) || a.id.localeCompare(b.id)),
+    techniques: by.technique.sort((a, b) => (a.at ?? 0) - (b.at ?? 0) || a.id.localeCompare(b.id)),
     correction: fixes,
   };
 }
@@ -650,6 +657,13 @@ export function chainAt(db, task, start) {
  *   base   = estimated minutes × quality × POINTS_PER_MINUTE
  *   points = base × min(BONUS_CAP, 1 + flow + pb + underdog + (batch or combo) + gear)
  */
+/** Points already earned on a day, up to `before`. The cap counts against this. */
+export function pointsToday(db, day, before = Infinity) {
+  let n = 0;
+  for (const d of db.done) if (d.day === day && (d.end ?? 0) < before) n += d.price?.points || 0;
+  return n;
+}
+
 export function priceDone(db, task, { start, end, minutes, value, quality }) {
   const rw = reworkByDone(db);
   const day = dayOf(end);
@@ -668,6 +682,10 @@ export function priceDone(db, task, { start, end, minutes, value, quality }) {
     batch: BONUS.batchStep * chain.batchIndex,
     gear: gearBonus(db, task, start).bonus,
   };
+  // Bonuses no longer touch points (SPEC.md › Points): a chain of tasks is not
+  // more work than the same tasks apart, and combo paying 2.5x made a twelve
+  // minute expense report worth eighteen points. They are kept, and become
+  // their own score.
   const multiplier = Math.min(BONUS_CAP, 1 + Object.values(bonuses).reduce((a, b) => a + b, 0));
   const base = Math.max(1, Math.round(hist.estimate * quality * POINTS_PER_MINUTE));
   const level = levelFor(skillXp(db, start).get(task.skill) || 0, SKILL_STEP).level;
@@ -679,6 +697,12 @@ export function priceDone(db, task, { start, end, minutes, value, quality }) {
     c *= tier.energy;
     return Math.round(c * 10) / 10;
   };
+  // The day is a budget of hours, so it is capped. A run that crosses the cap
+  // takes what is left of it rather than nothing, and a price once written is
+  // never rewritten — the cap cannot reach back into the morning.
+  const earned = Math.round(base * tier.points);
+  const room = Math.max(0, DAILY_POINTS_CAP - pointsToday(db, day, end));
+  const points = Math.min(earned, room);
   return {
     estimate: hist.estimate,
     estimateFrom: hist.estimateFrom,
@@ -687,7 +711,10 @@ export function priceDone(db, task, { start, end, minutes, value, quality }) {
     base,
     bonuses,
     multiplier: Math.round(multiplier * 100) / 100,
-    points: Math.round(base * multiplier * tier.points),
+    points,
+    /** What the bonuses came to, as its own score rather than a multiplier. */
+    style: Math.round(base * (multiplier - 1)),
+    ...(points < earned ? { capped: true, uncapped: earned } : {}),
     difficulty: tier.id,
     energy: { stamina: cost('stamina'), mana: cost('mana') },
     comboIndex: chain.comboIndex,
@@ -1542,6 +1569,143 @@ export function reviewDue(reviews, day) {
   return !!latest && latest.week < isoWeek(addDays(day, -7));
 }
 
+// ─── the week in skills ─────────────────────────────────────────────────────
+// SPEC.md › Streaks, reviews, achievements › The week in skills. A week of
+// completions is a pile of task names; what it does not say is which skill
+// sets the week went into, and which one keeps not being chosen. The time in
+// a day is fixed, so the question is never "did I do more hours" — it is
+// where the hours went and how much of them was spent doing something twice.
+
+/** Minutes really spent in a week on a skill, and what they bought. */
+function weekBucket(skill, db) {
+  return {
+    id: skill.id, name: skill.name, stat: skill.stat,
+    statName: db.stat.get(skill.stat)?.name || '',
+    minutes: 0, points: 0, runs: 0, rework: { count: 0, minutes: 0 }, tasks: new Map(),
+  };
+}
+
+/**
+ * The ISO week `day` falls in, grouped by skill and rolled up by stat, with
+ * the week before beside it. Minutes are where the time was really spent: a
+ * completion's minutes in the week it was done, a rework's fix minutes in the
+ * week the fix was done. Moments are not work and are not counted.
+ */
+export function weekInSkills(db, day) {
+  const week = isoWeek(day);
+  const prior = isoWeek(addDays(day, -7));
+  const now = new Map();
+  const was = new Map();
+  const of = (id) => db.skill.get(id);
+  const bucketFor = (map, skillId) => {
+    const skill = of(skillId);
+    if (!skill) return null;
+    if (!map.has(skillId)) map.set(skillId, weekBucket(skill, db));
+    return map.get(skillId);
+  };
+  const pick = (w) => (w === week ? now : w === prior ? was : null);
+
+  const days = new Set();
+  for (const d of db.done) {
+    const map = pick(isoWeek(d.day));
+    if (!map) continue;
+    const task = db.task.get(d.task);
+    const b = bucketFor(map, task?.skill);
+    if (!b) continue;
+    if (map === now) days.add(d.day);
+    b.minutes += d.minutes || 0;
+    b.points += d.price?.points || 0;
+    b.runs += 1;
+    const t = b.tasks.get(d.task) || { id: d.task, title: task?.title || '(deleted task)', runs: 0, minutes: 0, points: 0 };
+    t.runs += 1; t.minutes += d.minutes || 0; t.points += d.price?.points || 0;
+    b.tasks.set(d.task, t);
+  }
+  for (const r of db.rework) {
+    const map = pick(isoWeek(r.day));
+    if (!map) continue;
+    const taskId = r.task || db.done.find((d) => d.id === r.done)?.task;
+    const b = bucketFor(map, db.task.get(taskId)?.skill);
+    if (!b) continue;
+    b.minutes += r.minutes || 0;
+    b.rework.count += 1;
+    b.rework.minutes += r.minutes || 0;
+    const t = b.tasks.get(taskId);
+    if (t) t.minutes += r.minutes || 0;
+  }
+
+  const total = [...now.values()].reduce((n, b) => n + b.minutes, 0);
+  const longest = (a, b) => b.minutes - a.minutes || a.name.localeCompare(b.name);
+  const skills = [...now.values()].map((b) => ({
+    ...b,
+    tasks: [...b.tasks.values()].sort((x, y) => y.minutes - x.minutes || x.title.localeCompare(y.title)),
+    share: total ? b.minutes / total : 0,
+    reworkShare: b.minutes ? b.rework.minutes / b.minutes : 0,
+    prior: { minutes: was.get(b.id)?.minutes || 0, points: was.get(b.id)?.points || 0 },
+    change: b.minutes - (was.get(b.id)?.minutes || 0),
+  })).sort(longest);
+
+  const stats = [];
+  for (const k of skills) {
+    let s = stats.find((x) => x.id === k.stat);
+    if (!s) { s = { id: k.stat, name: k.statName, minutes: 0, points: 0, runs: 0, reworkMinutes: 0, skills: [] }; stats.push(s); }
+    s.minutes += k.minutes; s.points += k.points; s.runs += k.runs; s.reworkMinutes += k.rework.minutes;
+    s.skills.push(k.name);
+  }
+  for (const s of stats) {
+    s.share = total ? s.minutes / total : 0;
+    s.reworkShare = s.minutes ? s.reworkMinutes / s.minutes : 0;
+  }
+  stats.sort(longest);
+
+  // The ones not chosen this week, longest-cold first: never worked is coldest
+  // of all. A skill you keep not picking is the one worth noticing.
+  const lastDay = new Map();
+  for (const d of db.done) {
+    const skill = db.task.get(d.task)?.skill;
+    if (skill && (!lastDay.has(skill) || d.day > lastDay.get(skill))) lastDay.set(skill, d.day);
+  }
+  const untouched = db.skills.filter((k) => !now.has(k.id)).map((k) => {
+    const last = lastDay.get(k.id) || null;
+    return { id: k.id, name: k.name, stat: k.stat, last, days: last ? daysBetween(last, day) : null };
+  }).sort((a, b) => (b.days ?? Infinity) - (a.days ?? Infinity) || a.name.localeCompare(b.name));
+
+  return { week, day, minutes: total, points: skills.reduce((n, k) => n + k.points, 0), days: days.size, skills, stats, untouched };
+}
+
+/**
+ * Toil over an ISO week (SPEC.md › Most tasks belong to no skill): the share
+ * of the week's minutes spent on work that is an instance of nothing the
+ * player is getting better at. It is the one number on the board meant to go
+ * down. A bounced unit's minutes count twice, because a redo of
+ * administrative work teaches nothing and is pure waste.
+ */
+export function weekToil(db, day) {
+  const week = isoWeek(day);
+  let total = 0;
+  let minutes = 0;
+  let weighted = 0;
+  let units = 0;
+  let bounces = 0;
+  for (const d of db.done) {
+    if (isoWeek(d.day) !== week) continue;
+    const mins = d.minutes || 0;
+    total += mins;
+    if (db.task.get(d.task)?.skill) continue;
+    minutes += mins;
+    units += 1;
+    if (d.bounced) { bounces += 1; weighted += mins * 2; } else { weighted += mins; }
+  }
+  for (const r of db.rework) {
+    if (isoWeek(r.day) !== week) continue;
+    total += r.minutes || 0;
+  }
+  return {
+    week, total, minutes, weighted, units, bounces,
+    share: total > 0 ? minutes / total : 0,
+    bounceRate: units > 0 ? bounces / units : 0,
+  };
+}
+
 // ─── achievements ───────────────────────────────────────────────────────────
 
 const ACHIEVEMENTS = [
@@ -1584,7 +1748,8 @@ export function play(records, now = Date.now()) {
   const totalXp = [...xp.values()].reduce((a, b) => a + b, 0);
 
   const tier = difficultyOn(db, day);
-  const tasks = db.tasks.filter((t) => !offToday(t)).map((t) => {
+  const onToday = db.tasks.filter((t) => !offToday(t));
+  const tasks = onToday.map((t) => {
     const mine = db.done.filter((d) => d.task === t.id);
     const hist = taskStats(db, t, Infinity, rw, difficultyOn(db, day, t.skill).targetStep);
     const streak = t.cadence === 'daily' ? dailyStreak(new Set(mine.map((d) => d.day)), day, tier.grace)
@@ -1644,9 +1809,20 @@ export function play(records, now = Date.now()) {
     now, day, week: isoWeek(day),
     settings: db.settings,
     player, difficulty, balance, energy, stats, skills, tasks,
+    // What Planner has, but did not lay on today: never offered, kept here so
+    // a screen can show it behind a toggle (SPEC.md › Today is Planner's Today).
+    backlog: db.tasks.filter((t) => offToday(t) && !t.archived).sort((a, b) => a.title.localeCompare(b.title)),
     rewards: db.rewards.filter((r) => !r.archived).map((r) => ({ ...r, affordable: balance >= r.price, bought: db.purchases.filter((p) => p.reward === r.id).length })),
     next, combo, batch,
-    today: { points: doneToday.reduce((n, d) => n + (d.price?.points || 0), 0), done: doneToday.length, minutes: doneToday.reduce((n, d) => n + d.minutes, 0) },
+    today: {
+      points: doneToday.reduce((n, d) => n + (d.price?.points || 0), 0),
+      // Style is what the bonuses came to: kept beside the points rather than
+      // multiplied into them (SPEC.md › Points).
+      style: doneToday.reduce((n, d) => n + (d.price?.style || 0), 0),
+      cap: DAILY_POINTS_CAP,
+      done: doneToday.length,
+      minutes: doneToday.reduce((n, d) => n + d.minutes, 0),
+    },
     history: [...db.done].reverse().slice(0, 50).map((d) => ({ ...d, title: db.task.get(d.task)?.title || '(deleted task)', rework: rw.get(d.id) || [] })),
     purchases: [...db.purchases].reverse().slice(0, 20).map((p) => ({ ...p, title: db.reward.get(p.reward)?.title || '(deleted reward)' })),
     satisfaction: { latest, trend, history: reviews, due: reviewDue(reviews, day) },

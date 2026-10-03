@@ -82,19 +82,19 @@ test('cli: a realistic factory day end to end', (t) => {
   let out = h.ok(['done', 'Customer quote', '--minutes', '45', '--start', '08:15'], '09:00');
   assert.match(out, /\+45/);
   out = h.ok(['done', 'PR 1', '--minutes', '10', '--start', '09:05'], '09:15');
-  assert.match(out, /\+11/, 'combo ×2: +10%');
+  assert.match(out, /\+10 pts/, 'ten minutes is ten points; the combo is style'); assert.match(out, /style \(combo ×2 \+10%\)/);
   out = h.ok(['done', 'PR 2', '--minutes', '10', '--start', '09:20'], '09:30');
-  assert.match(out, /\+12/, 'batch ×2: +15% replaces the combo');
+  assert.match(out, /\+10 pts/); assert.match(out, /style \(batch ×2 \+15%\)/, 'the batch replaces the combo, in style');
   out = h.ok(['done', 'PR 3', '--minutes', '10', '--start', '09:35'], '09:45');
-  assert.match(out, /\+13/, 'batch ×3: +30%');
+  assert.match(out, /\+10 pts/); assert.match(out, /style \(batch ×3 \+30%\)/);
   out = h.ok(['done', 'Inspect line 2', '--minutes', '30', '--start', '10:00'], '10:30');
-  assert.match(out, /\+42/, 'combo ×5: +40%');
+  assert.match(out, /\+30 pts/, 'thirty minutes is thirty points'); assert.match(out, /style \(combo ×5 \+40%\)/);
 
   let s = h.json(['status'], '11:00');
-  assert.equal(s.today.points, 123);
+  assert.equal(s.today.points, 105);
   assert.equal(s.today.done, 5);
-  assert.equal(s.player.xp, 123);
-  assert.equal(s.balance, 123);
+  assert.equal(s.player.xp, 105);
+  assert.equal(s.balance, 105);
   near(s.energy.stamina, 8 - 0.25 - 2);
   near(s.energy.mana, 7 - 0.5 - 3 - 1 - 0.5 - 0.5, 0.06);
 
@@ -103,23 +103,24 @@ test('cli: a realistic factory day end to end', (t) => {
   assert.match(out, /40/);
   h.ok(['moment', 'Chat', '--from', '12:00', '--to', '12:30', '--who', 'Whitney'], '13:05');
   s = h.json(['status'], '13:10');
-  assert.equal(s.player.xp, 83, 'rework comes off XP');
-  assert.equal(s.balance, 83, 'and off the balance; chatting costs no points');
+  assert.equal(s.player.xp, 65, 'rework comes off XP');
+  assert.equal(s.balance, 65, 'and off the balance; chatting costs no points');
   assert.ok(s.energy.mana < 1, 'chatting cost mana');
 
+  // Bubble tea is 40, out of a balance of 65.
   h.ok(['buy', 'Bubble tea', '--at', '15:00'], '15:00');
   s = h.json(['status'], '15:05');
-  assert.equal(s.balance, 43);
-  // 30 of the concert is covered, nothing below zero
+  assert.equal(s.balance, 25);
+  // The concert is 30: 25 is covered, and the 5 below zero costs double.
   h.ok(['buy', 'Concert', '--at', '16:00'], '16:00');
-  assert.equal(h.json(['status'], '16:05').balance, 13);
+  assert.equal(h.json(['status'], '16:05').balance, 25 - 25 - 10);
   const again = h.run(['buy', 'Concert', '--at', '16:30'], '16:30');
   assert.notEqual(again.code, 0, 'a one-off cannot be bought twice');
-  // into debt: 13 covered, 27 below zero at double → 13 + 54 = 67
+  // Deeper in: every point of the next 40 is below zero, so all of it doubles.
   h.ok(['buy', 'Bubble tea', '--at', '17:00'], '17:00');
   s = h.json(['status'], '17:05');
-  assert.equal(s.balance, 13 - 13 - 54);
-  assert.equal(s.player.xp, 83, 'buying never touches XP');
+  assert.equal(s.balance, -10 - 80);
+  assert.equal(s.player.xp, 65, 'buying never touches XP');
 
   const replay = h.ok(['replay', '--day', D], '21:00');
   for (const word of ['Customer quote', 'Inspect line 2', 'Whitney', 'Bubble tea']) assert.ok(replay.includes(word), word);
